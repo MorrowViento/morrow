@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,15 +26,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Android SDK components (SDK 37 / NDK 27.1 / CMake 3.22.1)
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-37" \
-            "build-tools;37.0.0" \
-            "ndk;27.1.12297006" \
-            "cmake;3.22.1" > /dev/null
+      # 安装配方对齐 Glasmio 官方 CI：cmdline-tools 固定版本 + android-37.0 平台包名
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 15859902
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: true
+
+      - name: Install SDK platform / NDK / CMake
+        run: sdkmanager 'platforms;android-37.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
 
       - name: Set up Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v4
@@ -35,10 +43,12 @@ jobs:
           gradle-version: "9.6.0"
 
       - name: Build & check (assembleDebug + unit test + lint)
-        run: gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+        run: gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ying-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
