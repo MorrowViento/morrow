@@ -1,0 +1,32 @@
+[versions]
+# 构建链（决策 D6：与 Glasmio 0.1.2 官方构建环境对齐）
+agp = "9.4.1"
+kotlin = "2.4.21"
+gradleWrapper = "9.6.0"
+
+# AndroidX（对齐 Glasmio sample 传递依赖）
+composeBom = "2026.09.00"
+activityCompose = "1.13.0"
+
+# Glasmio（决策 D3：锁定 0.1.2，升级仅改此处并回归 ui/glass/ 封装层）
+glasmio = "0.1.2"
+
+junit = "4.13.2"
+
+[libraries]
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+
+# Glasmio 模块（scaffold/ui/glass/core 经传递依赖引入）
+glasmio-scaffold = { group = "io.github.neoruaa.glasmio", name = "glasmio-scaffold", version.ref = "glasmio" }
+glasmio-preference = { group = "io.github.neoruaa.glasmio", name = "glasmio-preference", version.ref = "glasmio" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
