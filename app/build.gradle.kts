@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // AGP 9 起内置 Kotlin 支持，不再应用 org.jetbrains.kotlin.android
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -36,12 +36,6 @@ android {
     lint {
         // M0 阶段放宽，M7 发布前收紧为 true（对齐 Glasmio 官方工程）
         abortOnError = false
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
