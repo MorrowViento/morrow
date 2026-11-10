@@ -1,9 +1,12 @@
 package com.jiuxina.ying.ui.glass
 
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
+import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
 
 /**
  * Glasmio API 隔离层（重构计划决策 D3）。
@@ -19,20 +22,36 @@ fun GlassTheme(content: @Composable () -> Unit) {
     GlasmioTheme { content() }
 }
 
-/** Glasmio 主题配色（groupedBackground 等），供业务页取采样背景色。 */
-val glassColors
-    get() = GlasmioTheme.colors
+/** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */
+@Composable
+fun glassColors() = GlasmioTheme.colors
 
-/** Glasmio 字体排版（headlineLarge 等）。 */
-val glassTypography
-    get() = GlasmioTheme.typography
-
-/** 玻璃背景宿主：sampledContent 提供被采样背景，overlayContent 承载玻璃控件。 */
+/**
+ * 玻璃背景宿主（纯色背景版）：把背景色交给 Glasmio 采样，
+ * 其上的玻璃控件通过 overlayContent 绘制。
+ */
 @Composable
 fun GlassBackdropHost(
     modifier: Modifier = Modifier,
-    sampledContent: @Composable () -> Unit,
-    overlayContent: @Composable () -> Unit,
+    sampledColor: Color,
+    overlayContent: @Composable BoxScope.(LayerBackdrop) -> Unit,
+) {
+    GlasmioBackdropHost(
+        sampledColor = sampledColor,
+        modifier = modifier,
+        overlayContent = overlayContent,
+    )
+}
+
+/**
+ * 玻璃背景宿主（自定义内容版）：sampledContent 提供被采样的页面内容，
+ * overlayContent 承载其上的玻璃控件。
+ */
+@Composable
+fun GlassBackdropHost(
+    modifier: Modifier = Modifier,
+    sampledContent: @Composable BoxScope.(LayerBackdrop) -> Unit,
+    overlayContent: @Composable BoxScope.(LayerBackdrop) -> Unit,
 ) {
     GlasmioBackdropHost(
         modifier = modifier,
