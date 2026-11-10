@@ -34,8 +34,10 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: true
 
-      - name: Install SDK platform / NDK / CMake
-        run: sdkmanager 'platforms;android-37.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      # 无需 NDK / CMake：Glasmio 的 AAR 已内置四 ABI 预编译 .so（libglasmio_liquid_menu_sdf.so），
+      # 使用方不编译原生代码，NDK 仅供 Glasmio 自身构建使用。
+      - name: Install SDK platform
+        run: sdkmanager 'platforms;android-37.0'
 
       - name: Set up Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v4
