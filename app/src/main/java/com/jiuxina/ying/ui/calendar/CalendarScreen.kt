@@ -36,6 +36,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jiuxina.ying.domain.time.LunarCalendar
+import com.jiuxina.ying.ui.component.CreateFab
+import com.jiuxina.ying.ui.glass.GlassBackdrop
 import com.jiuxina.ying.ui.glass.GlassCirclePanel
 import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
@@ -48,23 +50,37 @@ import java.time.YearMonth
  *
  * 性能取舍：整月格子只套**一个** GlassPanel，格子内部用纯文字与浅色块区分状态。
  * 42 个独立玻璃面在低端机上会明显掉帧，而玻璃材质的表现力在「一块大面板」上并不损失。
+ *
+ * 这是**整页覆盖**而非浮层：必须自己铺一层不透明底色（[GlassBackdrop]），
+ * 否则下层首页的标题与卡片会从缝隙里透出来形成"两页重叠"。
  */
 @Composable
 fun CalendarScreen(
     state: CalendarUiState,
     actions: CalendarActions,
+    /** 带日期新建：用当前选中日，没选中就用今天。 */
+    onCreate: (LocalDate) -> Unit,
     onOpenEvent: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize()) {
-        CalendarHeader(state, actions, onDismiss)
-        when {
-            state.error != null -> CenterHint("读取事件失败", state.error)
-            state.isLoading -> CenterHint("载入中…", null)
-            state.view == CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
-            state.view == CalendarView.YEAR -> YearView(state, actions)
-            else -> MonthListView(state, onOpenEvent)
+    Box(Modifier.fillMaxSize()) {
+        GlassBackdrop()
+        Column(Modifier.fillMaxSize()) {
+            CalendarHeader(state, actions, onDismiss)
+            when {
+                state.error != null -> CenterHint("读取事件失败", state.error)
+                state.isLoading -> CenterHint("载入中…", null)
+                state.view == CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
+                state.view == CalendarView.YEAR -> YearView(state, actions)
+                else -> MonthListView(state, onOpenEvent)
+            }
         }
+        CreateFab(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 26.dp),
+            onClick = { onCreate(state.selected ?: state.today) },
+        )
     }
 }
 

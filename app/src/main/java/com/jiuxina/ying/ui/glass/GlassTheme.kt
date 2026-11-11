@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.glass.GlassSurface
@@ -30,6 +31,23 @@ import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
 @Composable
 fun GlassTheme(content: @Composable () -> Unit) {
     GlasmioTheme { content() }
+}
+
+/**
+ * 页面底色（同时充当玻璃的采样源）。
+ *
+ * 渐变只在这里定义一份：首页把它放进 `sampledContent`，日历等**整页覆盖**视图
+ * 必须再画一遍同款渐变当自己的不透明底。否则覆盖层是透明的，下层首页文字会穿出来
+ * （日历与列表重叠的成因），且覆盖层上的玻璃采样到的颜色与周围底色对不上。
+ */
+@Composable
+fun GlassBackdrop(modifier: Modifier = Modifier) {
+    val colors = if (isSystemInDarkTheme()) {
+        listOf(Color(0xFF151A35), Color(0xFF2A1436), Color(0xFF3F1630))
+    } else {
+        listOf(Color(0xFF3B6FE0), Color(0xFF9B4BE8), Color(0xFFE84B8A))
+    }
+    Box(modifier.fillMaxSize().background(Brush.linearGradient(colors)))
 }
 
 /** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */

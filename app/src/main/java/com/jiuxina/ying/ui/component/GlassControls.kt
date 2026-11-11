@@ -8,15 +8,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -26,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jiuxina.ying.ui.glass.GlassCirclePanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
 
@@ -127,5 +132,29 @@ fun ChipRow(content: @Composable () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         content()
+    }
+}
+
+/**
+ * 新建事件的主按钮（右下角玻璃圆钮）。
+ *
+ * 首页与日历页共用：日历是整页覆盖且有不透明底色，会把首页那颗按钮整个盖住，
+ * 因此日历页必须自己再放一颗，否则进日历后就无法新建。
+ */
+@Composable
+fun CreateFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    GlassCirclePanel(modifier = modifier.size(60.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+",
+                style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Light, color = glassTextPrimary()),
+            )
+        }
     }
 }

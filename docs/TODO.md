@@ -8,6 +8,8 @@
 
 M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（113 项 0 失败），APK 76 MB。
 
+真机首轮反馈的两个运行时问题已修：日历整页覆盖缺底色导致与首页重叠、日期滚轮所在的 `verticalScroll` 表单里 `LazyColumn` 无界高导致点 + 号闪退（详见 `docs/CHANGELOG.md` 同名条目）。
+
 仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
 
 下一步：`M5` 桌面小部件；`M2a`–`M2d` 与 `M4` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 是**唯一必须真机才能验证**的里程碑。

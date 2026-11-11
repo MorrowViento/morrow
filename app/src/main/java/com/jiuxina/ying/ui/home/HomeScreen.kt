@@ -8,7 +8,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +43,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -59,12 +57,14 @@ import com.jiuxina.ying.ui.calendar.CalendarScreen
 import com.jiuxina.ying.ui.calendar.CalendarUiState
 import com.jiuxina.ying.ui.category.CategoryActions
 import com.jiuxina.ying.ui.category.CategorySheet
+import com.jiuxina.ying.ui.component.CreateFab
 import com.jiuxina.ying.ui.event.EventActions
 import com.jiuxina.ying.ui.event.EventDetailScreen
 import com.jiuxina.ying.ui.event.EventEditSheet
 import com.jiuxina.ying.ui.event.EventFormState
 import com.jiuxina.ying.ui.event.HomeUiState
 import com.jiuxina.ying.ui.event.UndoBar
+import com.jiuxina.ying.ui.glass.GlassBackdrop
 import com.jiuxina.ying.ui.glass.GlassBackdropHost
 import com.jiuxina.ying.ui.glass.GlassCirclePanel
 import com.jiuxina.ying.ui.glass.GlassPanel
@@ -130,7 +130,7 @@ fun HomeScreen(
     GlassTheme {
         GlassBackdropHost(
             modifier = Modifier.fillMaxSize(),
-            sampledContent = { BackdropGradient() },
+            sampledContent = { GlassBackdrop() },
             overlayContent = {
                 Box(
                     Modifier
@@ -169,7 +169,7 @@ fun HomeScreen(
                             }
                         }
                     }
-                    CreateButton(
+                    CreateFab(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 20.dp, bottom = 26.dp),
@@ -177,7 +177,8 @@ fun HomeScreen(
                     )
 
                     // 日历是整页替换（不是浮层）：盖住列表与 FAB，但与列表共用同一个 backdrop，
-                    // 换成独立窗口会切断采样源让玻璃材质失效。
+                    // 换成独立窗口会切断采样源让玻璃材质失效。它自己会重铺一层不透明底色，
+                    // 不能依赖下层首页透出来。
                     AnimatedVisibility(
                         visible = showCalendar,
                         modifier = Modifier.fillMaxSize(),
@@ -187,6 +188,7 @@ fun HomeScreen(
                         CalendarScreen(
                             state = calendar,
                             actions = calendarActions,
+                            onCreate = { date -> editingForm = EventFormState(date = date) },
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },
                         )
@@ -555,24 +557,6 @@ private fun CenterState(title: String, detail: String?) {
 }
 
 @Composable
-private fun CreateButton(modifier: Modifier, onClick: () -> Unit) {
-    GlassCirclePanel(modifier = modifier.size(60.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "+",
-                style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Light, color = glassTextPrimary()),
-            )
-        }
-    }
-}
-
-@Composable
 private fun MoreMenu(
     completedCount: Int,
     totalCount: Int,
@@ -686,16 +670,8 @@ private fun ConfirmClearAll(totalCount: Int, onConfirm: () -> Unit, onDismiss: (
     }
 }
 
-/** 被采样的背景：浅色用品牌渐变，深色压暗以免玻璃高光过曝。 */
-@Composable
-private fun BackdropGradient() {
-    val colors = if (isSystemInDarkTheme()) {
-        listOf(Color(0xFF151A35), Color(0xFF2A1436), Color(0xFF3F1630))
-    } else {
-        listOf(Color(0xFF3B6FE0), Color(0xFF9B4BE8), Color(0xFFE84B8A))
-    }
-    Box(Modifier.fillMaxSize().background(Brush.linearGradient(colors)))
-}
+/** 被采样的背景由 [GlassBackdrop] 统一提供：首页与整页覆盖的日历页必须用同一份，
+ * 否则两者交叠处会出现色差（玻璃采样到的颜色与页面底色不一致）。 */
 
 private fun SortMode.label(): String = when (this) {
     SortMode.DISTANCE -> "距离"

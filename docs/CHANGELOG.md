@@ -2,6 +2,15 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] 修复：日历与主界面重叠 + 点 + 号闪退
+
+- 改动：`GlassBackdrop`（新增，渐变底色只保留这一份）——首页放进 `sampledContent`，日历页在根 `Box` 里重铺一层不透明同款渐变；`CalendarScreen` 根节点由裸 `Column` 改为 `Box`，并新增 `onCreate(LocalDate)` 回调与自己的 `CreateFab`（整页不透明后会盖住首页那颗按钮）；`CreateFab` 从 `HomeScreen` 的私有 `CreateButton` 提到 `ui/component/GlassControls.kt` 供两处共用，日历页用它按「选中日 → 今天」的顺序开表单；`WheelColumn` 的 `LazyColumn` 改为 `modifier.height(itemHeight * visibleRows)` 固定高度。
+- 涉及文件：`ui/glass/GlassTheme.kt`、`ui/calendar/CalendarScreen.kt`、`ui/component/{WheelPicker,GlassControls}.kt`、`ui/home/HomeScreen.kt`
+- 根因 1（重叠）：日历被当作"整页替换"实现，但 `CalendarScreen` 根节点没有背景，只有内部的玻璃面板；它叠在首页同一个 `Box` 里，于是首页的大标题、`排序·创建` 胶囊、卡片副标题全部从透明处穿出来。修复不是加遮罩 alpha，而是让日历页复用**同一份**渐变底色——玻璃采样的仍是 host 的 `LayerBackdrop`，底色与采样源同源才能让交叠处的材质颜色对得上。
+- 根因 2（闪退）：`EventEditSheet` 的内容列是 `verticalScroll`，纵向约束为 infinity，而日期滚轮内部的 `LazyColumn` 直接吃这个约束，Compose 在测量阶段抛 `IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints`，点 + 即崩。修复是让滚轮自己定高（5 行 × 34dp = 170dp，与 `contentPadding` 的半侧内边距配套），而不是给表单换掉 `verticalScroll`。
+- 验证：`assembleDebug + testDebugUnitTest + lintDebug` 通过；113 项单测 0 失败；lint 11 项与改前基线完全一致（全是依赖版本提示类）；debug APK 76 MB
+- 状态：代码完成，待真机回归（本次两个问题都是"编译通过、运行崩/糊"，正是缺真机验收的典型）
+
 ## [2026-11-11] M4 提醒通知
 
 - 改动：新增 `ReminderPlan`（纯函数排期：锚点 = 全天 09:00 / 否则目标时刻，每条提醒 = 锚点 − 提前分钟；年度重复按当次周年推导，单事件最多两次落点 × 5 条提醒 = 10 个闹钟上限，超过上限由「触发后立即重排」自转）；`ReminderScheduler` 接口 + `AlarmReminderScheduler`（槽位模型：`requestCode` = 槽位下标、`Intent.data` 带事件 id，因此取消只需扫 0..9、事件之间也不会互相覆盖；有精确闹钟权限走 `setExactAndAllowWhileIdle`，没有则退化 `setAndAllowWhileIdle`）；`ReminderReceiver`（触发投递 / 通知「完成」/「稍后 10 分钟」三 action 共用，`goAsync` + IO 读库避免 ANR，触发后立即 `sync` 补下一次落点）；`ReminderBootReceiver`（`BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` / `TIME_SET` / `TIMEZONE_CHANGED` 全量对账）；`ReminderNotifier`（`reminders` 高优先级渠道、通知日期取**当次落点**而非首次目标、通知里自带 self-check 权限守卫）；`ReminderPermissions`（通知 / 精确闹钟状态探测与设置页跳转，ROM 裁掉设置页时回落应用详情页）；`ui/reminder/`（诊断页：权限两行状态 + 排期列表 + 发测试通知 + 手动重排期，回前台自动重读权限）；`EventViewModel` 在保存/删除/完成/批量清理/撤销后同步闹钟；`YingApp` 冷启动全量对账；通知点击经 `singleTop` + `StateFlow` 直达详情页。

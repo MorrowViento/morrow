@@ -147,3 +147,7 @@ app/src/main/java/com/jiuxina/ying/
 25. **日历条目刻意不复用 `EventCardModel`**：卡片带 `remainingToday`/`progress` 这类依赖 `now` 的字段，放进按天刷新的状态里要么立刻变味、要么每秒触发重组。`CalendarEntry` 只存「哪天、差几天」。
 26. **月视图整月只套一个 `GlassPanel`**：42 个独立玻璃面在中低端机大概率掉帧，格子状态用文字色/浅色块表达即可。若确要"每格玻璃"，先在真机量帧再改，别直接动结构。
 27. **年视图/列表视图共用 `CalendarNav.month` 作锚点**：切换视图不新建位置状态，避免三套游标互相不同步；翻页一律走 `CalendarNav.clamp`，防止用户翻到没有农历数据的年份。
+28. **整页覆盖的视图必须自带 `GlassBackdrop`**：日历叠在首页同一个 `Box` 上，若根节点没有不透明底色，下层首页的标题/胶囊/卡片会整片透出来，看起来像"两页重叠"。底色务必用 `ui/glass/GlassBackdrop`（渐变只有这一份）——玻璃面板采样的是 host 的 `LayerBackdrop`，只有底色与采样源同源，交叠处材质颜色才对得上。**加浮层不需要底色（本来就该透），整页替换必须加。**
+29. **`verticalScroll` 里不能放 `LazyColumn`**：纵向约束是 infinity，Lazy 组件在测量阶段直接抛 `IllegalStateException: ... infinity maximum height constraints`。M2b 的点 + 号必崩就是这么来的（表单是 `verticalScroll`，日期滚轮是 `LazyColumn`）。现在 `WheelColumn` 自己定高（`itemHeight * visibleRows`），新增任何可滚列表进浮层前先确认高度有界。
+30. **日历页的 FAB 不能复用首页那颗**：日历不透明后会把首页 FAB 整个盖住，所以 `CalendarScreen` 有自己的 `CreateFab`（新建日期 = 选中日，没选中就今天）。两处共用 `ui/component` 里的 `CreateFab`，别再各写一份。
+31. **切视图/改布局后先想「有没有第二层整页」**：目前只有首页与日历两层。若日后加设置中心（M6）等整页界面，同样要在根节点铺 `GlassBackdrop` 并处理返回键，否则会复现本次的重叠。

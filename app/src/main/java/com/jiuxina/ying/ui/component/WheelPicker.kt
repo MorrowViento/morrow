@@ -39,6 +39,11 @@ import java.time.YearMonth
  *
  * 说明：对齐依赖 `itemHeight` 与实际行高一致，改字号时要同步改 `itemHeight`；
  * 高亮条由 [WheelDateTimePicker] 统一绘制，本组件只负责滚动与渲染。
+ *
+ * **高度必须由本组件自己定死**：滚轮放在表单的 `verticalScroll` 里，
+ * 纵向约束是 infinity，LazyColumn 拿到无限高约束会直接抛
+ * `IllegalStateException: Vertically scrollable component was measured with an
+ * infinity maximum height constraints`（点 + 号必崩的根因）。
  */
 @Composable
 fun WheelColumn(
@@ -72,7 +77,7 @@ fun WheelColumn(
     LazyColumn(
         state = state,
         flingBehavior = fling,
-        modifier = modifier,
+        modifier = modifier.height(itemHeight * visibleRows),
         contentPadding = PaddingValues(vertical = itemHeight * (visibleRows / 2)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
