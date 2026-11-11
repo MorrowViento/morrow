@@ -2,6 +2,15 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] 诊断：m6 安装后启动即退（真机 Android 16）
+
+- 现象：`ying-4.0.0-alpha1-debug-m6.apk` 在同一台 Android 16 机器上点开**一闪即退、看不到任何画面**；同机 `debug-m5.apk` 正常。故问题由 M6 引入，且落在启动早期。
+- 本地复现结论：**代码逻辑层无问题，无法在 JVM 侧复现**。新增 `StartupSmokeTest`（Robolectric 4.16）把 `YingApp.onCreate` 与 `MainActivity` 拉到 `onResume`，并强制 `decorView.measure/layout` 走完首帧测量（上一轮「点 + 号闪退」正是测量期异常，只到 onResume 是测不到的），三例在 **API 33 与 34** 下全通过。另用 `javap` 核实两处外部假设：①`GlasmioTheme` 默认 `appearance` 即 `GlassAppearance()`（构造 mask=7 全默认），M6 显式传入的 `GlassAppearance(reduceTransparency = false)` 与之逐字段相等，**GlassTheme 改造可排除**；②`GlassAppearance` 默认值为 `liquidGlassEnabled=true / reduceTransparency=false / adaptiveColorScheme=false`。`preferencesDataStore` 全项目仅一处声明，无「同一文件多实例」陷阱；`Glasmio` 的 `libglasmio_liquid_menu_sdf.so` 只被 `LiquidMenuNativeField` 加载，不在启动路径上。
+- 改动：新增 `util/StartupTrace`（**临时诊断设施，M7 发布前移除**）——`mark()` 把启动每一步追加进 `startup.log` 并立即落盘，即使崩溃是 native 层（SIGSEGV 不被 Java handler 捕获）也能看出卡在哪一步；`install()` 挂 `UncaughtExceptionHandler`，把 Java 堆栈连同末 40 行启动轨迹、设备与版本信息写成 `crash-*.txt`。落盘在 `Android/media/<包名>/`，Android 11+ 对该目录免权限且任何文件管理器可见，用户取日志不需要电脑或 root。`YingApp` 的启动自愈链拆成 `warmStart()` + `step()`：迁移 / 撤销恢复 / 提醒对账 / 小部件刷新逐步 `runCatching` 隔离——此前整段 `appScope.launch` 无任何兜底，其中任一步抛异常都会直达默认处理器**杀掉整个进程**，与「打开即闪退」的现象完全吻合。
+- 涉及文件：`util/StartupTrace.kt`（新建）、`YingApp.kt`、`MainActivity.kt`、`app/src/test/java/com/jiuxina/ying/StartupSmokeTest.kt`（新建）、`app/build.gradle.kts`（`testImplementation(libs.robolectric)`，版本目录里本就预留 4.16）
+- 验证：全量单测 0 失败（新增 3 例启动冒烟）；编译仅 1 条 `getExternalMediaDirs` 废弃警告（API 37 标注，行为不受影响）
+- 状态：**等用户取回 `startup.log` / `crash-*.txt` 再定根因**。若日志停在 `main setContent returned` 之后，则锁定首帧绘制（渲染层）；若停在更早的位置，按最后一条 mark 逐步收窄。
+
 ## [2026-11-11] M6 设置中心与备份
 
 - 改动：新增 `ui/settings/`——`SettingsScreen`（整页覆盖，自带 `GlassBackdrop` 与 `BackHandler`；外观 / 数据 / 提醒 / 关于四组玻璃卡片，全部由一个 LazyColumn 承载）+ `SettingsViewModel`（持久设置走 DataStore Flow、瞬时状态走本地 StateFlow，两者 combine 成一个 UI 状态）+ `SettingsUiState`/`SettingsActions`（含 `ImportReport.summaryText` 文案）+ 自绘 `GlassSwitch`（跟随 `reduceMotion` 用 `snap()` 关动画）；`GlassTheme` 新增 `darkTheme`/`reduceTransparency`/`reduceMotion` 三参数并暴露 `LocalGlassDark`/`LocalReduceMotion`，`GlassBackdrop` 与 `glassTextPrimary/Secondary` 改为读 `LocalGlassDark`（此前只认系统深浅，用户强制浅色会底色与文字分裂）；新增 `data/settings/AppSettings`（`ThemeMode` + `isDark(systemDark)` 纯函数）；新增 `data/backup/`——`BackupDocument`/`BackupCodec`（逐字段容错、时间双格式、坏条目跳过计数、版本过高拒绝）+ `BackupMapper`（领域 ↔ 可读文本）+ `BackupMerge`（按 id 合并）+ `BackupRepository`（导出全量 / 导入 REPLACE|MERGE / 清空全部）+ `BackupFiles`（SAF 读写 + 建议文件名）；`WidgetConfigStore` 增 `widget.default_style` 作为「widgetId 查不到」时的兜底。

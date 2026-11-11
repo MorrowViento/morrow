@@ -19,6 +19,7 @@ import com.jiuxina.ying.ui.reminder.ReminderActions
 import com.jiuxina.ying.ui.reminder.ReminderViewModel
 import com.jiuxina.ying.ui.settings.SettingsActions
 import com.jiuxina.ying.ui.settings.SettingsViewModel
+import com.jiuxina.ying.util.StartupTrace
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private val pendingDetailId = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartupTrace.mark("main", "onCreate enter")
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as YingApp
@@ -162,6 +164,11 @@ class MainActivity : ComponentActivity() {
                 onDetailRequestConsumed = { pendingDetailId.value = null },
             )
         }
+        StartupTrace.mark("main", "setContent returned")
+
+        // 首帧标记：能走到这里说明组合、测量、绘制全都过了。
+        // 若 startup.log 停在上一行，崩溃就在首帧绘制里（渲染层），而不在业务代码。
+        window.decorView.post { StartupTrace.mark("main", "first frame drawn") }
     }
 
     override fun onNewIntent(intent: Intent) {

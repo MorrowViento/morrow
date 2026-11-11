@@ -10,6 +10,8 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 
 真机首轮反馈的两个运行时问题已修：日历整页覆盖缺底色导致与首页重叠、日期滚轮所在的 `verticalScroll` 表单里 `LazyColumn` 无界高导致点 + 号闪退（详见 `docs/CHANGELOG.md` 同名条目）。
 
+**当前阻塞：m6 包在 Android 16 真机上「打开即闪退」（同机 m5 正常）。** JVM 侧已用 Robolectric 把 `Application` + `MainActivity` 拉到 `onResume` 并强制走完首帧测量（API 33/34），三例全通过，说明不是业务逻辑缺陷；同时已用字节码核实 `GlasmioTheme` 默认 `GlassAppearance` 与 M6 显式传参逐字段相等，`GlassTheme` 改造可排除。已加临时诊断设施 `util/StartupTrace`（启动轨迹 `startup.log` + 崩溃堆栈 `crash-*.txt`，落在 `Android/media/<包名>/`），**等用户取回日志定根因**；M7 发布前须移除该设施。
+
 仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
 
 下一步：`M7` 应用内更新与发布；`M2a`–`M6` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 与小部件的「跨零点刷新」、备份的云盘读写必须真机才能验证。
