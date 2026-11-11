@@ -71,7 +71,8 @@ class EventViewModel(
             events.observeAll()
                 .drop(1)
                 .debounce(300)
-                .collect { widgetRefresh.refreshAll() }
+                // 拼 RemoteViews 会走 Binder IPC，别占主线程
+                .collect { withContext(Dispatchers.IO) { widgetRefresh.refreshAll() } }
         }
     }
 
