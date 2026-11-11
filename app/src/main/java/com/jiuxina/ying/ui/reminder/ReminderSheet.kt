@@ -105,6 +105,18 @@ fun ReminderSheet(
                         actionLabel = "去开启",
                         onClick = actions.openExactAlarmSettings,
                     )
+                    Spacer(Modifier.height(6.dp))
+                    PermissionRow(
+                        title = "后台运行",
+                        detail = if (state.batteryUnrestricted) {
+                            "不受电池限制，闹钟不会被冻结"
+                        } else {
+                            "系统可能冻结后台，提醒会晚上几秒到几十秒"
+                        },
+                        ok = state.batteryUnrestricted,
+                        actionLabel = "去设置",
+                        onClick = actions.openBatterySettings,
+                    )
 
                     Spacer(Modifier.height(14.dp))
                     SectionTitle("排期中的提醒 · ${state.alarmCount} 条 / ${state.eventCount} 个事件")
@@ -113,7 +125,7 @@ fun ReminderSheet(
                     // 精确闹钟未授权时通常明显为正，授权后应接近 0
                     state.lastDelayMillis?.let { delay ->
                         Text(
-                            text = describeDelay(delay),
+                            text = describeDelay(delay, state.lastHandleMillis),
                             style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
                             modifier = Modifier.padding(top = 6.dp, start = 2.dp),
                         )
@@ -229,12 +241,17 @@ private fun ReminderRowView(row: ReminderRow) {
  * 把「上一条提醒的实际延迟」说成人话。
  *
  * 阈值取 5 秒：正常人感觉不到几秒的偏差，而一旦到了「分钟」级，用户就是真的觉得不准了，
- * 这时必须直接指出原因（系统推迟），否则用户只会以为应用坏了。
+ * 这时必须直接指出责任方（系统推迟 / 应用处理慢），否则用户只会以为应用坏了。
  */
-private fun describeDelay(delayMillis: Long): String = when {
-    delayMillis > 5_000L -> "上次提醒晚了 ${formatSpan(delayMillis)}，系统在推迟闹钟"
-    delayMillis < -5_000L -> "上次提醒早了 ${formatSpan(-delayMillis)}"
-    else -> "上次提醒准时"
+private fun describeDelay(delayMillis: Long, handleMillis: Long?): String {
+    val head = when {
+        delayMillis > 5_000L -> "上次提醒晚了 ${formatSpan(delayMillis)}，系统在推迟闹钟"
+        delayMillis < -5_000L -> "上次提醒早了 ${formatSpan(-delayMillis)}"
+        else -> "上次提醒准时"
+    }
+    // 应用自身处理超过 1 秒才值得单独说明：这是代码问题，不是系统问题
+    val tail = handleMillis?.takeIf { it > 1_000L }?.let { "，应用处理耗时 ${formatSpan(it)}" }.orEmpty()
+    return head + tail
 }
 
 private fun formatSpan(millis: Long): String {

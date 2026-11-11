@@ -123,6 +123,9 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             .putExtra(ReminderReceiver.EXTRA_TARGET, item.targetAtMillis)
             // 计划触发时刻随 intent 带到接收器，才能算出「系统推迟了多久」
             .putExtra(ReminderReceiver.EXTRA_TRIGGER_AT, item.triggerAtMillis)
+            // 标题与全天标记也带上：接收器冷启动时不必先开数据库就能发出通知
+            .putExtra(ReminderReceiver.EXTRA_TITLE, item.title)
+            .putExtra(ReminderReceiver.EXTRA_IS_ALL_DAY, item.isAllDay)
 
     private fun snoozeIntent(eventId: String): Intent =
         Intent(appContext, ReminderReceiver::class.java)

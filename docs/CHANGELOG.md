@@ -2,6 +2,18 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] 提醒仍晚约 20 秒：通知不等数据库，自愈链让路，延迟拆成两段
+
+- 现象（真机）：补 `USE_EXACT_ALARM` 后从「晚 4 分钟」降到「晚约 20 秒」，仍未准点。
+- 判断：4 分钟 → 20 秒说明精确闹钟已生效，剩下的是另一层耗时。可能来源有两个，且都在应用侧可控——① 接收器冷启动时先 `findById` 查 Room，等于让通知等数据库；② `YingApp.onCreate` 里的自愈链（`syncAll` 多次 AlarmManager 调用 + `refreshAll` 的 RemoteViews Binder 往返）与通知投递同时起跑，争抢 CPU/IO。
+- 改动：
+  - **通知不再依赖数据库**：`Title` / `isAllDay` 随 Intent 带给 `ReminderReceiver`，`ReminderNotifier` 新增不接 `CountdownEvent` 的重载。投递在前、查库在后，数据库只用于「已完成则撤销 / 重复事件重排」的对账。旧排期（Intent 里没有标题）自动回退到查库路径。
+  - **自愈链让路**：`warmStart()` 延后 1.5 秒启动，给闹钟广播拉起的进程腾出资源。自愈本身是纯后台维护，晚 1.5 秒无可见影响。
+  - **延迟拆成两段**：新增 `LAST_REMINDER_SHOWN_AT`，与 `LAST_REMINDER_FIRED_AT`、`LAST_REMINDER_TRIGGER_AT` 一起算出「系统延迟」与「应用处理耗时」，诊断页分别显示。应用耗时超过 1 秒才单独提示——那才是代码问题，其余是系统问题。
+  - **新增「后台运行」状态行**：`PowerManager.isIgnoringBatteryOptimizations` + 跳系统电池优化列表。国产 ROM 的后台冻结会让进程延迟收广播，即便精确闹钟权限齐备也会晚几秒到几十秒，这一项必须和「精确闹钟」分开显示。
+- 涉及文件：`reminder/{ReminderReceiver,ReminderNotifier}.kt`、`data/reminder/{AlarmReminderScheduler,ReminderPermissions}.kt`、`data/settings/LegacySettingsKeys.kt`、`ui/reminder/{ReminderViewModel,ReminderUiState,ReminderSheet}.kt`、`YingApp.kt`、`MainActivity.kt`
+- 验证：175 项单测 0 失败、lint 11 项基线。
+
 ## [2026-11-11] 修提醒晚 4 分钟：补 USE_EXACT_ALARM，并让延迟可观测
 
 - 现象（真机反馈，OnePlus PJZ110 / Android 17）：事件设「提前 10 分钟」，实际提前 6 分钟才响，晚 4 分钟；同一时刻应用在前台；设置页「发送测试通知」正常。

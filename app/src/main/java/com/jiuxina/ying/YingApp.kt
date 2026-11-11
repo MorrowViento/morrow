@@ -19,6 +19,7 @@ import com.jiuxina.ying.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -87,7 +88,16 @@ class YingApp : Application() {
         backupRepository = BackupRepository(settingsRepository, eventRepository)
         StartupTrace.mark("app", "widget + backup wired")
 
-        appScope.launch { warmStart() }
+        // 冷启动自愈让路 1.5 秒再跑。
+        //
+        // 用途是给「闹钟广播拉起进程」这条路径腾出 CPU/IO：自愈链里有 syncAll（多次
+        // AlarmManager 调用）与 refreshAll（RemoteViews Binder 往返），若与通知投递挤在
+        // 同一瞬间，就会变成用户感知到的「提醒晚了」。自愈本身是纯后台维护，
+        // 晚 1.5 秒没有任何可见影响。
+        appScope.launch {
+            delay(WARM_START_GRACE_MILLIS)
+            warmStart()
+        }
     }
 
     /**
@@ -139,5 +149,8 @@ class YingApp : Application() {
 
     companion object {
         private const val TAG = "YingApp"
+
+        /** 冷启动自愈的让路时间，见 `onCreate` 里的说明。 */
+        private const val WARM_START_GRACE_MILLIS = 1_500L
     }
 }

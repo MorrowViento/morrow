@@ -25,6 +25,9 @@ import java.time.ZoneId
 class ReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // 取到达时刻要尽量靠前：这是「系统实际投递」的唯一可信时间戳，
+        // 后面任何一行代码的耗时会污染它
+        val receivedAt = System.currentTimeMillis()
         val app = context.applicationContext as? YingApp ?: return
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID) ?: return
         val pending = goAsync()
@@ -33,7 +36,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 when (intent.action) {
                     ACTION_COMPLETE -> complete(app, eventId)
                     ACTION_SNOOZE -> snooze(app, eventId)
-                    else -> fire(app, eventId, intent)
+                    else -> fire(app, eventId, intent, receivedAt)
                 }
             } catch (t: Throwable) {
                 // 接收器里抛异常会让系统杀掉进程，这里必须兜住
@@ -44,34 +47,74 @@ class ReminderReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun fire(app: YingApp, eventId: String, intent: Intent) {
-        val event = app.eventRepository.findById(eventId) ?: return
-        // 用户在别处已完成/删除后，残留闹钟应当安静退出
-        if (event.isCompleted) return
-
+    /**
+     * 投递提醒。
+     *
+     * 顺序刻意如此：**先发通知，再查数据库**。闹钟广播通常伴随进程冷启动，
+     * 此时 Room 尚未打开，`findById` 要先建库连接——放前面等于让用户干等。
+     * 而渲染通知需要的标题、是否全天、目标时刻在排期时已知，随 Intent 带来即可；
+     * 数据库只在通知发出之后用于「已完成则撤销 / 重复事件重排」这类对账。
+     */
+    private suspend fun fire(app: YingApp, eventId: String, intent: Intent, receivedAt: Long) {
         val minutes = intent.getIntExtra(EXTRA_MINUTES, 0)
-        val fallbackTarget = event.targetDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val target = intent.getLongExtra(EXTRA_TARGET, 0L).takeIf { it > 0L } ?: fallbackTarget
-        val now = System.currentTimeMillis()
-        app.reminderNotifier.show(event, minutes, target, now)
+        val target = intent.getLongExtra(EXTRA_TARGET, 0L)
+        val title = intent.getStringExtra(EXTRA_TITLE)
+        val isAllDay = intent.getBooleanExtra(EXTRA_IS_ALL_DAY, false)
 
-        // 记下「系统实际比计划晚/早了多少」，供诊断页显示。
-        // 没有触发时刻的调用方（稍后提醒）不记，否则会把延迟数据搅乱
-        val planned = intent.getLongExtra(EXTRA_TRIGGER_AT, 0L)
-        if (planned > 0L) {
-            runCatching {
-                app.settingsRepository.putStrings(
-                    mapOf(
-                        LegacySettingsKeys.LAST_REMINDER_FIRED_AT to now.toString(),
-                        LegacySettingsKeys.LAST_REMINDER_TRIGGER_AT to planned.toString(),
-                    ),
-                )
-            }
-            Log.i(TAG, "提醒已投递 event=$eventId 计划=$planned 实际=$now 延迟=${now - planned}ms")
+        if (target > 0L && !title.isNullOrBlank()) {
+            app.reminderNotifier.show(eventId, title, isAllDay, minutes, target, receivedAt)
+        } else {
+            // 兼容升级前已排进系统、Intent 里还没有标题的旧闹钟
+            val event = app.eventRepository.findById(eventId) ?: return
+            if (event.isCompleted) return
+            val fallbackTarget = event.targetDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            app.reminderNotifier.show(event, minutes, target.takeIf { it > 0L } ?: fallbackTarget, receivedAt)
         }
 
-        // 年度重复事件靠这一步自转：触发后立即按「从现在起」重排，补上明年的落点
-        app.reminderScheduler.sync(event)
+        val shownAt = System.currentTimeMillis()
+        recordDelivery(app, eventId, intent.getLongExtra(EXTRA_TRIGGER_AT, 0L), receivedAt, shownAt)
+
+        // 后置对账：已完成则撤销（并发场景下排期可能没来得及清），否则按「从现在起」重排，
+        // 年度重复事件靠这一步自转，补上明年的落点
+        val event = app.eventRepository.findById(eventId) ?: return
+        if (event.isCompleted) {
+            app.reminderNotifier.cancel(eventId)
+            app.reminderScheduler.cancel(eventId)
+        } else {
+            app.reminderScheduler.sync(event)
+        }
+    }
+
+    /**
+     * 把「计划 / 系统投递 / 应用发出」三个时刻落盘，供诊断页显示。
+     *
+     * 三段拆分是为了让「晚了」这件事可归因：`received - planned` 是系统拖延（省电策略、
+     * 不精确闹钟），`shown - received` 是应用自身的处理耗时。两者混在一起时，
+     * 用户只能描述「感觉晚了」，无法判断该改哪里。
+     */
+    private suspend fun recordDelivery(
+        app: YingApp,
+        eventId: String,
+        plannedAt: Long,
+        receivedAt: Long,
+        shownAt: Long,
+    ) {
+        // 稍后提醒的 Intent 没有计划触发时刻，不参与延迟统计
+        if (plannedAt <= 0L) return
+        Log.i(
+            TAG,
+            "提醒已投递 event=$eventId 计划=$plannedAt 收到=$receivedAt 发出=$shownAt " +
+                "系统延迟=${receivedAt - plannedAt}ms 处理耗时=${shownAt - receivedAt}ms",
+        )
+        runCatching {
+            app.settingsRepository.putStrings(
+                mapOf(
+                    LegacySettingsKeys.LAST_REMINDER_TRIGGER_AT to plannedAt.toString(),
+                    LegacySettingsKeys.LAST_REMINDER_FIRED_AT to receivedAt.toString(),
+                    LegacySettingsKeys.LAST_REMINDER_SHOWN_AT to shownAt.toString(),
+                ),
+            )
+        }
     }
 
     private suspend fun complete(app: YingApp, eventId: String) {
@@ -101,6 +144,8 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_MINUTES = "minutes_before"
         const val EXTRA_TARGET = "target_at"
         const val EXTRA_TRIGGER_AT = "trigger_at"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_IS_ALL_DAY = "is_all_day"
 
         const val SNOOZE_MINUTES = 10
     }

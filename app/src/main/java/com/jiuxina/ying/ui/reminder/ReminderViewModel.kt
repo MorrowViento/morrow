@@ -56,22 +56,24 @@ class ReminderViewModel(
         }
     }
 
-    /** 上一次投递的实际延迟；两个键都缺失时为 null。 */
-    private val lastDelay: Flow<Long?> = combine(
-        settings.rawString(LegacySettingsKeys.LAST_REMINDER_FIRED_AT),
+    /** 上一次投递的「系统延迟 → 应用耗时」；任一时刻缺失时为 null。 */
+    private val lastDelivery: Flow<Pair<Long, Long>?> = combine(
         settings.rawString(LegacySettingsKeys.LAST_REMINDER_TRIGGER_AT),
-    ) { fired, planned ->
-        val f = fired?.toLongOrNull()
-        val p = planned?.toLongOrNull()
-        if (f == null || p == null) null else f - p
+        settings.rawString(LegacySettingsKeys.LAST_REMINDER_FIRED_AT),
+        settings.rawString(LegacySettingsKeys.LAST_REMINDER_SHOWN_AT),
+    ) { plannedPref, firedPref, shownPref ->
+        val planned = plannedPref?.toLongOrNull()
+        val fired = firedPref?.toLongOrNull()
+        val shown = shownPref?.toLongOrNull()
+        if (planned == null || fired == null || shown == null) null else (fired - planned) to (shown - fired)
     }
 
     val state: StateFlow<ReminderUiState> = combine(
         events.observeAll(),
         refreshTick,
         ticker,
-        lastDelay,
-    ) { list, _, now, delay -> build(list, now, delay) }
+        lastDelivery,
+    ) { list, _, now, delivery -> build(list, now, delivery) }
         .catch { emit(ReminderUiState(isLoading = false)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReminderUiState())
 
@@ -82,6 +84,8 @@ class ReminderViewModel(
     fun openNotificationSettings() = permissions.openNotificationSettings()
 
     fun openExactAlarmSettings() = permissions.openExactAlarmSettings()
+
+    fun openBatterySettings() = permissions.openBatterySettings()
 
     fun sendTest() {
         runCatching {
@@ -98,7 +102,11 @@ class ReminderViewModel(
         }
     }
 
-    private fun build(list: List<CountdownEvent>, nowMillis: Long, lastDelayMillis: Long?): ReminderUiState {
+    private fun build(
+        list: List<CountdownEvent>,
+        nowMillis: Long,
+        delivery: Pair<Long, Long>?,
+    ): ReminderUiState {
         val planned = list
             .flatMap { ReminderPlan.upcoming(it, nowMillis) }
             .sortedBy { it.triggerAtMillis }
@@ -106,12 +114,14 @@ class ReminderViewModel(
         return ReminderUiState(
             notificationsAllowed = permissions.notificationsAllowed(),
             exactAlarmsAllowed = permissions.exactAlarmsAllowed(),
+            batteryUnrestricted = permissions.batteryUnrestricted(),
             rows = planned.take(MAX_ROWS).map { it.toRow(zone, nowMillis) },
             alarmCount = planned.size,
             eventCount = list.count { event ->
                 !event.isCompleted && event.reminders.any { it.enabled }
             },
-            lastDelayMillis = lastDelayMillis,
+            lastDelayMillis = delivery?.first,
+            lastHandleMillis = delivery?.second,
             isLoading = false,
         )
     }

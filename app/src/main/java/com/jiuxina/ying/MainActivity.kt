@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                     refresh = reminderViewModel::refresh,
                     openNotificationSettings = reminderViewModel::openNotificationSettings,
                     openExactAlarmSettings = reminderViewModel::openExactAlarmSettings,
+                    openBatterySettings = reminderViewModel::openBatterySettings,
                     sendTest = reminderViewModel::sendTest,
                     resync = reminderViewModel::resync,
                 )

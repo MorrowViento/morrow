@@ -32,6 +32,9 @@ object LegacySettingsKeys {
      */
     const val LAST_REMINDER_FIRED_AT = "reminder.last_fired_at"
     const val LAST_REMINDER_TRIGGER_AT = "reminder.last_trigger_at"
+
+    /** 通知真正交给系统通知栏的时刻；与 [LAST_REMINDER_FIRED_AT] 之差即应用自身处理耗时。 */
+    const val LAST_REMINDER_SHOWN_AT = "reminder.last_shown_at"
 }
 
 /** 迁移自身使用的元数据键（不属于旧版数据，前缀区分）。 */

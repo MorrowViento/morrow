@@ -17,12 +17,22 @@ class ReminderPermissions(context: Context) {
     private val appContext = context.applicationContext
     private val notificationManager = appContext.getSystemService(android.app.NotificationManager::class.java)
     private val alarmManager = appContext.getSystemService(AlarmManager::class.java)
+    private val powerManager = appContext.getSystemService(android.os.PowerManager::class.java)
 
     /** 通知总开关（含渠道被用户关掉的情况由系统统一反映在这里）。 */
     fun notificationsAllowed(): Boolean = notificationManager.areNotificationsEnabled()
 
     /** 是否允许精确闹钟（Android 14 起新装应用默认拒绝）。 */
     fun exactAlarmsAllowed(): Boolean = alarmManager.canScheduleExactAlarms()
+
+    /**
+     * 是否已豁免电池优化。
+     *
+     * 国产 ROM（ColorOS / HyperOS / EMUI 等）会在这之上再叠一层自家的「后台冻结」，
+     * 即便精确闹钟权限齐备，被冻结的进程也会延迟接收广播——真机上「晚了 20 秒」
+     * 就是这一类的典型表现。所以这一项要和精确闹钟分开显示，不能合并成「权限已开」。
+     */
+    fun batteryUnrestricted(): Boolean = powerManager.isIgnoringBatteryOptimizations(appContext.packageName)
 
     fun openNotificationSettings() {
         launch(
@@ -36,6 +46,11 @@ class ReminderPermissions(context: Context) {
             Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
                 .setData("package:${appContext.packageName}".toUri()),
         )
+    }
+
+    /** 打开系统的「电池优化」列表页，由用户自行把本应用设为「不受限制」。 */
+    fun openBatterySettings() {
+        launch(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }
 
     private fun launch(intent: Intent) {

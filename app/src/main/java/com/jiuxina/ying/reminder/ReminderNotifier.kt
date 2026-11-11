@@ -45,9 +45,28 @@ class ReminderNotifier(context: Context) {
     }
 
     fun show(event: CountdownEvent, minutesBefore: Int, targetAtMillis: Long, nowMillis: Long) {
+        show(event.id, event.title, event.isAllDay, minutesBefore, targetAtMillis, nowMillis)
+    }
+
+    /**
+     * 不依赖 [CountdownEvent] 的投递入口。
+     *
+     * 闹钟广播触发时进程往往是冷启动，此刻去 Room 查事件要先打开数据库文件——
+     * 真机实测这段能吃掉数百毫秒乃至更久（省电模式下更糟）。而标题、是否全天
+     * 这些渲染通知必需的信息在排期时就已经知道，随 Intent 带过来即可，
+     * 于是**通知不必等数据库**。数据库只在投递之后用于对账。
+     */
+    fun show(
+        eventId: String,
+        title: String,
+        isAllDay: Boolean,
+        minutesBefore: Int,
+        targetAtMillis: Long,
+        nowMillis: Long,
+    ) {
         val target = LocalDateTime.ofInstant(Instant.ofEpochMilli(targetAtMillis), ZoneId.systemDefault())
         val body = buildString {
-            append(target.format(if (event.isAllDay) DATE_ONLY else DATE_TIME))
+            append(target.format(if (isAllDay) DATE_ONLY else DATE_TIME))
             append(" · ")
             append(relativeText(target.toLocalDate(), nowMillis))
         }
@@ -55,29 +74,29 @@ class ReminderNotifier(context: Context) {
         val noIcon: Icon? = null
         val notification = Notification.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(event.title)
+            .setContentTitle(title)
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))
             .setSubText(EventReminder.labelForMinutes(minutesBefore))
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)
-            .setContentIntent(openIntent(event.id))
+            .setContentIntent(openIntent(eventId))
             .addAction(
                 Notification.Action.Builder(
                     noIcon,
                     appContext.getString(R.string.reminder_action_complete),
-                    actionIntent(event.id, ReminderReceiver.ACTION_COMPLETE),
+                    actionIntent(eventId, ReminderReceiver.ACTION_COMPLETE),
                 ).build(),
             )
             .addAction(
                 Notification.Action.Builder(
                     noIcon,
                     appContext.getString(R.string.reminder_action_snooze),
-                    actionIntent(event.id, ReminderReceiver.ACTION_SNOOZE),
+                    actionIntent(eventId, ReminderReceiver.ACTION_SNOOZE),
                 ).build(),
             )
             .build()
-        notify(notificationId(event.id), notification)
+        notify(notificationId(eventId), notification)
     }
 
     /** 诊断页的「发一条测试通知」：走真实渠道，用于确认权限与免打扰设置。 */
