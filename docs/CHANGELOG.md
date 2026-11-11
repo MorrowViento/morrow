@@ -2,6 +2,14 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] 启动闪退结案：冷启动自愈链缺兜底
+
+- 结论：m6 的「打开即闪退」根因是 `YingApp` 冷启动自愈链**没有任何异常兜底**。迁移 / 撤销恢复 / 提醒对账 / 小部件刷新整段塞在一个裸 `appScope.launch {}` 里，协程内未捕获异常直达系统默认 `UncaughtExceptionHandler` 直接杀进程——所以是「一闪即退、看不到任何画面」，而不是界面画到一半才挂。诊断包（把四步逐步 `runCatching` 隔离）装上后**用户反馈不再闪退**，与推断一致。这也解释了为何 JVM 侧测不出来：Robolectric 下 `Dispatchers.IO` 的调度时序与真机不同，异常没在同样的时机被抛出。
+- 改动：`util/StartupTrace` 收敛为**仅 debug 包生效**——落盘与崩溃拦截都走 `ApplicationInfo.FLAG_DEBUGGABLE` 判定（不依赖 buildConfig 开关）；正式包只写 logcat、不接管 `UncaughtExceptionHandler`（接管会挡住系统与商店的崩溃上报）。启动轨迹与 `warmStart`/`step` 的逐步隔离保留，这是真修复。
+- 涉及文件：`util/StartupTrace.kt`、`YingApp.kt`
+- 验证：全量单测 0 失败；`assembleDebug` 通过
+- 状态：闪退已解除。**被吞掉的异常本身尚未归因**——若能在装过诊断包的那台机器上取到 `Android/media/com.jiuxina.ying/startup.log`，看哪一步标了 `: XXXException`，即可确认是哪个自愈步骤在这台机器上失败（大概率是旧数据迁移或提醒对账），再决定要不要单独修。
+
 ## [2026-11-11] 诊断：m6 安装后启动即退（真机 Android 16）
 
 - 现象：`ying-4.0.0-alpha1-debug-m6.apk` 在同一台 Android 16 机器上点开**一闪即退、看不到任何画面**；同机 `debug-m5.apk` 正常。故问题由 M6 引入，且落在启动早期。

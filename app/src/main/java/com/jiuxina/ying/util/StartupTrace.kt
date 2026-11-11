@@ -1,6 +1,7 @@
 package com.jiuxina.ying.util
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.util.Log
 import java.io.File
@@ -9,7 +10,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 启动轨迹与崩溃记录（**诊断期临时设施，M7 发布前移除**）。
+ * 启动轨迹与崩溃记录。
  *
  * 存在理由：真机上「打开即闪退」时，本机没有 adb 通道、Robolectric 又跳过真实绘制，
  * 崩溃点只能靠设备自己留下证据。这里做两件事：
@@ -18,6 +19,9 @@ import java.util.Locale
  *    即使崩溃是 native 层（SIGSEGV 不会被 Java 的 UncaughtExceptionHandler 捕获），
  *    日志里最后一条也能指出卡在哪一步。
  * 2. 安装 [Thread.setDefaultUncaughtExceptionHandler]，把 Java 异常堆栈写成 `crash-*.txt`。
+ *
+ * **只在 debug 包生效**：正式包不落盘、不接管崩溃处理器（接管会挡住系统/商店的崩溃上报）。
+ * debug 判定取 `FLAG_DEBUGGABLE`，不依赖 buildConfig 开关。
  *
  * 落盘位置优先 `Android/media/<包名>/`：Android 11+ 起应用可自由读写自己的 media 目录，
  * 且**任何文件管理器都能直接看到**，用户取出日志不需要电脑、不需要 root。
@@ -33,7 +37,7 @@ object StartupTrace {
     @Volatile
     private var dir: File? = null
 
-    /** 诊断目录（对用户可见）；为空表示落盘不可用，此时只写 logcat。 */
+    /** 诊断目录（对用户可见）；为空表示不落盘——正式包或落盘不可用时都为空。 */
     fun directory(): File? = dir
 
     /**
@@ -44,17 +48,21 @@ object StartupTrace {
         if (dir != null) return
 
         val app = context.applicationContext
-        dir = resolveDir(app)
-
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            // 写日志本身失败绝不能掩盖原始崩溃：包住后继续交给原处理器
-            runCatching { writeCrash(app, thread, error) }
-            previous?.uncaughtException(thread, error)
+        // 正式包什么都不装：轨迹只进 logcat，崩溃处理器保持系统默认
+        val debuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (debuggable) {
+            dir = resolveDir(app)
+            val previous = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+                // 写日志本身失败绝不能掩盖原始崩溃：包住后继续交给原处理器
+                runCatching { writeCrash(app, thread, error) }
+                previous?.uncaughtException(thread, error)
+            }
         }
 
         mark("app", "install sdk=${Build.VERSION.SDK_INT} release=${Build.VERSION.RELEASE} " +
-            "device=${Build.MANUFACTURER}/${Build.MODEL} pid=${android.os.Process.myPid()}")
+            "device=${Build.MANUFACTURER}/${Build.MODEL} pid=${android.os.Process.myPid()} " +
+            "debug=$debuggable")
     }
 
     /** 记录一行启动轨迹：同时进 logcat 与 startup.log，且立刻 flush。 */

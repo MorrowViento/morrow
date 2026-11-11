@@ -62,8 +62,7 @@ class YingApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // 诊断设施必须最先装上：构造阶段的崩溃留不下证据（M7 发布前移除）。
-        // 每步几十字节的同步写，不构成 ANR 风险。
+        // 仅 debug 包落盘；正式包里只写 logcat，不接管崩溃处理器
         StartupTrace.install(this)
 
         database = YingDatabase.build(this)
