@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import androidx.core.net.toUri
+import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -55,17 +56,23 @@ class WidgetRefresher(
     )
 
     override suspend fun refreshAll() {
-        val overviewIds = manager.getAppWidgetIds(overviewComponent)
-        val detailIds = manager.getAppWidgetIds(detailComponent)
-        if (overviewIds.isEmpty() && detailIds.isEmpty()) return
-        refresh(overviewIds, isDetail = false)
-        refresh(detailIds, isDetail = true)
+        // 小部件是「顺带」的能力，任何一处出错都不该波及 App 本体：
+        // 调用方多在 viewModelScope / 接收器协程里，异常没人接就会杀进程
+        // （真机上曾因旧键类型错配抛 ClassCastException，表现为「保存后退回桌面」）。
+        runCatching {
+            val overviewIds = manager.getAppWidgetIds(overviewComponent)
+            val detailIds = manager.getAppWidgetIds(detailComponent)
+            if (overviewIds.isEmpty() && detailIds.isEmpty()) return
+            refresh(overviewIds, isDetail = false)
+            refresh(detailIds, isDetail = true)
+        }.onFailure { Log.e(TAG, "刷新总览小部件失败，已忽略", it) }
     }
 
     /** 刷新指定的一组小部件（provider 的 onUpdate 用这个，避免每次都扫全部 id）。 */
     suspend fun refreshIds(ids: IntArray, isDetail: Boolean) {
         if (ids.isEmpty()) return
-        refresh(ids, isDetail)
+        runCatching { refresh(ids, isDetail) }
+            .onFailure { Log.e(TAG, "刷新小部件失败 ids=${ids.joinToString()}", it) }
     }
 
     private suspend fun refresh(ids: IntArray, isDetail: Boolean) {
@@ -295,6 +302,8 @@ class WidgetRefresher(
             Configuration.UI_MODE_NIGHT_YES
 
     companion object {
+        private const val TAG = "YingWidget"
+
         /** 与 `widget_overview.xml` 里写死的 5 组行保持一致。 */
         private const val ROW_COUNT = 5
 

@@ -2,6 +2,19 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] 修「保存事件后退回桌面」——DataStore 旧键类型错配
+
+- 现象（真机 OnePlus PJZ110 / Android 17，debug 包）：填完表单点保存，应用**退回桌面**；重开记录还在（说明数据已落库，崩在保存之后）。
+- 根因（取自 `crash-1794397428221.txt`）：`ClassCastException: java.lang.Boolean cannot be cast to java.lang.String`，栈为 `WidgetConfigStore.legacyDefaults(…:66)` ← `defaultStyle(…:37)` ← `WidgetRefresher.refresh(…:79)`。
+  - DataStore 的 `Preferences.Key` 是 `data class Key<T>(name)`，**相等性只看 name、不校验类型**，内部实现 `preferencesMap[key] as T?`；于是「用 String 键读 Boolean 值」不会在读取时被挡住，而是在调用方做 `String` 赋值时抛 CCE。
+  - 错配来源：M1 迁移用 `putRaw` **原样保留类型**搬运 Flutter 版偏好，而 Flutter 版的 `widget_show_progress` / `widget_show_category` / `widget_show_date` 是 **Boolean**；M5 的 `WidgetConfigStore` 按 String 读。
+  - 为何是「退回桌面」而不是界面内报错：该刷新挂在 `EventViewModel` 的 `observeAll()` 上（`drop(1)+debounce(300)`），运行在 `viewModelScope`——**没有异常处理器**，未捕获异常直达默认 `UncaughtExceptionHandler` 直接杀进程。保存本身早已完成，所以重开记录还在。
+- 改动：把「按名字 + 类型宽容」的读取收敛进 `SettingsRepository`——新增 `Preferences.stringOrNull` / `booleanOrNull`（`Any?` → 文本/布尔，认 `"true"/"1"/"yes"` 与数字），`themeMode` / `sortMode` / `reduceTransparency` / `reduceMotion` / `onboardingCompleted` / `snapshotSettings` / `rawString` / `stringOnce` 全部改走它们。全项目 DataStore 读取都经 `SettingsRepository`，一处收口即全覆盖。顺带修掉一个潜伏问题：迁移完成标记 `migration.legacy_v1_done` 也是 Boolean，此前 `rawString` 读它会抛异常（被 `warmStart` 的 `runCatching` 吞掉），导致**每次冷启动都重跑一遍旧数据迁移**。
+- 另加固：`WidgetRefresher.refreshAll` / `refreshIds` 与 `EventViewModel` 的刷新 collector 各包一层 `runCatching`——小部件是附带能力，任何异常只留日志，绝不波及保存与启动。
+- 另修复：`WidgetStyleCodec.fromLegacy` 此前读了 `widget_show_*` 三个键却**从不使用**（死读，且正是崩点）；现在按旧版显式开关覆盖预设默认，旧用户的小部件显隐能真正带过来。
+- 涉及文件：`data/settings/SettingsRepository.kt`、`widget/WidgetStyle.kt`、`widget/WidgetRefresher.kt`、`ui/event/EventViewModel.kt`、`app/src/test/java/com/jiuxina/ying/data/settings/SettingsTypeSafetyTest.kt`（新建 5 例）
+- 验证：全量单测 0 失败（新增 5 例：布尔/数字旧值读取不抛、缺键保持默认、`legacyDefaults()` 完整复现路径、无旧键时不崩）；lint 仍为基线
+
 ## [2026-11-11] 启动闪退结案：冷启动自愈链缺兜底
 
 - 结论：m6 的「打开即闪退」根因是 `YingApp` 冷启动自愈链**没有任何异常兜底**。迁移 / 撤销恢复 / 提醒对账 / 小部件刷新整段塞在一个裸 `appScope.launch {}` 里，协程内未捕获异常直达系统默认 `UncaughtExceptionHandler` 直接杀进程——所以是「一闪即退、看不到任何画面」，而不是界面画到一半才挂。诊断包（把四步逐步 `runCatching` 隔离）装上后**用户反馈不再闪退**，与推断一致。这也解释了为何 JVM 侧测不出来：Robolectric 下 `Dispatchers.IO` 的调度时序与真机不同，异常没在同样的时机被抛出。

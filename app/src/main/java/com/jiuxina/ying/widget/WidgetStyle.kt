@@ -204,9 +204,26 @@ object WidgetStyleCodec {
             "accent", "brand", "colorful" -> WidgetPalette.ACCENT
             else -> WidgetPalette.SYSTEM
         }
-        return WidgetStyle(preset = preset, fontScale = font, palette = palette)
-            .withPreset(preset)
+        // 先按预设确定默认显隐，再让旧版显式开关覆盖它——否则 withPreset 会把旧值抹掉
+        val base = WidgetStyle(preset = preset, fontScale = font, palette = palette).withPreset(preset)
+        return base.copy(
+            showCategory = values.legacyBool("widget_show_category") ?: base.showCategory,
+            showDate = values.legacyBool("widget_show_date") ?: base.showDate,
+            showProgress = values.legacyBool("widget_show_progress") ?: base.showProgress,
+        )
     }
+
+    /**
+     * 旧版布尔值：Dart 侧存的是 Boolean 真值，经 `putRaw` 原样搬家后仍是 Boolean；
+     * 这里统一转成文本再解析，因此 `true` / `"true"` / `"1"` 都能认。
+     */
+    private fun Map<String, String?>.legacyBool(key: String): Boolean? =
+        when (val raw = this[key]?.trim()?.lowercase()) {
+            null, "" -> null
+            "true", "1", "yes" -> true
+            "false", "0", "no" -> false
+            else -> null
+        }
 
     private inline fun <reified E : Enum<E>> JsonObject.enumOrNull(key: String): E? {
         val name = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString

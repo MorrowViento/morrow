@@ -1,5 +1,6 @@
 package com.jiuxina.ying.ui.event
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -71,8 +72,14 @@ class EventViewModel(
             events.observeAll()
                 .drop(1)
                 .debounce(300)
-                // 拼 RemoteViews 会走 Binder IPC，别占主线程
-                .collect { withContext(Dispatchers.IO) { widgetRefresh.refreshAll() } }
+                .collect {
+                    // 拼 RemoteViews 会走 Binder IPC，别占主线程。
+                    // 再包一层：viewModelScope 没有异常处理器，这里抛出去会直达默认
+                    // UncaughtExceptionHandler 直接杀进程——真机上「保存后退回桌面」就是这样，
+                    // 数据已落库所以重开还在。小部件坏了不该拖累保存。
+                    runCatching { withContext(Dispatchers.IO) { widgetRefresh.refreshAll() } }
+                        .onFailure { Log.w(TAG, "小部件刷新失败，已忽略", it) }
+                }
         }
     }
 
@@ -281,6 +288,8 @@ class EventViewModel(
     }
 
     companion object {
+        private const val TAG = "YingEventVM"
+
         fun factory(
             events: EventRepository,
             settings: SettingsRepository,
