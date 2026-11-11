@@ -28,6 +28,7 @@ object UndoCodec {
         root.addProperty("kind", op.kind.name)
         root.addProperty("message", op.message)
         root.addProperty("expiresAt", op.expiresAtMillis)
+        root.addProperty("pushedAt", op.pushedAtMillis)
         root.add("events", JsonArray().apply { op.snapshot.forEach { add(encodeEvent(it)) } })
         return root.toString()
     }
@@ -58,6 +59,8 @@ object UndoCodec {
             message = obj.string("message").orEmpty(),
             snapshot = snapshot,
             expiresAtMillis = expiresAt,
+            // 旧版落盘没有这个字段：按满窗口倒推，语义与当时一致
+            pushedAtMillis = obj.long("pushedAt") ?: (expiresAt - UndoOperation.WINDOW_MILLIS),
         )
     }
 

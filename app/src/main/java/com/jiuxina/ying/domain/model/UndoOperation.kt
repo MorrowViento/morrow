@@ -25,6 +25,14 @@ data class UndoOperation(
     /** 受影响事件的完整快照（撤销时整批回填）。 */
     val snapshot: List<CountdownEvent>,
     val expiresAtMillis: Long,
+    /**
+     * 首次记录时刻。
+     *
+     * 冷启动恢复要靠它判断「这条删除还值不值得再给一次窗口」：系统随时可能回收进程，
+     * 用户不该为此付出代价，但隔夜回来的旧撤销也没有意义。默认值等价于「按满窗口倒推」，
+     * 旧版落盘数据（没有这个字段）解码后也落到同一个值上。
+     */
+    val pushedAtMillis: Long = expiresAtMillis - WINDOW_MILLIS,
 ) {
     fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean = nowMillis >= expiresAtMillis
 
@@ -32,6 +40,9 @@ data class UndoOperation(
 
     /** 撤销条倒计时用：向上取整，避免最后不足 1 秒时显示 0。 */
     fun remainingSeconds(nowMillis: Long): Int = ((remainingMillis(nowMillis) + 999L) / 1000L).toInt()
+
+    /** 复制一条新窗口的撤销项（冷启动/回到前台时用），保留创建时刻。 */
+    fun withDeadline(deadlineMillis: Long): UndoOperation = copy(expiresAtMillis = deadlineMillis)
 
     companion object {
         /** 撤销窗口：与原 Flutter 版一致的 6 秒。 */

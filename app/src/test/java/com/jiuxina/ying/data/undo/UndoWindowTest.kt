@@ -22,6 +22,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -30,12 +31,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 撤销窗口的「前台计时」语义。
+ * 撤销窗口的「前台计时 + 跨进程续期」语义。
  *
- * 真机反馈：删完事件切到别的应用（或按 Home），超过 6 秒回来撤销条已经消失，用户根本没机会点。
- * 这里把窗口改成前台可见时间：离开时 [UndoRepository.pauseWindow] 冻结，回来时
- * [UndoRepository.resumeWindow] 把这段时间补回到期时刻；冻结时刻本身也落盘，
- * 所以「划掉最近任务再重开」同样接得上。
+ * 真机反馈（两轮）：① 删完切到别的应用超过 6 秒回来，撤销条已经消失；② 从最近任务划掉应用
+ * （进程终止）再重开同样没有——用户对「进程什么时候被杀」毫无控制力，不该因此丢掉撤销。
+ * 现在的规则：前台只按剩余量倒计时；冷启动重开只要这条删除发生在 10 分钟内，就重新给满 6 秒。
  *
  * 时间全部走可控时钟 + 虚拟调度器：仓库内部的到期任务挂在 `backgroundScope` 上，
  * 不会被真实墙钟提前触发（否则这类测试会在慢机器上偶发失败）。
@@ -108,10 +108,10 @@ class UndoWindowTest {
 
     /**
      * 用户最常见的操作其实是「划掉最近任务」——那是进程终止，不是回到后台。
-     * 只留内存里的冻结时刻，重开时又会按墙钟判过期，所以冻结时刻必须落盘。
+     * 冷启动重开时不再按墙钟判过期，而是重新给满一个窗口，否则这条撤销就白做了。
      */
     @Test
-    fun `后台被杀后重开，冻结时长补回，撤销条仍在`() = runTest {
+    fun `划掉任务重开，重新给满 6 秒且能撤销`() = runTest {
         val settings = newSettings()
         val before = repository(settings)
         before.push(operation(expiresAt = now + UndoOperation.WINDOW_MILLIS))
@@ -125,16 +125,21 @@ class UndoWindowTest {
 
         val pending = after.pending.value
         assertNotNull("重开后仍应看到撤销条（now=$now）", pending)
-        assertEquals(4_000L, pending!!.remainingMillis(now))
+        assertEquals(
+            "重开应重新给满一个窗口，而不是接着墙钟的残值",
+            UndoOperation.WINDOW_MILLIS,
+            pending!!.remainingMillis(now),
+        )
+        assertTrue("这时点撤销必须真的回填", after.undo())
     }
 
     @Test
-    fun `后台超过十分钟再重开，不再恢复撤销条`() = runTest {
+    fun `删除超过十分钟再重开，不再恢复撤销条`() = runTest {
         val settings = newSettings()
         val before = repository(settings)
         before.push(operation(expiresAt = now + UndoOperation.WINDOW_MILLIS))
         before.pauseWindow()
-        now += UndoRepository.MAX_FROZEN_MILLIS + 1_000
+        now += UndoRepository.MAX_RESTORE_AGE_MILLIS + 1_000
 
         val after = repository(settings)
         after.restore()
@@ -149,6 +154,22 @@ class UndoWindowTest {
         repo.push(operation(expiresAt = expiresAt))
         repo.resumeWindow()
         assertEquals(expiresAt, repo.pending.value?.expiresAtMillis)
+    }
+
+    @Test
+    fun `前台过期后划掉重开，十分钟内仍能撤销`() = runTest {
+        val settings = newSettings()
+        val before = repository(settings)
+        before.push(operation(expiresAt = now + UndoOperation.WINDOW_MILLIS))
+        // 前台就把 6 秒耗光（撤销条早消失），随后用户划掉应用
+        now += 30_000
+
+        val after = repository(settings)
+        after.restore()
+
+        val pending = after.pending.value
+        assertNotNull("过期只清内存，落盘那条要留给重开的机会", pending)
+        assertEquals(UndoOperation.WINDOW_MILLIS, pending!!.remainingMillis(now))
     }
 
     @Test

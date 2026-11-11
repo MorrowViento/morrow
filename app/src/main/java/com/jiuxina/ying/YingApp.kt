@@ -88,6 +88,12 @@ class YingApp : Application() {
         backupRepository = BackupRepository(settingsRepository, eventRepository)
         StartupTrace.mark("app", "widget + backup wired")
 
+        // 撤销窗口只有 6 秒，不能跟着自愈链一起让路 1.5 秒——那等于开局就先吃掉四分之一。
+        // 这一步只读一次 DataStore，代价很小，尽早跑才能让用户重开应用后完整看到撤销条。
+        appScope.launch {
+            step("undo") { undoRepository.restore() }
+        }
+
         // 冷启动自愈让路 1.5 秒再跑。
         //
         // 用途是给「闹钟广播拉起进程」这条路径腾出 CPU/IO：自愈链里有 syncAll（多次
@@ -115,11 +121,6 @@ class YingApp : Application() {
             val report = LegacyDataMigrator(this@YingApp, database.eventDao(), settingsRepository)
                 .migrateIfNeeded()
             Log.i(TAG, "迁移结果: $report")
-        }
-
-        step("undo") {
-            // M2c：恢复未过期的待撤销项（窗口 6 秒，跨进程重启仍有效）
-            undoRepository.restore()
         }
 
         step("reminders") {
