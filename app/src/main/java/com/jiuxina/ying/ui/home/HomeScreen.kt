@@ -1,6 +1,8 @@
 package com.jiuxina.ying.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -8,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jiuxina.ying.data.category.CategoryItem
+import com.jiuxina.ying.data.settings.AppSettings
 import com.jiuxina.ying.domain.model.SortMode
 import com.jiuxina.ying.ui.calendar.CalendarActions
 import com.jiuxina.ying.ui.calendar.CalendarScreen
@@ -74,6 +78,9 @@ import com.jiuxina.ying.ui.glass.glassTextSecondary
 import com.jiuxina.ying.ui.reminder.ReminderActions
 import com.jiuxina.ying.ui.reminder.ReminderSheet
 import com.jiuxina.ying.ui.reminder.ReminderUiState
+import com.jiuxina.ying.ui.settings.SettingsActions
+import com.jiuxina.ying.ui.settings.SettingsScreen
+import com.jiuxina.ying.ui.settings.SettingsUiState
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -94,6 +101,10 @@ fun HomeScreen(
     eventActions: EventActions,
     reminders: ReminderUiState,
     reminderActions: ReminderActions,
+    /** 主题 / 减透明 / 减动效：决定 GlassTheme 的实际外观，所以必须在最外层参数里。 */
+    appSettings: AppSettings,
+    settings: SettingsUiState,
+    settingsActions: SettingsActions,
     onToggleCompleted: () -> Unit,
     onSortChange: (SortMode) -> Unit,
     onSaveEvent: (EventFormState) -> Unit,
@@ -110,6 +121,7 @@ fun HomeScreen(
     var confirmClearAll by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
     var showReminders by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
 
     // 通知点进来时数据可能还没加载完：先记下 id，等列表到位后 detailCard 自然会匹配上
@@ -127,7 +139,11 @@ fun HomeScreen(
         (state.active + state.completed).firstOrNull { it.id == id }
     }
 
-    GlassTheme {
+    GlassTheme(
+        darkTheme = appSettings.isDark(isSystemInDarkTheme()),
+        reduceTransparency = appSettings.reduceTransparency,
+        reduceMotion = appSettings.reduceMotion,
+    ) {
         GlassBackdropHost(
             modifier = Modifier.fillMaxSize(),
             sampledContent = { GlassBackdrop() },
@@ -182,8 +198,8 @@ fun HomeScreen(
                     AnimatedVisibility(
                         visible = showCalendar,
                         modifier = Modifier.fillMaxSize(),
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                        enter = if (appSettings.reduceMotion) EnterTransition.None else fadeIn(),
+                        exit = if (appSettings.reduceMotion) ExitTransition.None else fadeOut(),
                     ) {
                         CalendarScreen(
                             state = calendar,
@@ -191,6 +207,22 @@ fun HomeScreen(
                             onCreate = { date -> editingForm = EventFormState(date = date) },
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },
+                        )
+                    }
+
+                    // 设置中心同样是整页覆盖：自带不透明底色与返回处理（见 SettingsScreen）。
+                    // 它排在日历之后绘制，因此两者同时为真时设置页在上层——实际上互斥，
+                    // 日历里没有设置入口。
+                    AnimatedVisibility(
+                        visible = showSettings,
+                        modifier = Modifier.fillMaxSize(),
+                        enter = if (appSettings.reduceMotion) EnterTransition.None else fadeIn(),
+                        exit = if (appSettings.reduceMotion) ExitTransition.None else fadeOut(),
+                    ) {
+                        SettingsScreen(
+                            state = settings,
+                            actions = settingsActions,
+                            onDismiss = { showSettings = false },
                         )
                     }
 
@@ -238,6 +270,10 @@ fun HomeScreen(
                         MoreMenu(
                             completedCount = state.completed.size,
                             totalCount = state.totalCount,
+                            onOpenSettings = {
+                                showMoreMenu = false
+                                showSettings = true
+                            },
                             onOpenReminders = {
                                 showMoreMenu = false
                                 showReminders = true
@@ -560,6 +596,7 @@ private fun CenterState(title: String, detail: String?) {
 private fun MoreMenu(
     completedCount: Int,
     totalCount: Int,
+    onOpenSettings: () -> Unit,
     onOpenReminders: () -> Unit,
     onClearCompleted: () -> Unit,
     onClearAll: () -> Unit,
@@ -579,6 +616,7 @@ private fun MoreMenu(
                 .padding(horizontal = 16.dp, vertical = 24.dp),
         ) {
             Column(Modifier.padding(vertical = 6.dp)) {
+                MenuRow(label = "设置", enabled = true, onClick = onOpenSettings)
                 MenuRow(label = "提醒", enabled = true, onClick = onOpenReminders)
                 MenuRow(
                     label = "清空已完成（$completedCount）",

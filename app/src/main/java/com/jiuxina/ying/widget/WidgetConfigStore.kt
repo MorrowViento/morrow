@@ -19,19 +19,44 @@ class WidgetConfigStore(private val settings: SettingsRepository) {
      */
     suspend fun load(widgetId: Int): WidgetStyle {
         val raw = settings.stringOnce(key(widgetId))
-        if (raw != null) return WidgetStyleCodec.decode(raw) ?: WidgetStyle()
+        val parsed = raw?.let { WidgetStyleCodec.decode(it) }
+        return parsed ?: defaultStyle()
+    }
+
+    /**
+     * 没有专属配置的小部件用什么样式。
+     *
+     * 回落链：**上一次保存的默认样式 → 旧版全局样式 → 出厂默认**。
+     * 中间那一档是关键：换机 / 重装后系统分配的 widgetId 必然变了，按 id 一条都对不上，
+     * 只靠旧版全局键的话，用户在新设备上每加一个小部件都要重设一遍。
+     */
+    suspend fun defaultStyle(): WidgetStyle {
+        settings.stringOnce(KEY_DEFAULT_STYLE)?.let { raw ->
+            WidgetStyleCodec.decode(raw)?.let { return it }
+        }
         return legacyDefaults()
     }
 
     suspend fun save(widgetId: Int, style: WidgetStyle) {
-        settings.putString(key(widgetId), WidgetStyleCodec.encode(style))
+        val json = WidgetStyleCodec.encode(style)
+        settings.putStrings(
+            mapOf(
+                key(widgetId) to json,
+                // 同时作为「默认样式」：备份只按 id 存，换机后 id 对不上时靠它兜底
+                KEY_DEFAULT_STYLE to json,
+            ),
+        )
     }
 
     suspend fun remove(widgetId: Int) = settings.remove(key(widgetId))
 
-    /** 一次性取全部已保存配置，供批量刷新时少读几次 DataStore。 */
+    /**
+     * 一次性取全部已保存配置，供批量刷新时少读几次 DataStore。
+     *
+     * `widget.default_style` 不参与：它的前缀段不是数字，[widgetIdOf] 会返回 null。
+     */
     suspend fun loadAll(): Map<Int, WidgetStyle> = settings.stringsOnce(PREFIX).mapNotNull { (k, v) ->
-        val id = k.removePrefix(PREFIX).substringBefore('.').toIntOrNull() ?: return@mapNotNull null
+        val id = widgetIdOf(k) ?: return@mapNotNull null
         val style = WidgetStyleCodec.decode(v) ?: return@mapNotNull null
         id to style
     }.toMap()
@@ -45,6 +70,18 @@ class WidgetConfigStore(private val settings: SettingsRepository) {
     companion object {
         const val PREFIX = "widget."
 
+        /**
+         * 最近一次保存的样式，作为「按 id 查不到配置」时的兜底。
+         *
+         * 存在的理由：备份里的小部件样式是按 widgetId 存的，而 widgetId 由桌面宿主分配，
+         * 换机后必然对不上。少了这一份，用户换机后每加一个小部件都要重设一遍。
+         */
+        const val KEY_DEFAULT_STYLE = "widget.default_style"
+
         fun key(widgetId: Int): String = "$PREFIX$widgetId.style"
+
+        /** 从 `widget.<id>.style` 解析 id；不是这种形态（含默认样式键）时返回 null。 */
+        fun widgetIdOf(key: String): Int? =
+            key.removePrefix(PREFIX).substringBefore('.').toIntOrNull()
     }
 }

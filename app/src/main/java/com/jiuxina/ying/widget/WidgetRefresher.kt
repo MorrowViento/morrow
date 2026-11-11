@@ -74,9 +74,9 @@ class WidgetRefresher(
         val today = LocalDate.now()
         val now = LocalDateTime.now()
         val systemDark = isSystemDark()
-        // 只有总览需要"没配置就用旧版默认值"，单事件小部件必须有自己的 eventId
+        // 只有总览需要「没配置就用默认样式」，单事件小部件必须有自己的 eventId
         val styleById = if (isDetail) emptyMap() else store.loadAll()
-        val fallback = if (isDetail) null else store.legacyDefaults()
+        val fallback = if (isDetail) null else store.defaultStyle()
 
         ids.forEach { widgetId ->
             val style = if (isDetail) store.load(widgetId) else (styleById[widgetId] ?: fallback ?: WidgetStyle())

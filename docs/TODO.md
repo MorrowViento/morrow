@@ -6,13 +6,13 @@
 
 ## 当前阶段
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（142 项 0 失败），APK 76 MB。
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（167 项 0 失败），APK 76 MB。
 
 真机首轮反馈的两个运行时问题已修：日历整页覆盖缺底色导致与首页重叠、日期滚轮所在的 `verticalScroll` 表单里 `LazyColumn` 无界高导致点 + 号闪退（详见 `docs/CHANGELOG.md` 同名条目）。
 
 仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
 
-下一步：`M6` 设置中心；`M2a`–`M5` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 与小部件的「跨零点刷新」必须真机才能验证。
+下一步：`M7` 应用内更新与发布；`M2a`–`M6` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 与小部件的「跨零点刷新」、备份的云盘读写必须真机才能验证。
 
 ## 移植范围（2026-11-11 二次定稿）
 
@@ -47,7 +47,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 - [x] **M4 提醒通知** —— 已完成。`ReminderPlan` 纯函数排期（全天锚点 09:00；年度重复按当次周年；单事件 2 次落点 × 5 条提醒 = 10 个闹钟上限）+ `AlarmReminderScheduler`（槽位 requestCode + `Intent.data` 区分事件，`setExactAndAllowWhileIdle`，无精确权限时退化不精确）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟）+ `ReminderBootReceiver`（开机、覆盖安装、时间与时区变更全量对账）+ `ReminderNotifier`（高优先级渠道、日期取当次落点）+ `ReminderPermissions`（两项权限探测与跳转）+ 提醒诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动全量对账。**未真机验收。**
   剩余验收项（只能在真机做）：锁屏与 Doze 下准时触发、通知「完成」「稍后 10 分钟」动作生效、重启后闹钟自动重建、跨年重复事件落点正确、时间/时区变更后不漂移、诊断页条目与实际闹钟一致。
 - [x] **M5 桌面小部件** —— 已完成（未迁移旧 Kotlin 实现，按裁剪范围重写）：总览 + 单事件两个 provider、`MidnightRefreshScheduler` 跨天刷新、进程内只读快照替代 method channel；配置台保留样式预设 + 字号 + 配色 + 元素显隐 + 单事件绑定。验收项（显示/跨天刷新/点击跳转/旧样式映射）待真机确认。
-- [ ] **M6 设置中心** —— `glasmio-preference` 偏好行 + 二级分类页 + 主题/排序/减少透明度/减少动效（键名已沿用 Flutter 原始键）+ 备份导入导出（兼容旧版格式）+ 关于页；**不做**字体库、头像 Emoji、单位文案、相册背景、赞助页；验收：设置项对照清单逐项勾验，各开关即时生效并持久化，备份可跨设备双向还原。
+- [x] **M6 设置中心** —— 已完成：外观（主题三态 / 减弱透明 / 减弱动效，键名沿用 Flutter 原始键）+ 数据（导出/导入备份、清空全部，SAF 免权限）+ 提醒（通知与精确闹钟状态跳转）+ 关于（版本 / 开源许可 / 项目主页）。设置行自绘而非 `glasmio-preference`（理由见 HANDOFF 决策表）。备份为单文件 JSON，含事件/分类/外观/小部件样式，导入分「合并 / 覆盖」两档。验收项待真机确认。
 - [ ] **M7 更新与发布** —— GitHub Releases 检查 + 镜像源测速选路 + WorkManager 断点续传下载 + `PackageInstaller` 应用内安装 + 更新弹窗与进度 UI + 真机全量回归（Android 13/14/15/16）+ 正式签名与 ABI 拆分 + `lint.abortOnError = true`；验收：真机完成「检查→下载→安装→升级」全流程，回归清单逐项通过，旧用户升级后数据与小部件无感迁移。
 - [ ] **M0 遗留（可选）** —— 计划里承诺的 ktlint/detekt 尚未接入；做法：加 `spotless` 或 `ktlint` Gradle 插件并接入 CI；验收：CI 增一步静态检查且不阻断当前代码。建议在 M2 结束、代码量上来之前做。
 

@@ -11,7 +11,9 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.jiuxina.ying.domain.model.SortMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -43,6 +45,57 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[booleanPreferencesKey(LegacySettingsKeys.ONBOARDING_COMPLETED)] = true }
     }
 
+    // ---- M6：设置中心（四项合成一个快照，见 AppSettings 的注释）----
+
+    val appSettings: Flow<AppSettings> = combine(
+        themeMode,
+        sortMode,
+        reduceTransparency,
+        reduceMotion,
+    ) { theme, sort, transparency, motion ->
+        AppSettings(
+            themeMode = ThemeMode.fromPref(theme),
+            sortMode = SortMode.fromPref(sort),
+            reduceTransparency = transparency,
+            reduceMotion = motion,
+        )
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) =
+        putString(LegacySettingsKeys.THEME_MODE, mode.prefValue)
+
+    suspend fun setReduceTransparency(enabled: Boolean) =
+        putBoolean(LegacySettingsKeys.REDUCE_TRANSPARENCY, enabled)
+
+    suspend fun setReduceMotion(enabled: Boolean) =
+        putBoolean(LegacySettingsKeys.REDUCE_MOTION, enabled)
+
+    /**
+     * 一次性读出整组设置。
+     *
+     * 供备份导出与设置中心首帧使用：这两处只要「现在的值」，
+     * 订阅四条 Flow 反而要等四次 DataStore 读盘各自发射。
+     */
+    suspend fun snapshotSettings(): AppSettings {
+        val prefs = store.data.first()
+        return AppSettings(
+            themeMode = ThemeMode.fromPref(prefs[stringPreferencesKey(LegacySettingsKeys.THEME_MODE)]),
+            sortMode = SortMode.fromPref(prefs[stringPreferencesKey(LegacySettingsKeys.EVENT_SORT_MODE)]),
+            reduceTransparency = prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] ?: false,
+            reduceMotion = prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] ?: false,
+        )
+    }
+
+    /** 备份导入用：一次 edit 写完四个键，避免四条 Flow 各触发一次重组。 */
+    suspend fun applySettings(value: AppSettings) {
+        store.edit { prefs ->
+            prefs[stringPreferencesKey(LegacySettingsKeys.THEME_MODE)] = value.themeMode.prefValue
+            prefs[stringPreferencesKey(LegacySettingsKeys.EVENT_SORT_MODE)] = value.sortMode.prefValue
+            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = value.reduceTransparency
+            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] = value.reduceMotion
+        }
+    }
+
     // ---- 原始读写（供尚未建模的旧设置项透传）----
 
     fun rawString(key: String): Flow<String?> = store.data.map { it[stringPreferencesKey(key)] }
@@ -63,6 +116,19 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun putString(key: String, value: String) {
         store.edit { it[stringPreferencesKey(key)] = value }
+    }
+
+    /**
+     * 批量写字符串键。
+     *
+     * 备份导入会一次写入「事件之外的全部键」（分类 + 每个小部件的样式），
+     * 逐个 [putString] 会触发同样多次落盘，DataStore 每次都要重写整份文件。
+     */
+    suspend fun putStrings(values: Map<String, String>) {
+        if (values.isEmpty()) return
+        store.edit { prefs ->
+            values.forEach { (key, value) -> prefs[stringPreferencesKey(key)] = value }
+        }
     }
 
     suspend fun putBoolean(key: String, value: Boolean) {

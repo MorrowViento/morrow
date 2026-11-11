@@ -17,13 +17,15 @@ import com.jiuxina.ying.ui.event.EventViewModel
 import com.jiuxina.ying.ui.home.HomeScreen
 import com.jiuxina.ying.ui.reminder.ReminderActions
 import com.jiuxina.ying.ui.reminder.ReminderViewModel
+import com.jiuxina.ying.ui.settings.SettingsActions
+import com.jiuxina.ying.ui.settings.SettingsViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * 应用入口。首页、日历与提醒诊断的数据都来自 [YingApp] 装配的仓库，
  * 且共用同一个 [EventViewModel]，避免多处各自订阅导致状态不同步。
  *
- * 当前进度：M2a 列表 + M2b 表单 + M2b2 分类 + M2c 详情/撤销 + M2d 日历 + M4 提醒。
+ * 当前进度：M2a 列表 + M2b 表单 + M2b2 分类 + M2c 详情/撤销 + M2d 日历 + M4 提醒 + M5 小部件 + M6 设置中心。
  */
 class MainActivity : ComponentActivity() {
 
@@ -63,11 +65,23 @@ class MainActivity : ComponentActivity() {
                     app.reminderScheduler,
                 ),
             )
+            val settingsViewModel: SettingsViewModel = viewModel(
+                factory = SettingsViewModel.factory(
+                    this@MainActivity,
+                    app.settingsRepository,
+                    app.backupRepository,
+                    app.eventRepository,
+                    app.reminderScheduler,
+                    app.reminderPermissions,
+                    app.widgetRefresher,
+                ),
+            )
             val state by viewModel.state.collectAsStateWithLifecycle()
             val calendar by viewModel.calendar.collectAsStateWithLifecycle()
             val categories by categoryViewModel.items.collectAsStateWithLifecycle()
             val reminders by reminderViewModel.state.collectAsStateWithLifecycle()
             val openDetail by pendingDetailId.collectAsStateWithLifecycle()
+            val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
 
             // 回调集合只取决于 ViewModel 实例：避免每帧重组都新建 lambda
             val categoryActions = remember(categoryViewModel) {
@@ -108,6 +122,27 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            val settingsActions = remember(settingsViewModel) {
+                SettingsActions(
+                    refresh = settingsViewModel::refreshPermissions,
+                    setTheme = settingsViewModel::setTheme,
+                    setReduceTransparency = settingsViewModel::setReduceTransparency,
+                    setReduceMotion = settingsViewModel::setReduceMotion,
+                    exportTo = settingsViewModel::exportTo,
+                    loadImport = settingsViewModel::loadImport,
+                    confirmImport = settingsViewModel::confirmImport,
+                    cancelImport = settingsViewModel::cancelImport,
+                    requestClearAll = settingsViewModel::requestClearAll,
+                    confirmClearAll = settingsViewModel::confirmClearAll,
+                    cancelClearAll = settingsViewModel::cancelClearAll,
+                    showLicenses = settingsViewModel::showLicenses,
+                    hideLicenses = settingsViewModel::hideLicenses,
+                    consumeMessage = settingsViewModel::consumeMessage,
+                    openNotificationSettings = settingsViewModel::openNotificationSettings,
+                    openExactAlarmSettings = settingsViewModel::openExactAlarmSettings,
+                )
+            }
+
             HomeScreen(
                 state = state,
                 calendar = calendar,
@@ -117,6 +152,9 @@ class MainActivity : ComponentActivity() {
                 eventActions = eventActions,
                 reminders = reminders,
                 reminderActions = reminderActions,
+                appSettings = settingsState.settings,
+                settings = settingsState,
+                settingsActions = settingsActions,
                 onToggleCompleted = viewModel::toggleCompletedSection,
                 onSortChange = viewModel::setSortMode,
                 onSaveEvent = viewModel::save,

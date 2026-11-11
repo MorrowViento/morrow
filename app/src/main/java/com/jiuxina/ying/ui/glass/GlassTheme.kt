@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
@@ -27,10 +30,44 @@ import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
  * 而非 main 分支——main 分支新增了 `sampledColor` 便捷重载，0.1.2 中不存在。
  */
 
-/** 主题入口。内部使用 GlasmioTheme（浅色/深色自动外观）。 */
+/**
+ * 当前渲染外观是否深色。
+ *
+ * 不能直接用 `isSystemInDarkTheme()`：用户在设置里可以强制浅色/深色。
+ * [GlassTheme] 把最终决定放进这个 CompositionLocal，页面底色与文字色都读它，
+ * 否则会出现「主题是浅色但底色仍按系统深色画」的分裂。
+ */
+val LocalGlassDark = staticCompositionLocalOf { false }
+
+/** 用户是否要求减弱动效（无障碍「移除动画」）。页面切换据此跳过淡入淡出。 */
+val LocalReduceMotion = staticCompositionLocalOf { false }
+
+/**
+ * 主题入口。
+ *
+ * @param darkTheme 最终明暗。跟随系统时由调用方传 `isSystemInDarkTheme()`，
+ *   设置里选了浅色/深色时直接传对应值（见 `AppSettings.isDark`）。
+ * @param reduceTransparency 减弱透明：交给 Glasmio 把玻璃降级为不透明面板，
+ *   比在外面叠一层纯色遮罩更彻底（遮罩挡得住背景，挡不住折射与高光）。
+ */
 @Composable
-fun GlassTheme(content: @Composable () -> Unit) {
-    GlasmioTheme { content() }
+fun GlassTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    reduceTransparency: Boolean = false,
+    reduceMotion: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalGlassDark provides darkTheme,
+        LocalReduceMotion provides reduceMotion,
+    ) {
+        GlasmioTheme(
+            isDark = darkTheme,
+            appearance = GlassAppearance(reduceTransparency = reduceTransparency),
+        ) {
+            content()
+        }
+    }
 }
 
 /**
@@ -42,7 +79,7 @@ fun GlassTheme(content: @Composable () -> Unit) {
  */
 @Composable
 fun GlassBackdrop(modifier: Modifier = Modifier) {
-    val colors = if (isSystemInDarkTheme()) {
+    val colors = if (LocalGlassDark.current) {
         listOf(Color(0xFF151A35), Color(0xFF2A1436), Color(0xFF3F1630))
     } else {
         listOf(Color(0xFF3B6FE0), Color(0xFF9B4BE8), Color(0xFFE84B8A))
@@ -57,17 +94,17 @@ fun glassColors() = GlasmioTheme.colors
 /**
  * 玻璃上的主文字色。
  *
- * GlasmioTheme 默认跟随系统外观，故用系统深色态判断即可与材质明暗保持一致；
- * 不去读 Glasmio 内部颜色字段，避免把未公开的 API 细节漏进业务层。
+ * 跟随 [LocalGlassDark] 而不是系统深浅：用户强制浅色主题时，
+ * 玻璃材质已经是浅色，再用白字会完全看不见。
  */
 @Composable
 fun glassTextPrimary(): Color =
-    if (isSystemInDarkTheme()) Color.White else Color(0xFF1C1C1E)
+    if (LocalGlassDark.current) Color.White else Color(0xFF1C1C1E)
 
 /** 玻璃上的次级文字色（分类、日期、说明文字）。 */
 @Composable
 fun glassTextSecondary(): Color =
-    if (isSystemInDarkTheme()) {
+    if (LocalGlassDark.current) {
         Color.White.copy(alpha = 0.62f)
     } else {
         Color(0xFF3C3C43).copy(alpha = 0.6f)
