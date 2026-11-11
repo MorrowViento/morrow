@@ -13,18 +13,18 @@
 5. **M2a 首页列表**：`EventViewModel` + `EventPresentation`（纯函数排序/进度）+ `HomeScreen` + `EventCardView`；玻璃封装层增文字色与圆形面板。
 6. **M2b 新建表单**：`EventFormState` + `WheelDateTimePicker`（五列滚轮）+ `EventEditSheet`（同页浮层）+ FAB 落库；41 项单测全绿。**未真机校准。**
 7. **T0 远程对齐**：根因是 `core.autocrlf=true` 导致 README 整文件换行符差异；加 `.gitattributes`（`eol=lf`）→ `reset --mixed origin/main` → 两次提交（`c02adc9` 行尾 / `548edad` M2a+M2b+docs）→ `push -u origin main`。本地与远程齐平于 `548edad`，CI 全绿。
-8. **文档**：`README.md`（决策表 + 包结构 + Glasmio 版本差异）、`docs/TODO.md`、`docs/CHANGELOG.md`、本文件。
+8. **M2b2 分类管理**：`EventCategory`（预置 7 类、12 字上限）+ `CategoryRules`（纯函数规则）+ `CategoryCodec`（DataStore `category_list_v1` JSON）+ `CategoryRepository`（存储列表 ∪ 旧事件孤儿分类，删除需迁移目标）+ `CategoryViewModel` + `CategorySheet` 浮层；Room 增分类统计/级联更新三条查询；`EventEditSheet` 改读仓库并加「管理分类…」；抽出 `GlassControls`。62 项单测全绿。**未真机验收。**
+9. **文档**：`README.md`（决策表 + 包结构 + Glasmio 版本差异）、`docs/TODO.md`、`docs/CHANGELOG.md`、本文件。
 
 ## 未完成清单（按顺序，可直接执行）
 
-1. `M2a/M2b` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态，以及表单滚轮吸附与保存落库（本机无设备，纯视觉与交互项全压在这）。
-2. `M2b2` 分类管理：预置 + 自定义增删改（DataStore 新键，兼容旧事件里出现过的分类）；顺手把表单里的 `DEFAULT_CATEGORIES` 常量换成仓库读取。
-3. `M2c` 详情页 + 6 秒撤销（四类操作：delete / toggleCompleted / clearCompleted / clearAll）。
-4. `M2d` 日历三视图（月/年/按月分组列表）+ 农历星期副标题，与首页共享 ViewModel。
-5. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
-6. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
-7. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
-8. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
+1. `M2a/M2b/M2b2` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类浮层的增删改与删除迁移弹层（本机无设备，纯视觉与交互项全压在这）。
+2. `M2c` 详情页 + 6 秒撤销（四类操作：delete / toggleCompleted / clearCompleted / clearAll）。
+3. `M2d` 日历三视图（月/年/按月分组列表）+ 农历星期副标题，与首页共享 ViewModel。
+4. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
+5. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
+6. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
+7. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
 
 验收标准与涉及文件见 `docs/TODO.md`，此处不重复。
 
@@ -48,6 +48,10 @@
 | — | 进度环 = `createdAt → target` 的已完成比例，重复事件不画 | 重复事件的 target 每年前移，进度无稳定语义 |
 | — | 表单做成同页面浮层，不用 `ModalBottomSheet`/`Dialog` | 玻璃材质靠 `GlassBackdropHost` 采样，独立窗口会切断 backdrop，材质直接失效 |
 | — | 滚轮自行实现（五列 + snap fling） | Glasmio 0.1.2 无此组件，Material3 无 iOS 式滚轮；日期日数随年月动态变化 |
+| — | 分类以**名字**为唯一标识，重命名级联 `UPDATE events SET category` | 避免为一个展示性字段升 Room schema 并回填旧数据；用户可见效果与 id 引用一致 |
+| — | 分类列表 = 存储列表 ∪ 事件里出现过的「孤儿分类」 | 旧数据里的自定义分类不能凭空消失，否则用户会觉得"分类丢了" |
+| — | 删除被占用分类必须先选迁移目标，禁止静默删事件 | 数据安全优先；候选为空时提示先新建一个分类 |
+| — | 分类浮层同样做同页浮层，叠在表单之上 | 与表单同一个 backdrop 约束；独立窗口会让玻璃材质失效 |
 
 ## 关键文件路径与约定
 
@@ -103,3 +107,7 @@ app/src/main/java/com/jiuxina/ying/
 11. **本机无设备也无模拟器**（`adb devices` 为空，`.toolchain/sdk` 未装 emulator）：所有视觉/交互验收只能等真机，构建链只保证编译、单测、lint 通过。
 12. ~~**M2a/M2b 尚未提交**~~ **已解决（T0）**：`548edad` 已推送，upstream 已建立。后续每个里程碑结束各自提交，避免再次堆积。
 13. **滚轮吸附未实机校准**：`WheelColumn` 依赖 `itemHeight`(34dp) 与实际行高一致才能居中吸附，`rememberSnapFlingBehavior` 在停止滚动后回写下标；真机上若出现偏移一行的现象，调 `itemHeight` 或改用 `firstVisibleItemIndex + 偏移判断`。
+14. **分类改名不是跨库事务**：Room 与 DataStore 无法同事务，写入顺序固定「先改事件、再改列表」。若第二步失败，结果是事件已改名而列表仍是旧名，旧名会以孤儿分类形式重新出现——数据不丢、可再操作。反之先写列表会出现「列表有、事件挂着已消失的旧名」的隐性不一致，故不采用。**不要**为此改回 id 引用：那要升 Room 版本 + 回填旧数据，收益不足。
+15. **表单打开期间改名/删除其所属分类**：表单持有的是旧名字符串，保存后事件会挂回旧名、重新变成孤儿分类（管理页显示「旧数据中的分类」）。不阻断、不丢数据，属刻意取舍；若后续觉得刺眼，需把表单的 category 改成跟随仓库解析。
+16. **孤儿分类会被任意一次分类编辑「收编」**：`add/rename/delete` 都以「存储列表 ∪ 孤儿」的合并结果为基准并整体落盘，所以旧分类会被写进 `category_list_v1`。这是预期行为——否则重名校验会失效。
+17. **分类浮层沿用 `WhileSubscribed(5s)` 状态流**：冷启动瞬间 `categories` 为空列表，此时立刻点 + 打开表单，分类 chips 只会显示当前值；数据流毫秒级就会补齐。属已知瞬态，不影响落库。

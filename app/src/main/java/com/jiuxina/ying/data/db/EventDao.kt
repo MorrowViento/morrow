@@ -34,6 +34,27 @@ interface EventDao {
     @Query("DELETE FROM events")
     suspend fun clear()
 
+    // ---- 分类统计与级联（M2b2）----
+
+    /**
+     * 按分类计数，并按「该分类下最早创建时刻」排序。
+     *
+     * 排序是为了让「旧事件里出现过但未定义的分类」在列表末尾保持首次出现的先后顺序，
+     * GROUP BY 本身不保证顺序。
+     */
+    @Query(
+        "SELECT category AS category, COUNT(*) AS event_count FROM events " +
+            "GROUP BY category ORDER BY MIN(created_at) ASC",
+    )
+    fun observeCategoryUsage(): Flow<List<CategoryUsage>>
+
+    @Query("SELECT COUNT(*) FROM events WHERE category = :category")
+    suspend fun countByCategory(category: String): Int
+
+    /** 分类重命名 / 删除迁移：把一个分类下的所有事件改挂到另一个分类。 */
+    @Query("UPDATE events SET category = :to WHERE category = :from")
+    suspend fun renameCategory(from: String, to: String): Int
+
     /** 迁移专用：整表替换，保证一次性原子提交。 */
     @Transaction
     suspend fun replaceAll(entities: List<EventEntity>) {

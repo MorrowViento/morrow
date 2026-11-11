@@ -93,9 +93,6 @@ data class EventFormState(
         }
 
     companion object {
-        /** 预置分类。M2b2 会把它换成可增删的存储，当前先用常量保证表单可用。 */
-        val DEFAULT_CATEGORIES = listOf("生活", "生日", "纪念", "节日", "工作", "学习", "旅行")
-
         /** 提醒快捷选项（分钟）。 */
         val REMINDER_PRESETS = listOf(0, 10, 30, 60, 180, 720, 1440, 2880, 10080)
 

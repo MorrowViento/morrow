@@ -3,7 +3,6 @@ package com.jiuxina.ying.ui.event
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,12 +12,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,13 +26,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jiuxina.ying.domain.model.CountDirection
 import com.jiuxina.ying.domain.model.EventReminder
+import com.jiuxina.ying.ui.component.ChipRow
+import com.jiuxina.ying.ui.component.ChoiceChip
+import com.jiuxina.ying.ui.component.GlassTextField
+import com.jiuxina.ying.ui.component.SectionTitle
 import com.jiuxina.ying.ui.component.WheelDateTimePicker
 import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
@@ -51,6 +50,8 @@ import com.jiuxina.ying.ui.glass.glassTextSecondary
 @Composable
 fun EventEditSheet(
     initial: EventFormState,
+    categories: List<String>,
+    onManageCategories: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (EventFormState) -> Unit,
 ) {
@@ -60,6 +61,12 @@ fun EventEditSheet(
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     val isEditing = form.id != null
+
+    // 分类 chips：仓库列表 + 当前值。当前值可能是旧数据里已不在列表中的分类，
+    // 也必须能显示与保留，否则一打开表单就会被悄悄改掉分类。
+    val categoryChips = remember(categories, form.category) {
+        (categories + form.category).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    }
 
     BackHandler(onBack = onDismiss)
 
@@ -123,11 +130,12 @@ fun EventEditSheet(
 
                     SectionTitle("分类")
                     ChipRow {
-                        EventFormState.DEFAULT_CATEGORIES.forEach { category ->
+                        categoryChips.forEach { category ->
                             ChoiceChip(category, form.category == category) {
                                 form = form.copy(category = category)
                             }
                         }
+                        ChoiceChip("管理分类…", false, onClick = onManageCategories)
                     }
 
                     SectionTitle("提醒（最多 ${EventReminder.MAX_COUNT} 条）")
@@ -200,92 +208,10 @@ private fun SheetHeader(title: String, onCancel: () -> Unit, onSave: () -> Unit)
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
-    )
-}
-
-@Composable
 private fun QuickDateRow(onPick: (java.time.LocalDate) -> Unit) {
     ChipRow {
         EventFormState.quickDates().forEach { (label, date) ->
             ChoiceChip(label, false) { onPick(date) }
-        }
-    }
-}
-
-@Composable
-private fun ChipRow(content: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(primary.copy(alpha = if (selected) 0.18f else 0.06f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = label,
-            style = TextStyle(
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) primary else secondary,
-            ),
-        )
-    }
-}
-
-/** 玻璃风输入框：BasicTextField 自带可控配色，避免 MaterialTheme 默认色在深色玻璃上不可读。 */
-@Composable
-private fun GlassTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    singleLine: Boolean = true,
-    minHeight: androidx.compose.ui.unit.Dp = 46.dp,
-    error: String? = null,
-) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
-    Column {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(primary.copy(alpha = 0.06f))
-                .heightIn(min = minHeight)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-        ) {
-            if (value.isEmpty()) {
-                Text(placeholder, style = TextStyle(fontSize = 15.sp, color = secondary.copy(alpha = 0.7f)))
-            }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = singleLine,
-                textStyle = TextStyle(fontSize = 15.sp, color = primary),
-                cursorBrush = SolidColor(primary),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        error?.let {
-            Spacer(Modifier.height(4.dp))
-            Text(it, style = TextStyle(fontSize = 11.sp, color = Color(0xFFFF6B6B)))
         }
     }
 }

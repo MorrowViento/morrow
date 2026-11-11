@@ -1,0 +1,131 @@
+package com.jiuxina.ying.ui.component
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jiuxina.ying.ui.glass.glassTextPrimary
+import com.jiuxina.ying.ui.glass.glassTextSecondary
+
+/**
+ * 玻璃风基础控件集合（表单浮层与分类管理浮层共用）。
+ *
+ * 统一用 BasicTextField + 自绘圆角底，而不是 Material 组件：
+ * MaterialTheme 的默认色在深色玻璃上不可读，且会带入与玻璃材质冲突的阴影/描边。
+ */
+
+/** 玻璃风输入框。 */
+@Composable
+fun GlassTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    minHeight: Dp = 46.dp,
+    error: String? = null,
+) {
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Column(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(primary.copy(alpha = 0.06f))
+                .heightIn(min = minHeight)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    text = placeholder,
+                    style = TextStyle(fontSize = 15.sp, color = secondary.copy(alpha = 0.7f)),
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = singleLine,
+                textStyle = TextStyle(fontSize = 15.sp, color = primary),
+                cursorBrush = SolidColor(primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        error?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = TextStyle(fontSize = 11.sp, color = Color(0xFFFF6B6B)))
+        }
+    }
+}
+
+/** 可选中的胶囊标签。 */
+@Composable
+fun ChoiceChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(primary.copy(alpha = if (selected) 0.18f else 0.06f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = label,
+            style = TextStyle(
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) primary else secondary,
+            ),
+        )
+    }
+}
+
+/** 小节标题。 */
+@Composable
+fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
+    )
+}
+
+/** 横向可滚动的 chips 容器。 */
+@Composable
+fun ChipRow(content: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        content()
+    }
+}

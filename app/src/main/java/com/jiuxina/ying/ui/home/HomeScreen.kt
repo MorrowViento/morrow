@@ -43,7 +43,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jiuxina.ying.data.category.CategoryItem
 import com.jiuxina.ying.domain.model.SortMode
+import com.jiuxina.ying.ui.category.CategoryActions
+import com.jiuxina.ying.ui.category.CategorySheet
 import com.jiuxina.ying.ui.event.EventEditSheet
 import com.jiuxina.ying.ui.event.EventFormState
 import com.jiuxina.ying.ui.event.HomeUiState
@@ -64,12 +67,16 @@ import java.time.LocalDate
 @Composable
 fun HomeScreen(
     state: HomeUiState,
+    categories: List<CategoryItem>,
+    categoryActions: CategoryActions,
     onToggleCompleted: () -> Unit,
     onSortChange: (SortMode) -> Unit,
     onSaveEvent: (EventFormState) -> Unit,
 ) {
     val listState = rememberLazyListState()
     var editingForm by remember { mutableStateOf<EventFormState?>(null) }
+    var showCategories by remember { mutableStateOf(false) }
+    val categoryNames = remember(categories) { categories.map { it.name } }
 
     GlassTheme {
         GlassBackdropHost(
@@ -112,11 +119,22 @@ fun HomeScreen(
                     editingForm?.let { form ->
                         EventEditSheet(
                             initial = form,
+                            categories = categoryNames,
+                            onManageCategories = { showCategories = true },
                             onDismiss = { editingForm = null },
                             onSave = { saved ->
                                 onSaveEvent(saved)
                                 editingForm = null
                             },
+                        )
+                    }
+
+                    // 分类管理叠在表单之上：用户从表单的「管理分类…」进入，关闭后回到表单继续填写
+                    if (showCategories) {
+                        CategorySheet(
+                            items = categories,
+                            actions = categoryActions,
+                            onDismiss = { showCategories = false },
                         )
                     }
                 }

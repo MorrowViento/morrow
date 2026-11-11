@@ -3,6 +3,7 @@ package com.jiuxina.ying
 import android.app.Application
 import android.util.Log
 import com.jiuxina.ying.data.EventRepository
+import com.jiuxina.ying.data.category.CategoryRepository
 import com.jiuxina.ying.data.db.YingDatabase
 import com.jiuxina.ying.data.legacy.LegacyDataMigrator
 import com.jiuxina.ying.data.settings.SettingsRepository
@@ -25,6 +26,9 @@ class YingApp : Application() {
     lateinit var settingsRepository: SettingsRepository
         private set
 
+    lateinit var categoryRepository: CategoryRepository
+        private set
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -32,6 +36,7 @@ class YingApp : Application() {
         database = YingDatabase.build(this)
         eventRepository = EventRepository(database.eventDao())
         settingsRepository = SettingsRepository(this)
+        categoryRepository = CategoryRepository(settingsRepository, eventRepository)
 
         // M1：启动即执行旧版数据迁移（幂等，失败不阻断启动）
         appScope.launch {

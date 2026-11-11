@@ -24,4 +24,18 @@ class EventRepository(private val dao: EventDao) {
     suspend fun delete(id: String) = dao.deleteById(id)
 
     suspend fun count(): Int = dao.count()
+
+    // ---- 分类（M2b2）----
+
+    /**
+     * 分类使用统计。返回值用 `associate` 构造，迭代顺序即 DAO 的
+     * 「首次创建时刻升序」，供分类列表拼接旧分类时保持稳定顺序。
+     */
+    fun observeCategoryUsage(): Flow<Map<String, Int>> =
+        dao.observeCategoryUsage().map { rows -> rows.associate { it.category to it.eventCount } }
+
+    suspend fun countByCategory(category: String): Int = dao.countByCategory(category)
+
+    /** 分类改名 / 删除迁移：把旧分类名下的事件统一改挂到新名字。 */
+    suspend fun renameCategory(from: String, to: String): Int = dao.renameCategory(from, to)
 }
