@@ -49,7 +49,7 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             snoozeIntent(eventId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        setAt(System.currentTimeMillis() + minutes * MINUTE_MILLIS, pi)
+        setAt(System.currentTimeMillis() + minutes * MINUTE_MILLIS, pi, "snooze:$eventId")
     }
 
     // ---- 内部 ----
@@ -61,7 +61,7 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             fireIntent(eventId, item),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        setAt(item.triggerAtMillis, pi)
+        setAt(item.triggerAtMillis, pi, "slot=$slot event=$eventId 提前${item.minutesBefore}分")
     }
 
     private fun cancelSlot(eventId: String, slot: Int) {
@@ -89,17 +89,24 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
      * 有精确闹钟权限就走 `setExactAndAllowWhileIdle`（Doze 下仍准时）；
      * 没有则退化到 `setAndAllowWhileIdle`——仍会响，但系统可能推迟几分钟。
      * 这个降级在提醒诊断页里会明确告知用户，不做静默处理。
+     *
+     * 降级分支必须留日志：真机上「提前 10 分钟实际晚 4 分钟」就是这条路径的表现，
+     * 没有日志时只能靠猜。每次排期最多 10 个闹钟，不会把 logcat 刷爆。
      */
-    private fun setAt(atMillis: Long, pi: PendingIntent) {
+    private fun setAt(atMillis: Long, pi: PendingIntent, origin: String) {
         try {
             if (alarms.canScheduleExactAlarms()) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi)
             } else {
+                Log.w(
+                    TAG,
+                    "无精确闹钟权限，降级为不精确闹钟（实际触发可能延后数分钟）：$origin at=$atMillis",
+                )
                 alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi)
             }
         } catch (e: SecurityException) {
             // 权限在授权后被用户撤销时可能走到这里
-            Log.w(TAG, "精确闹钟被拒，退化为不精确闹钟", e)
+            Log.w(TAG, "精确闹钟被拒，退化为不精确闹钟：$origin", e)
             runCatching { alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi) }
         }
     }
@@ -114,6 +121,8 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             .putExtra(ReminderReceiver.EXTRA_EVENT_ID, eventId)
             .putExtra(ReminderReceiver.EXTRA_MINUTES, item.minutesBefore)
             .putExtra(ReminderReceiver.EXTRA_TARGET, item.targetAtMillis)
+            // 计划触发时刻随 intent 带到接收器，才能算出「系统推迟了多久」
+            .putExtra(ReminderReceiver.EXTRA_TRIGGER_AT, item.triggerAtMillis)
 
     private fun snoozeIntent(eventId: String): Intent =
         Intent(appContext, ReminderReceiver::class.java)

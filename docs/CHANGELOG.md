@@ -2,6 +2,19 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] 修提醒晚 4 分钟：补 USE_EXACT_ALARM，并让延迟可观测
+
+- 现象（真机反馈，OnePlus PJZ110 / Android 17）：事件设「提前 10 分钟」，实际提前 6 分钟才响，晚 4 分钟；同一时刻应用在前台；设置页「发送测试通知」正常。
+- 判断依据：测试通知有效 → 通知渠道与 `ReminderNotifier` 无问题，问题在「排期 → 闹钟 → 接收器」这条链。晚到而非不响 → 闹钟排上了但被系统延迟投递，即走了不精确分支。
+- 根因：只声明了 `SCHEDULE_EXACT_ALARM`。该权限 Android 14 起对新装应用**默认拒绝**且需用户手动开开关，`canScheduleExactAlarms()` 返回 false，调度器退化为 `setAndAllowWhileIdle`——它本身就是不精确闹钟，系统允许推迟数分钟（前台也不例外，Doze/待机窗口同样适用）。诊断页当时已显示「未允许，系统可能把提醒推迟几分钟」，与实测完全吻合。
+- 改动：
+  - `AndroidManifest.xml` 增加 `USE_EXACT_ALARM`（API 33 引入的普通权限，安装即授予、不受用户开关影响，专供闹钟/日历类「必须准点」的应用）。两条同时声明时系统以 `USE_EXACT_ALARM` 为准。
+  - `AlarmReminderScheduler`：降级分支补 `Log.w`（含事件、槽位、提前分钟），此前静默降级导致只能靠猜。
+  - 延迟可观测：`fireIntent` 带上计划触发时刻 `EXTRA_TRIGGER_AT`，`ReminderReceiver` 投递后把「计划/实际」两个时刻写入设置，诊断页显示「上次提醒晚了 X 分 Y 秒，系统在推迟闹钟」或「上次提醒准时」。阈值 5 秒——几秒偏差用户无感，到了分钟级才是真问题。
+- 涉及文件：`AndroidManifest.xml`、`data/reminder/AlarmReminderScheduler.kt`、`reminder/ReminderReceiver.kt`、`data/settings/LegacySettingsKeys.kt`、`ui/reminder/{ReminderViewModel,ReminderUiState,ReminderSheet}.kt`、`MainActivity.kt`
+- 验证：175 项单测 0 失败、lint 11 项基线、`aapt2 dump permissions` 确认 `USE_EXACT_ALARM` 已入包。
+- 注意（M7 发版前）：Google Play 对 `USE_EXACT_ALARM` 有用途审查（仅限闹钟/日历类核心功能），上架需在商店后台声明；若审核不通过，回退为仅 `SCHEDULE_EXACT_ALARM` + 保留诊断页引导开关。
+
 ## [2026-11-11] 修日期时间滚轮「滚哪里都弹回今天 09:00」
 
 - 现象（真机反馈）：滚年月日或时分，选完立刻弹回 `2026.11.11 09:00`——正好是新建表单的初始值。

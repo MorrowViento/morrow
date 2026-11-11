@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.jiuxina.ying.data.EventRepository
 import com.jiuxina.ying.data.reminder.ReminderPermissions
 import com.jiuxina.ying.data.reminder.ReminderScheduler
+import com.jiuxina.ying.data.settings.LegacySettingsKeys
+import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.domain.model.CountdownEvent
 import com.jiuxina.ying.domain.model.EventReminder
 import com.jiuxina.ying.domain.time.ReminderPlan
@@ -38,6 +40,7 @@ import java.time.format.DateTimeFormatter
  */
 class ReminderViewModel(
     private val events: EventRepository,
+    private val settings: SettingsRepository,
     private val permissions: ReminderPermissions,
     private val notifier: ReminderNotifier,
     private val scheduler: ReminderScheduler,
@@ -53,11 +56,22 @@ class ReminderViewModel(
         }
     }
 
+    /** 上一次投递的实际延迟；两个键都缺失时为 null。 */
+    private val lastDelay: Flow<Long?> = combine(
+        settings.rawString(LegacySettingsKeys.LAST_REMINDER_FIRED_AT),
+        settings.rawString(LegacySettingsKeys.LAST_REMINDER_TRIGGER_AT),
+    ) { fired, planned ->
+        val f = fired?.toLongOrNull()
+        val p = planned?.toLongOrNull()
+        if (f == null || p == null) null else f - p
+    }
+
     val state: StateFlow<ReminderUiState> = combine(
         events.observeAll(),
         refreshTick,
         ticker,
-    ) { list, _, now -> build(list, now) }
+        lastDelay,
+    ) { list, _, now, delay -> build(list, now, delay) }
         .catch { emit(ReminderUiState(isLoading = false)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReminderUiState())
 
@@ -84,7 +98,7 @@ class ReminderViewModel(
         }
     }
 
-    private fun build(list: List<CountdownEvent>, nowMillis: Long): ReminderUiState {
+    private fun build(list: List<CountdownEvent>, nowMillis: Long, lastDelayMillis: Long?): ReminderUiState {
         val planned = list
             .flatMap { ReminderPlan.upcoming(it, nowMillis) }
             .sortedBy { it.triggerAtMillis }
@@ -97,6 +111,7 @@ class ReminderViewModel(
             eventCount = list.count { event ->
                 !event.isCompleted && event.reminders.any { it.enabled }
             },
+            lastDelayMillis = lastDelayMillis,
             isLoading = false,
         )
     }
@@ -129,13 +144,14 @@ class ReminderViewModel(
 
         fun factory(
             events: EventRepository,
+            settings: SettingsRepository,
             permissions: ReminderPermissions,
             notifier: ReminderNotifier,
             scheduler: ReminderScheduler,
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ReminderViewModel(events, permissions, notifier, scheduler) as T
+                ReminderViewModel(events, settings, permissions, notifier, scheduler) as T
         }
     }
 }

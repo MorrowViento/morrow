@@ -3,8 +3,22 @@
 
     <!-- M4：提醒通知 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- 精确闹钟：Android 14 起新装应用默认拒绝，需在提醒诊断页引导用户开启，
-         未开启时调度器退化为不精确闹钟（仍会提醒，但可能延后几分钟） -->
+    <!--
+      精确闹钟，两条一起声明：
+
+      SCHEDULE_EXACT_ALARM 是「可被用户撤销」的权限，Android 14 起新装应用默认拒绝，
+      未授权时调度器只能退化成 setAndAllowWhileIdle，表现就是「提前 10 分钟」的提醒
+      实际晚了 4~5 分钟才响（真机已复现）。
+
+      USE_EXACT_ALARM 是 API 33 引入的普通权限，安装即授予、不受用户开关影响，
+      专供闹钟与日历这类「提醒必须准点」类应用。minSdk 已对齐 33，因此现代系统上
+      走这一条即可，SCHEDULE_EXACT_ALARM 只作为旧行为兜底保留。
+
+      注意：Google Play 对 USE_EXACT_ALARM 有用途审查（仅限闹钟/日历类核心功能），
+      M7 上架前需在商店后台声明用途；若审核不通过，则回退为仅 SCHEDULE_EXACT_ALARM
+      并依赖诊断页的引导开关。
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- 关机重启后重建闹钟 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

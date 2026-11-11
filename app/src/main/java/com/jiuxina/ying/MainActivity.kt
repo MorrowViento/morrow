@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
             val reminderViewModel: ReminderViewModel = viewModel(
                 factory = ReminderViewModel.factory(
                     app.eventRepository,
+                    app.settingsRepository,
                     app.reminderPermissions,
                     app.reminderNotifier,
                     app.reminderScheduler,

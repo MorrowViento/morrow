@@ -27,6 +27,13 @@ data class ReminderUiState(
     val alarmCount: Int = 0,
     /** 设有启用提醒且未完成的事件数。 */
     val eventCount: Int = 0,
+    /**
+     * 上一条提醒被系统推迟了多久（毫秒，可正可负）。
+     *
+     * 这是用户唯一能自己看见的「系统是否在拖延」的证据：精确闹钟未授权时会明显为正，
+     * 授权后应接近 0。为空表示还没投递过（或该次调用方没带计划时刻，例如稍后提醒）。
+     */
+    val lastDelayMillis: Long? = null,
     val isLoading: Boolean = true,
 )
 

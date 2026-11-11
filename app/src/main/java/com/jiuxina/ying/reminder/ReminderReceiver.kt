@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.jiuxina.ying.YingApp
+import com.jiuxina.ying.data.settings.LegacySettingsKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,7 +52,23 @@ class ReminderReceiver : BroadcastReceiver() {
         val minutes = intent.getIntExtra(EXTRA_MINUTES, 0)
         val fallbackTarget = event.targetDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val target = intent.getLongExtra(EXTRA_TARGET, 0L).takeIf { it > 0L } ?: fallbackTarget
-        app.reminderNotifier.show(event, minutes, target, System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        app.reminderNotifier.show(event, minutes, target, now)
+
+        // 记下「系统实际比计划晚/早了多少」，供诊断页显示。
+        // 没有触发时刻的调用方（稍后提醒）不记，否则会把延迟数据搅乱
+        val planned = intent.getLongExtra(EXTRA_TRIGGER_AT, 0L)
+        if (planned > 0L) {
+            runCatching {
+                app.settingsRepository.putStrings(
+                    mapOf(
+                        LegacySettingsKeys.LAST_REMINDER_FIRED_AT to now.toString(),
+                        LegacySettingsKeys.LAST_REMINDER_TRIGGER_AT to planned.toString(),
+                    ),
+                )
+            }
+            Log.i(TAG, "提醒已投递 event=$eventId 计划=$planned 实际=$now 延迟=${now - planned}ms")
+        }
 
         // 年度重复事件靠这一步自转：触发后立即按「从现在起」重排，补上明年的落点
         app.reminderScheduler.sync(event)
@@ -83,6 +100,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_EVENT_ID = "event_id"
         const val EXTRA_MINUTES = "minutes_before"
         const val EXTRA_TARGET = "target_at"
+        const val EXTRA_TRIGGER_AT = "trigger_at"
 
         const val SNOOZE_MINUTES = 10
     }

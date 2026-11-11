@@ -23,6 +23,15 @@ object LegacySettingsKeys {
 
     // 通知
     const val NOTIFICATION_ACTION_REVISION = "notification_action_revision"
+
+    /**
+     * 上一次提醒的「计划触发时刻」与「实际投递时刻」（毫秒）。
+     *
+     * 存下来只为诊断页显示延迟：不精确闹钟被系统推迟是「用户能感觉到、但说不清」的问题，
+     * 有了这两个数就能一眼判断「是系统在拖」还是「排期本身算错了」。
+     */
+    const val LAST_REMINDER_FIRED_AT = "reminder.last_fired_at"
+    const val LAST_REMINDER_TRIGGER_AT = "reminder.last_trigger_at"
 }
 
 /** 迁移自身使用的元数据键（不属于旧版数据，前缀区分）。 */

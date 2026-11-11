@@ -109,6 +109,16 @@ fun ReminderSheet(
                     Spacer(Modifier.height(14.dp))
                     SectionTitle("排期中的提醒 · ${state.alarmCount} 条 / ${state.eventCount} 个事件")
 
+                    // 上一条提醒的实际延迟：这是用户唯一能自己看到的「系统有没有拖延」的证据。
+                    // 精确闹钟未授权时通常明显为正，授权后应接近 0
+                    state.lastDelayMillis?.let { delay ->
+                        Text(
+                            text = describeDelay(delay),
+                            style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
+                            modifier = Modifier.padding(top = 6.dp, start = 2.dp),
+                        )
+                    }
+
                     if (state.rows.isEmpty()) {
                         Text(
                             text = if (state.isLoading) "读取中…" else "暂无待触发的提醒，去给事件加个提醒吧",
@@ -212,6 +222,28 @@ private fun ReminderRowView(row: ReminderRow) {
             style = TextStyle(fontSize = 11.sp, color = secondary.copy(alpha = 0.75f)),
             modifier = Modifier.padding(top = 1.dp),
         )
+    }
+}
+
+/**
+ * 把「上一条提醒的实际延迟」说成人话。
+ *
+ * 阈值取 5 秒：正常人感觉不到几秒的偏差，而一旦到了「分钟」级，用户就是真的觉得不准了，
+ * 这时必须直接指出原因（系统推迟），否则用户只会以为应用坏了。
+ */
+private fun describeDelay(delayMillis: Long): String = when {
+    delayMillis > 5_000L -> "上次提醒晚了 ${formatSpan(delayMillis)}，系统在推迟闹钟"
+    delayMillis < -5_000L -> "上次提醒早了 ${formatSpan(-delayMillis)}"
+    else -> "上次提醒准时"
+}
+
+private fun formatSpan(millis: Long): String {
+    val minutes = millis / 60_000L
+    val seconds = (millis % 60_000L) / 1_000L
+    return when {
+        minutes > 0 && seconds > 0 -> "${minutes} 分 ${seconds} 秒"
+        minutes > 0 -> "${minutes} 分"
+        else -> "${seconds} 秒"
     }
 }
 
