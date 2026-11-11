@@ -1,0 +1,302 @@
+package com.jiuxina.ying.ui.event
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jiuxina.ying.domain.model.CountDirection
+import com.jiuxina.ying.domain.model.EventReminder
+import com.jiuxina.ying.ui.component.WheelDateTimePicker
+import com.jiuxina.ying.ui.glass.GlassPanel
+import com.jiuxina.ying.ui.glass.glassTextPrimary
+import com.jiuxina.ying.ui.glass.glassTextSecondary
+
+/**
+ * 新建/编辑事件面板。
+ *
+ * 做成同页面内的浮层而不是 ModalBottomSheet：玻璃材质依赖 `GlassBackdropHost` 的采样上下文，
+ * 独立 Dialog/Sheet 窗口会把 backdrop 切断，材质直接失效。
+ */
+@Composable
+fun EventEditSheet(
+    initial: EventFormState,
+    onDismiss: () -> Unit,
+    onSave: (EventFormState) -> Unit,
+) {
+    var form by remember(initial.id) { mutableStateOf(initial) }
+    var showTitleError by remember { mutableStateOf(false) }
+    var reminderHint by remember { mutableStateOf<String?>(null) }
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    val isEditing = form.id != null
+
+    BackHandler(onBack = onDismiss)
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.3f))
+                .clickable(onClick = onDismiss),
+        )
+        GlassPanel(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.94f),
+            contentAlignment = Alignment.TopStart,
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                SheetHeader(
+                    title = if (isEditing) "编辑事件" else "新建事件",
+                    onCancel = onDismiss,
+                    onSave = {
+                        val errors = form.validate()
+                        showTitleError = errors.title != null
+                        if (errors.isValid) onSave(form)
+                    },
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 18.dp, end = 18.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    GlassTextField(
+                        value = form.title,
+                        onValueChange = { form = form.copy(title = it) },
+                        placeholder = "标题，例如「春节回家」",
+                        error = if (showTitleError) "请输入标题" else null,
+                    )
+
+                    WheelDateTimePicker(
+                        date = form.date,
+                        time = form.time,
+                        isAllDay = form.isAllDay,
+                        onDateChange = { form = form.withDate(it) },
+                        onTimeChange = { form = form.copy(time = it) },
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ChoiceChip("全天", form.isAllDay) { form = form.withAllDay(!form.isAllDay) }
+                        ChoiceChip(form.direction.label(), false) {
+                            form = form.copy(direction = form.direction.next())
+                        }
+                        ChoiceChip("每年重复", form.repeatYearly) {
+                            form = form.copy(repeatYearly = !form.repeatYearly)
+                        }
+                    }
+
+                    QuickDateRow(onPick = { form = form.withDate(it) })
+
+                    SectionTitle("分类")
+                    ChipRow {
+                        EventFormState.DEFAULT_CATEGORIES.forEach { category ->
+                            ChoiceChip(category, form.category == category) {
+                                form = form.copy(category = category)
+                            }
+                        }
+                    }
+
+                    SectionTitle("提醒（最多 ${EventReminder.MAX_COUNT} 条）")
+                    ChipRow {
+                        EventFormState.REMINDER_PRESETS.forEach { minutes ->
+                            val selected = form.reminders.any { it.minutesBefore == minutes }
+                            ChoiceChip(EventReminder.labelForMinutes(minutes), selected) {
+                                val next = form.toggleReminder(minutes)
+                                reminderHint = if (next.reminders.size == form.reminders.size && !selected) {
+                                    "最多 ${EventReminder.MAX_COUNT} 条提醒"
+                                } else {
+                                    null
+                                }
+                                form = next
+                            }
+                        }
+                    }
+                    reminderHint?.let {
+                        Text(it, style = TextStyle(fontSize = 11.sp, color = secondary))
+                    }
+
+                    SectionTitle("备注")
+                    GlassTextField(
+                        value = form.note,
+                        onValueChange = { form = form.copy(note = it) },
+                        placeholder = "可不填",
+                        singleLine = false,
+                        minHeight = 88.dp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetHeader(title: String, onCancel: () -> Unit, onSave: () -> Unit) {
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "取消",
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            style = TextStyle(fontSize = 14.sp, color = secondary),
+        )
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = primary),
+        )
+        Text(
+            text = "保存",
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onSave)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = primary),
+        )
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
+    )
+}
+
+@Composable
+private fun QuickDateRow(onPick: (java.time.LocalDate) -> Unit) {
+    ChipRow {
+        EventFormState.quickDates().forEach { (label, date) ->
+            ChoiceChip(label, false) { onPick(date) }
+        }
+    }
+}
+
+@Composable
+private fun ChipRow(content: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(primary.copy(alpha = if (selected) 0.18f else 0.06f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = label,
+            style = TextStyle(
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) primary else secondary,
+            ),
+        )
+    }
+}
+
+/** 玻璃风输入框：BasicTextField 自带可控配色，避免 MaterialTheme 默认色在深色玻璃上不可读。 */
+@Composable
+private fun GlassTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean = true,
+    minHeight: androidx.compose.ui.unit.Dp = 46.dp,
+    error: String? = null,
+) {
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(primary.copy(alpha = 0.06f))
+                .heightIn(min = minHeight)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            if (value.isEmpty()) {
+                Text(placeholder, style = TextStyle(fontSize = 15.sp, color = secondary.copy(alpha = 0.7f)))
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = singleLine,
+                textStyle = TextStyle(fontSize = 15.sp, color = primary),
+                cursorBrush = SolidColor(primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        error?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = TextStyle(fontSize = 11.sp, color = Color(0xFFFF6B6B)))
+        }
+    }
+}
+
+private fun CountDirection.label(): String = when (this) {
+    CountDirection.AUTO -> "自动方向"
+    CountDirection.COUNTDOWN -> "只倒数"
+    CountDirection.COUNTUP -> "只正数"
+}
+
+private fun CountDirection.next(): CountDirection {
+    val all = CountDirection.entries
+    return all[(ordinal + 1) % all.size]
+}

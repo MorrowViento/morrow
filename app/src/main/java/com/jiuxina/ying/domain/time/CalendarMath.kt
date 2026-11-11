@@ -22,4 +22,13 @@ object CalendarMath {
         val safeDay = day.coerceAtMost(java.time.YearMonth.of(year, month).lengthOfMonth())
         return LocalDate.of(year, month, safeDay)
     }
+
+    /**
+     * 按年月构造日期，日越界时夹取到该月最后一天（1 月 31 日切到 2 月 → 28/29 日）。
+     * 滚轮换月时用，避免 `LocalDate.of` 抛 `DateTimeException`。
+     */
+    fun dateClamped(year: Int, month: Int, day: Int): LocalDate {
+        val maxDay = java.time.YearMonth.of(year, month).lengthOfMonth()
+        return LocalDate.of(year, month, day.coerceIn(1, maxDay))
+    }
 }

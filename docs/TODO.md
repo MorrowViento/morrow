@@ -1,0 +1,79 @@
+# TODO — 萤 · Kotlin 重构
+
+## 项目概述
+
+用 Kotlin + Jetpack Compose + Glasmio（Liquid Glass）重写倒数日应用「萤」（Android 13+），取代 Flutter 主线。
+
+## 当前阶段
+
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（41 项 0 失败），APK 75 MB。
+
+仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 本地 HEAD `3e4333e`（M2a/M2b 尚未提交）· 版本 `4.0.0-alpha1 (40)`
+
+下一步：`M2b2` 分类管理 → `M2c` 详情页；`M2a/M2b` 的真机验收仍挂着（本机无设备/模拟器）。
+
+## 移植范围（2026-11-11 二次定稿）
+
+只保留下面这些裁剪，**未列出的模块一律按原计划全量实现**。
+
+| 模块 | 结论 |
+|---|---|
+| 小部件应用内配置台 | **适度精简**：保留样式预设 + 字号 + 配色 + 元素显隐；逐元素对齐/壁纸取色联动不做 |
+| 壁纸取色 / 节日皮肤 | 延后 v4.1 |
+| 字体库（在线 + 本地导入） | 延后 v4.1，本期用系统字体 |
+| 相册背景服务 | 延后 v4.1 |
+| 头像 / Emoji / 单位文案 | 删除，不做 |
+| 赞助页 | 取消（关于页保留） |
+| 单事件小部件 / 年视图 / 农历 / 提醒诊断页 | **保留**（不砍） |
+| 应用内更新 | **全量**：Releases 检查 + 镜像测速 + 断点续传 + PackageInstaller 静默安装 |
+| 分类体系 | **全量**：预置分类 + 自定义增删改，不做「只用固定分类」的简化 |
+| 滚轮日期选择器 / 搜索筛选排序栏 / 已完成折叠 / 6 秒撤销 | 保留（按原计划） |
+
+> 估算随之回到约 62–72 人日（12–14 周）。
+
+## 待办任务
+
+按执行顺序排列；`[ ]` 前的编号即依赖顺序，`→` 表示串行前置。
+
+- [ ] **T0 推送一致性核对** —— 本地 `main`（`3e4333e`）与远程 `main`（`68866a67`）SHA 不一致且本地未设 upstream；做法：`git fetch origin`，用 `git diff --stat HEAD origin/main` 确认树内容一致，一致则 `git reset --soft origin/main` 并 `git branch -u origin/main`，不一致则补差异提交；验收：`git status -sb` 显示与 `origin/main` 齐平，CI 对该提交全绿。
+- [x] **M2a 首页事件列表** —— 已实现：`EventViewModel`（Room Flow + 排序偏好 + 每秒时间源 combine）、`EventPresentation`（纯函数排序：置顶优先 / 距离（已过沉底且刚过优先）/ 日期 / 创建时间倒序）、`HomeScreen`（折叠标题、排序 chip、进行中与已完成分区、空态/加载/错误态）、`EventCardView`（天数徽章 + 进度环 + 今日剩余 `HH:mm:ss`）。验收：三种排序与置顶单测通过（10 项），`assembleDebug + testDebugUnitTest + lintDebug` 通过；**真机视觉待验**（见下条）。
+- [ ] **M2a/M2b 真机验收** —— 安装 `app/build/outputs/apk/debug/app-debug.apk`（本机无设备/模拟器，未经实机确认）；验收：① 卡片玻璃材质正常、倒计时逐秒跳动、今日事件显示剩余时分秒、排序 chip 循环三档且杀进程后保持、已完成折叠、空库空态；② 点 + 打开表单，滚轮年/月/日/时/分能选中并吸附居中（`itemHeight` 34dp 与实际行高需实机校准），空标题点保存有红字提示，保存后列表立即可见，杀进程重启仍在，全天事件提醒锚点为 09:00。
+- [x] **M2b 事件新建/编辑表单** —— 已实现：`EventFormState`（纯函数：校验/落库映射/日期夹取/提醒增删去重上限/快捷日期）、`WheelDateTimePicker`（年/月/日/时/分五列滚轮 + snap fling，全天隐藏时间列）、`EventEditSheet`（同页面浮层而非 ModalBottomSheet，避免 backdrop 断裂导致玻璃失效；标题/滚轮/全天/方向/每年重复/快捷日期/分类 chips/提醒 chips/备注）、`EventViewModel.save`、首页 FAB 接入。验收：9 项表单单测 + 41 项总计全绿，`assembleDebug + lintDebug` 通过；真机交互待上条验收。
+- [ ] **M2b2 分类管理** —— 预置分类 + 自定义增删改（存 DataStore 新键，需兼容旧事件里已出现但未定义的分类）；现状：表单已能用 `DEFAULT_CATEGORIES` 常量选择，自定义分类尚未可编辑；验收：新建自定义分类后可在表单中选中，重命名后旧事件同步显示新名（或保留历史名，需明确策略），删除分类时若有事件占用必须先提示迁移目标。
+- [ ] **M2c 详情页与 6 秒撤销** —— 详情页展示全字段 + 撤销队列，覆盖旧版四类操作：`delete` / `toggleCompleted` / `clearCompleted` / `clearAll`（撤销窗口内不真正落库删除）；验收：删除后 6 秒内可还原，超时后彻底删除不可还原，批量清理已完成可整体还原，撤销条展示期间连续操作不互相覆盖。
+- [ ] **M2d 日历视图** —— 月视图（日期格标记当日事件数）+ 年视图 + 按月分组列表 + 农历与星期副标题（农历需引入库或自实现，注意包体增量），与首页共享同一 ViewModel 数据源；验收：切换月份/年份数据正确，点选日期过滤出当天事件，重复事件按当年周年落位，农历日期与系统日历对照一致，抽 3 个典型月份人工比对。
+- [ ] **M4 提醒通知** —— `AlarmManager.setExactAndAllowWhileIdle` 精确闹钟（全天事件锚点 09:00）+ `BOOT_COMPLETED` 重建闹钟 + 通知动作（完成/稍后）+ 通知权限与精确闹钟权限引导 + 电池优化白名单引导页 + **提醒诊断页**（逐条列出已排闹钟与下次触发时刻）；验收：真机锁屏准时触发、通知动作可用、重启后闹钟自动重建、跨午夜与跨年重复事件触发日期正确、诊断页与实际闹钟一致。
+- [ ] **M5 桌面小部件** —— 迁移 `DaymarkWidgetProvider`（总览）+ `DaymarkDetailWidgetProvider`（单事件）+ `MidnightRefreshScheduler` + `Widget*Protocol`，数据通道由 method channel 改为进程内直读 Room；配置台按范围保留样式预设 + 字号 + 配色 + 元素显隐；验收：小部件显示当前事件、跨天午夜自动刷新、点击可跳转详情，旧用户已选样式可映射到预设不丢。
+- [ ] **M6 设置中心** —— `glasmio-preference` 偏好行 + 二级分类页 + 主题/排序/减少透明度/减少动效（键名已沿用 Flutter 原始键）+ 备份导入导出（兼容旧版格式）+ 关于页；**不做**字体库、头像 Emoji、单位文案、相册背景、赞助页；验收：设置项对照清单逐项勾验，各开关即时生效并持久化，备份可跨设备双向还原。
+- [ ] **M7 更新与发布** —— GitHub Releases 检查 + 镜像源测速选路 + WorkManager 断点续传下载 + `PackageInstaller` 应用内安装 + 更新弹窗与进度 UI + 真机全量回归（Android 13/14/15/16）+ 正式签名与 ABI 拆分 + `lint.abortOnError = true`；验收：真机完成「检查→下载→安装→升级」全流程，回归清单逐项通过，旧用户升级后数据与小部件无感迁移。
+- [ ] **M0 遗留（可选）** —— 计划里承诺的 ktlint/detekt 尚未接入；做法：加 `spotless` 或 `ktlint` Gradle 插件并接入 CI；验收：CI 增一步静态检查且不阻断当前代码。建议在 M2 结束、代码量上来之前做。
+
+## 涉及文件
+
+| 任务 | 主要文件 / 目录 |
+|---|---|
+| T0 | 仅 git 操作，无文件改动 |
+| M2a | `ui/event/{HomeUiState,EventViewModel}.kt`、`ui/home/{HomeScreen,EventCardView}.kt`、`domain/model/SortMode.kt`、`ui/glass/GlassTheme.kt`、`MainActivity.kt` |
+| M2b | `ui/event/EventEditSheet.kt`、`ui/component/WheelDateTimePicker.kt`（新建）、`data/EventRepository.kt` |
+| M2b2 | `ui/category/`（新建）、`data/category/CategoryRepository.kt`（新建，存 DataStore）、`ui/event/EventEditSheet.kt` |
+| M2c | `ui/event/EventDetailScreen.kt`、`ui/event/UndoBar.kt`、`domain/model/UndoOperation.kt`（新建） |
+| M2d | `ui/calendar/`（月/年/列表三视图）、`domain/time/LunarCalendar.kt`（新建）、`domain/time/RepeatRule.kt` |
+| M4 | `service/notification/`（新建）、`AndroidManifest.xml`（权限 + receiver） |
+| M5 | `widget/`、`service/widget/`（均由旧工程迁移） |
+| M6 | `ui/settings/`、`data/settings/SettingsRepository.kt`、`service/backup/` |
+| M7 | `service/update/`、`app/build.gradle.kts`（签名 / ABI 拆分 / lint） |
+| 全局 | `gradle/libs.versions.toml`（每步先补依赖）、`.github/workflows/android-ci.yml` |
+
+## 优先级与依赖
+
+```
+T0 → M2a → M2b → M2b2 → M2c → M2d
+                       ↘ M4（依赖 M2b 的提醒字段）
+                       ↘ M5（可与 M4 并行，数据源同为 M1）
+                       ↘ M6（可与 M4/M5 并行）
+                                 ↘ M7（最后，需全量回归）
+```
+
+- 阻塞：`M2a` 是后续所有页面的地基；`M2b2` 依赖 `M2b` 的表单分类入口；`M4` 依赖 `M2b` 产生的提醒数据；`M7` 必须最后。
+- 可并行：`M5` 与 `M6` 互不依赖（均只依赖已完成的 M1）。
+- 顺序铁律：**先补依赖再写页面**（`androidx.navigation:navigation-compose`、`androidx.work:work-runtime-ktx`、`material-icons-extended` 目前均未引入）。

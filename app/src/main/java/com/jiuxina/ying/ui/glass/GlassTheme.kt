@@ -1,9 +1,11 @@
 package com.jiuxina.ying.ui.glass
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +35,25 @@ fun GlassTheme(content: @Composable () -> Unit) {
 /** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */
 @Composable
 fun glassColors() = GlasmioTheme.colors
+
+/**
+ * 玻璃上的主文字色。
+ *
+ * GlasmioTheme 默认跟随系统外观，故用系统深色态判断即可与材质明暗保持一致；
+ * 不去读 Glasmio 内部颜色字段，避免把未公开的 API 细节漏进业务层。
+ */
+@Composable
+fun glassTextPrimary(): Color =
+    if (isSystemInDarkTheme()) Color.White else Color(0xFF1C1C1E)
+
+/** 玻璃上的次级文字色（分类、日期、说明文字）。 */
+@Composable
+fun glassTextSecondary(): Color =
+    if (isSystemInDarkTheme()) {
+        Color.White.copy(alpha = 0.62f)
+    } else {
+        Color(0xFF3C3C43).copy(alpha = 0.6f)
+    }
 
 /**
  * 玻璃背景宿主（自定义内容版，与 Glasmio 0.1.2 原始签名一一对应）。
@@ -86,6 +107,20 @@ fun GlassPanel(
     GlassSurface(
         modifier = modifier,
         contentAlignment = contentAlignment,
+        content = content,
+    )
+}
+
+/** 圆形玻璃面板（悬浮按钮用）。 */
+@Composable
+fun GlassCirclePanel(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    GlassSurface(
+        modifier = modifier,
+        shape = CircleShape,
+        contentAlignment = Alignment.Center,
         content = content,
     )
 }
