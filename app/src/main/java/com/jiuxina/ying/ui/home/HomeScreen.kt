@@ -82,7 +82,6 @@ import com.jiuxina.ying.ui.settings.SettingsActions
 import com.jiuxina.ying.ui.settings.SettingsScreen
 import com.jiuxina.ying.ui.settings.SettingsUiState
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 /**
  * 首页（M2a/M2c）：事件列表 + 折叠标题 + 排序切换 + 空态 + 详情浮层 + 撤销条。
@@ -123,6 +122,11 @@ fun HomeScreen(
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
+
+    // 分类改名 / 删除迁移的映射（旧名 → 新名，可链式）。表单状态在面板内部，
+    // 只能把「这个名字已经变了」传进去，否则表单会拿着旧名保存，让旧分类以孤儿身份长期存在。
+    // 每次打开新表单都清空，避免上一个表单里的改名影响新表单。
+    var categoryAliases by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     // 通知点进来时数据可能还没加载完：先记下 id，等列表到位后 detailCard 自然会匹配上
     LaunchedEffect(openDetailRequest) {
@@ -189,7 +193,10 @@ fun HomeScreen(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 20.dp, bottom = 26.dp),
-                        onClick = { editingForm = EventFormState(date = LocalDate.now()) },
+                        onClick = {
+                            categoryAliases = emptyMap()
+                            editingForm = EventFormState.newEvent()
+                        },
                     )
 
                     // 日历是整页替换（不是浮层）：盖住列表与 FAB，但与列表共用同一个 backdrop，
@@ -204,7 +211,10 @@ fun HomeScreen(
                         CalendarScreen(
                             state = calendar,
                             actions = calendarActions,
-                            onCreate = { date -> editingForm = EventFormState(date = date) },
+                            onCreate = { date ->
+                                categoryAliases = emptyMap()
+                                editingForm = EventFormState.newEvent(date = date)
+                            },
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },
                         )
@@ -233,7 +243,12 @@ fun HomeScreen(
                             onEdit = {
                                 val id = card.id
                                 detailId = null
-                                scope.launch { eventActions.loadForm(id)?.let { editingForm = it } }
+                                scope.launch {
+                                    eventActions.loadForm(id)?.let {
+                                        categoryAliases = emptyMap()
+                                        editingForm = it
+                                    }
+                                }
                             },
                             onToggleCompleted = { eventActions.toggleCompleted(card.id) },
                             onTogglePinned = { eventActions.togglePinned(card.id) },
@@ -248,6 +263,7 @@ fun HomeScreen(
                         EventEditSheet(
                             initial = form,
                             categories = categoryNames,
+                            categoryAliases = categoryAliases,
                             onManageCategories = { showCategories = true },
                             onDismiss = { editingForm = null },
                             onSave = { saved ->
@@ -257,11 +273,22 @@ fun HomeScreen(
                         )
                     }
 
-                    // 分类管理叠在表单之上：用户从表单的「管理分类…」进入，关闭后回到表单继续填写
+                    // 分类管理叠在表单之上：用户从表单的「管理分类…」进入，关闭后回到表单继续填写。
+                    // 表单只记分类名，所以改名/删除要同步回填选中项，否则表单会拿旧名保存，
+                    // 旧名又以「孤儿分类」身份回到列表里，新旧两个分类长期并存。
                     if (showCategories) {
                         CategorySheet(
                             items = categories,
                             actions = categoryActions,
+                            onRenamed = { from, to ->
+                                categoryAliases = categoryAliases + (from to to)
+                            },
+                            onRemoved = { name, target ->
+                                // 删除后事件已迁到 target；没有 target 说明该分类没人用，
+                                // 表单退回第一个仍存在的分类，别把已删的名字原样保存回去。
+                                val next = target ?: categoryNames.firstOrNull { it != name }
+                                if (next != null) categoryAliases = categoryAliases + (name to next)
+                            },
                             onDismiss = { showCategories = false },
                         )
                     }

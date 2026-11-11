@@ -2,6 +2,22 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 新建默认此刻，分类改名后表单自动跟随
+
+- 现象（真机反馈）：
+  1. 新建事件时时间滚轮默认停在当天 **09:00**，下午新建等于一保存就是过去的时刻；
+  2. 从表单进「管理分类…」把当前选中的分类改名后回到表单，旧名和新名**同时**出现在选项里且旧名仍被选中，不手动点新名直接保存 → 旧名被写回事件，于是新旧两个分类长期并存。
+- 根因：
+  1. `EventFormState.time` 默认值写死 `LocalTime.of(9, 0)`，与「新建＝从现在开始」的直觉不符（9 点是**全天事件**的提醒锚点，两件事被混成了一件）。
+  2. 表单状态由 `EventEditSheet` 自己持有（`remember(initial.id)`），父级只传初始值。分类改名只改了 DataStore 与 Room 里的事件，改不到面板内部那份 `form.category`；chip 行按「列表 + 当前值」渲染，旧名就以「孤儿分类」身份并排显示，保存时原样写回。
+- 改动：
+  - 新增 `EventFormState.newEvent(date, now)`：日期默认今天（日历里点的某天则用那天），时刻默认**此刻**并把秒/纳秒截断到分钟；FAB 与日历内新建都走它。`time` 的默认值同步改为「当前分钟」，避免任何漏改的构造点又回到 9 点。
+  - `CategorySheet` 增加 `onRenamed` / `onRemoved` 回调；`HomeScreen` 把「旧名 → 新名」记成 alias 映射传给 `EventEditSheet`，面板用 `LaunchedEffect` 把选中项沿映射解到终点（支持 A→B→C 链式改名），只改与旧名相同的值，不覆盖用户后来手动点的分类。
+  - 删除分类同理：有迁移目标就跟到目标，没有就退回第一个仍存在的分类，别把已删的名字原样保存回去。
+  - 每次打开新表单清空 alias，避免上一个表单里的改名影响新表单。
+- 涉及文件：`ui/event/EventFormState.kt`、`ui/event/EventEditSheet.kt`、`ui/category/CategorySheet.kt`、`ui/home/HomeScreen.kt`、`docs/MANUAL-TEST.md`（B10、E2b、E3b）
+- 验证：185 项单测 0 失败（新增 `newEvent` 默认时刻 2 项、`withCategoryAlias` 链式改名 1 项）、lint 11 项基线不变。
+
 ## [2026-11-11] 撤销条重开就没有：不再和系统回收赛跑，重开就给满一个窗口
 
 - 现象（真机反馈，第三次）：划掉最近任务再重开，撤销条依然不出现。

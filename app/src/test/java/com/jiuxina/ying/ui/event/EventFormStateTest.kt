@@ -8,6 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 
 /** 表单纯逻辑单测：校验、落库字段映射、提醒上限、日期夹取。 */
@@ -110,5 +111,38 @@ class EventFormStateTest {
         assertTrue(state.repeatYearly)
         assertEquals(listOf(1440), state.reminders.map { it.minutesBefore })
         assertEquals(event.targetDate.toLocalDate(), state.date)
+    }
+
+    @Test
+    fun newEvent_defaultsToTodayAndCurrentMinute() {
+        val now = LocalDateTime.of(2026, 11, 12, 7, 48, 33, 500_000_000)
+        val state = EventFormState.newEvent(now = now)
+
+        assertEquals(LocalDate.of(2026, 11, 12), state.date)
+        // 秒/纳秒截断：滚轮只有时/分，留着秒数会让卡片上的剩余时间对不上表盘
+        assertEquals(LocalTime.of(7, 48), state.time)
+        assertEquals(LocalDateTime.of(2026, 11, 12, 7, 48), state.target)
+    }
+
+    @Test
+    fun newEvent_keepsPickedDateButUsesCurrentTime() {
+        val state = EventFormState.newEvent(
+            date = LocalDate.of(2026, 12, 25),
+            now = LocalDateTime.of(2026, 11, 12, 23, 59, 59),
+        )
+        assertEquals(LocalDate.of(2026, 12, 25), state.date)
+        assertEquals(LocalTime.of(23, 59), state.time)
+    }
+
+    @Test
+    fun withCategoryAlias_followsRenameChain() {
+        val base = form().copy(category = "工作")
+
+        assertEquals("生活", base.withCategoryAlias(mapOf("工作" to "生活")).category)
+        // A→B→C：链式改名也要解到终点
+        assertEquals("杂事", base.withCategoryAlias(mapOf("工作" to "生活", "生活" to "杂事")).category)
+        // 与自己无关的改名不动
+        assertEquals("工作", base.withCategoryAlias(mapOf("旅行" to "出行")).category)
+        assertEquals(base, base.withCategoryAlias(emptyMap()))
     }
 }

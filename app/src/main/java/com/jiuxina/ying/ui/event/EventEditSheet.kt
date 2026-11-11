@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,13 @@ import com.jiuxina.ying.ui.glass.glassTextSecondary
 fun EventEditSheet(
     initial: EventFormState,
     categories: List<String>,
+    /**
+     * 分类改名 / 删除迁移的映射（旧名 → 新名，可链式）。
+     *
+     * 表单状态是面板自己持有的，父级改不到，只能把「分类名变了」这件事传进来，
+     * 否则用户重命名分类后这里仍拿着旧名，保存时又把旧名写回去。
+     */
+    categoryAliases: Map<String, String> = emptyMap(),
     onManageCategories: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (EventFormState) -> Unit,
@@ -61,6 +69,12 @@ fun EventEditSheet(
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     val isEditing = form.id != null
+
+    // 分类在管理页被改名 / 删除后，选中项跟着走；只改与旧名完全相同的值，
+    // 用户随后手动点选的分类不会被覆盖。
+    LaunchedEffect(categoryAliases) {
+        form = form.withCategoryAlias(categoryAliases)
+    }
 
     // 分类 chips：仓库列表 + 当前值。当前值可能是旧数据里已不在列表中的分类，
     // 也必须能显示与保留，否则一打开表单就会被悄悄改掉分类。

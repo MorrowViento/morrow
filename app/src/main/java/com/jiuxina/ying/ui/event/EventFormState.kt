@@ -19,13 +19,16 @@ data class EventFormErrors(val title: String? = null) {
 /**
  * 新建/编辑表单状态（纯数据，可单测）。
  *
- * 时间语义：全天事件把时刻归一到 00:00，提醒锚点由 `CountdownEvent.reminderAnchor` 统一处理（09:00）。
+ * 时间语义：新建时日期默认今天、时刻默认**此刻**（[newEvent]），不再固定 09:00——
+ * 「现在建一条」绝大多数情况下就是「从现在开始算」，固定 9 点会让当天 9 点以后新建的事件
+ * 一保存就是过去的时刻。全天事件把时刻归一到 00:00，提醒锚点由
+ * `CountdownEvent.reminderAnchor` 统一处理（09:00）。
  */
 data class EventFormState(
     val id: String? = null,
     val title: String = "",
     val date: LocalDate = LocalDate.now(),
-    val time: LocalTime = LocalTime.of(9, 0),
+    val time: LocalTime = LocalTime.now().withSecond(0).withNano(0),
     val isAllDay: Boolean = false,
     val category: String = CountdownEvent.DEFAULT_CATEGORY,
     val note: String = "",
@@ -71,6 +74,23 @@ data class EventFormState(
         return copy(date = value.withDayOfMonth(safeDay))
     }
 
+    /**
+     * 跟随分类改名 / 删除迁移：把选中的分类沿 [aliases] 解到最终名称（支持 A→B→C 链式改名）。
+     *
+     * 表单只持有分类**名字**。改名后不同步的话，chip 行会把旧名当成「孤儿分类」并排显示，
+     * 用户不手动点一下新名就直接保存——旧名被写回事件里，于是新旧两个分类长期并存。
+     * 删除同理：留着已删除的名字保存，只会把它原样复活。
+     */
+    fun withCategoryAlias(aliases: Map<String, String>): EventFormState {
+        if (aliases.isEmpty()) return this
+        var name = category.trim()
+        repeat(aliases.size + 1) {
+            val next = aliases[name] ?: return if (name == category) this else copy(category = name)
+            name = next
+        }
+        return if (name == category) this else copy(category = name)
+    }
+
     fun addReminder(minutesBefore: Int): EventFormState {
         if (minutesBefore < 0) return this
         if (reminders.size >= EventReminder.MAX_COUNT) return this
@@ -109,6 +129,20 @@ data class EventFormState(
             reminders = event.reminders,
             repeatYearly = event.repeatsYearly,
             createdAt = event.createdAt,
+        )
+
+        /**
+         * 新建表单：日期默认 [date]（今天，或日历里点的某天），时刻默认**此刻**。
+         *
+         * 秒按分钟截断：滚轮只有时/分两列，留着秒数会让「现在建的这条」比表盘上显示的时刻晚几十秒，
+         * 保存后卡片上的剩余时间看起来对不上。
+         */
+        fun newEvent(
+            date: LocalDate = LocalDate.now(),
+            now: LocalDateTime = LocalDateTime.now(),
+        ): EventFormState = EventFormState(
+            date = date,
+            time = now.toLocalTime().withSecond(0).withNano(0),
         )
 
         /** 快捷日期：今天 / 明天 / 一周后 / 月底 / 年底。 */

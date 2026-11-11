@@ -47,11 +47,16 @@ import kotlinx.coroutines.launch
  * 同样使用同页浮层而非独立窗口，保证玻璃材质仍能采样到首页背景。
  * 操作结果（重名 / 超长 / 至少保留一个）直接回显在对应输入框下，而不是弹 Toast：
  * 用户在输入现场就能看到原因并修改。
+ *
+ * [onRenamed] / [onRemoved] 用来把「分类改名 / 删除」告诉下层仍开着的编辑表单——
+ * 表单自己只持有分类**名字**，不改就会拿着旧名继续保存，于是旧名以孤儿分类的形式长期存在。
  */
 @Composable
 fun CategorySheet(
     items: List<CategoryItem>,
     actions: CategoryActions,
+    onRenamed: (from: String, to: String) -> Unit = { _, _ -> },
+    onRemoved: (name: String, target: String?) -> Unit = { _, _ -> },
     onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -158,13 +163,15 @@ fun CategorySheet(
                                         val from = item.name
                                         when (val result = actions.rename(from, editingText)) {
                                             is CategoryEdit.Ok -> {
+                                                val newName = editingText.trim()
                                                 editingName = null
                                                 editError = null
-                                                notice = if (editingText.trim() == from) {
+                                                notice = if (newName == from) {
                                                     "名称未变化"
                                                 } else {
-                                                    "已重命名为「${editingText.trim()}」"
+                                                    "已重命名为「$newName」"
                                                 }
+                                                if (newName != from) onRenamed(from, newName)
                                             }
                                             else -> editError = result.message()
                                         }
@@ -172,10 +179,15 @@ fun CategorySheet(
                                 },
                                 onDelete = {
                                     scope.launch {
-                                        when (val result = actions.delete(item.name, null)) {
+                                        val from = item.name
+                                        when (val result = actions.delete(from, null)) {
                                             is CategoryDelete.NeedsTarget -> {
-                                                pendingName = item.name
+                                                pendingName = from
                                                 pendingPrompt = result
+                                            }
+                                            is CategoryDelete.Ok -> {
+                                                notice = result.message()
+                                                onRemoved(from, null)
                                             }
                                             else -> notice = result.message()
                                         }
@@ -199,7 +211,11 @@ fun CategorySheet(
                 onPick = { target ->
                     val from = pendingName
                     scope.launch {
-                        if (from != null) notice = actions.delete(from, target).message()
+                        if (from != null) {
+                            val result = actions.delete(from, target)
+                            notice = result.message()
+                            if (result is CategoryDelete.Ok) onRemoved(from, target)
+                        }
                         pendingPrompt = null
                         pendingName = null
                     }
