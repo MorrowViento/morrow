@@ -8,7 +8,7 @@
 
 M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（41 项 0 失败），APK 75 MB。
 
-仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 本地 HEAD `3e4333e`（M2a/M2b 尚未提交）· 版本 `4.0.0-alpha1 (40)`
+仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 本地与远程齐平于 `548edad`（T0 已对齐，M2a/M2b 已提交）· 版本 `4.0.0-alpha1 (40)`
 
 下一步：`M2b2` 分类管理 → `M2c` 详情页；`M2a/M2b` 的真机验收仍挂着（本机无设备/模拟器）。
 
@@ -35,7 +35,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单已完成。
 
 按执行顺序排列；`[ ]` 前的编号即依赖顺序，`→` 表示串行前置。
 
-- [ ] **T0 推送一致性核对** —— 本地 `main`（`3e4333e`）与远程 `main`（`68866a67`）SHA 不一致且本地未设 upstream；做法：`git fetch origin`，用 `git diff --stat HEAD origin/main` 确认树内容一致，一致则 `git reset --soft origin/main` 并 `git branch -u origin/main`，不一致则补差异提交；验收：`git status -sb` 显示与 `origin/main` 齐平，CI 对该提交全绿。
+- [x] **T0 推送一致性核对** —— 已完成（2026-11-11）：复核确认差异仅为 README 换行符（`git diff --ignore-all-space` 为空），根因是 `core.autocrlf=true`；新增 `.gitattributes`（`* text=auto eol=lf`）后 `git reset --mixed origin/main`（工作区零损失），拆两次提交（`c02adc9` 行尾统一 / `548edad` M2a+M2b+docs）并 `push -u origin main`。验收结果：`git status -sb` 为 `## main...origin/main`（无 ahead/behind），CI run 42983525295 全绿。
 - [x] **M2a 首页事件列表** —— 已实现：`EventViewModel`（Room Flow + 排序偏好 + 每秒时间源 combine）、`EventPresentation`（纯函数排序：置顶优先 / 距离（已过沉底且刚过优先）/ 日期 / 创建时间倒序）、`HomeScreen`（折叠标题、排序 chip、进行中与已完成分区、空态/加载/错误态）、`EventCardView`（天数徽章 + 进度环 + 今日剩余 `HH:mm:ss`）。验收：三种排序与置顶单测通过（10 项），`assembleDebug + testDebugUnitTest + lintDebug` 通过；**真机视觉待验**（见下条）。
 - [ ] **M2a/M2b 真机验收** —— 安装 `app/build/outputs/apk/debug/app-debug.apk`（本机无设备/模拟器，未经实机确认）；验收：① 卡片玻璃材质正常、倒计时逐秒跳动、今日事件显示剩余时分秒、排序 chip 循环三档且杀进程后保持、已完成折叠、空库空态；② 点 + 打开表单，滚轮年/月/日/时/分能选中并吸附居中（`itemHeight` 34dp 与实际行高需实机校准），空标题点保存有红字提示，保存后列表立即可见，杀进程重启仍在，全天事件提醒锚点为 09:00。
 - [x] **M2b 事件新建/编辑表单** —— 已实现：`EventFormState`（纯函数：校验/落库映射/日期夹取/提醒增删去重上限/快捷日期）、`WheelDateTimePicker`（年/月/日/时/分五列滚轮 + snap fling，全天隐藏时间列）、`EventEditSheet`（同页面浮层而非 ModalBottomSheet，避免 backdrop 断裂导致玻璃失效；标题/滚轮/全天/方向/每年重复/快捷日期/分类 chips/提醒 chips/备注）、`EventViewModel.save`、首页 FAB 接入。验收：9 项表单单测 + 41 项总计全绿，`assembleDebug + lintDebug` 通过；真机交互待上条验收。
