@@ -45,10 +45,27 @@ app/src/main/java/com/jiuxina/ying/
   ui/glass/    # Glasmio 封装层（唯一允许 import Glasmio 的目录）
   ui/          # Compose 页面（M2+ 逐步填充）
   data/        # Room + DataStore（M1）
+    db/        # Room 实体 / DAO / 映射
+    legacy/    # Flutter 旧数据迁移（解析 + 搬运）
+    settings/  # DataStore 设置读写
   domain/      # 事件/日历/重复规则业务逻辑（M1）
   service/     # 通知、更新、备份、字体、壁纸（M4/M6/M7）
   widget/      # 桌面小部件（M5，迁移自 Flutter 版 android/ 目录）
 ```
+
+## M1 数据层（已完成）
+
+| 项 | 内容 |
+|---|---|
+| 领域模型 | `CountdownEvent` / `EventReminder` / `CountDirection` / `RepeatType`，与 Flutter 版字段一一对应 |
+| 日历计算 | `CalendarMath`（LocalDate 差值，天然规避夏令时）、`RepeatRule`（每年重复，闰日回落 2/28） |
+| 持久化 | Room `events` 表（时间存本地时区毫秒，提醒列表存 JSON），schema 导出至 `app/schemas/` |
+| 设置 | DataStore `ying_settings`，**键名沿用 Flutter 原始键名**，迁移后无需二次映射 |
+| 旧数据迁移 | 读 `FlutterSharedPreferences`（`flutter.` 前缀）→ 事件入 Room、其余键入 DataStore；幂等（`migration.legacy_v1_done`），单条损坏不阻断 |
+| 测试 | 22 项单元测试（日历/重复/提醒归一化/旧 JSON 解析/键值拆分/实体映射） |
+
+迁移兼容点均对齐 Dart 侧 `fromJson` 兜底行为：`category` 缺省「生活」、未知枚举回落默认值、
+无 `reminders` 时读旧字段 `reminderMinutes`、`targetDate` 无时区时按本地时刻解释（带 `Z` 也能解析）。
 
 ## 包名说明
 
