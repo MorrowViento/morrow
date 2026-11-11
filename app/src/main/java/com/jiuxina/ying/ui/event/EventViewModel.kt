@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.jiuxina.ying.data.EventRepository
+import com.jiuxina.ying.data.reminder.ReminderScheduler
 import com.jiuxina.ying.data.settings.LegacySettingsKeys
 import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.undo.UndoRepository
@@ -15,6 +16,7 @@ import com.jiuxina.ying.ui.calendar.CalendarNav
 import com.jiuxina.ying.ui.calendar.CalendarPresentation
 import com.jiuxina.ying.ui.calendar.CalendarUiState
 import com.jiuxina.ying.ui.calendar.CalendarView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -45,6 +48,7 @@ class EventViewModel(
     private val events: EventRepository,
     private val settings: SettingsRepository,
     private val undo: UndoRepository,
+    private val reminders: ReminderScheduler,
 ) : ViewModel() {
 
     private val completedExpanded = MutableStateFlow(false)
@@ -159,7 +163,11 @@ class EventViewModel(
      */
     fun save(form: EventFormState) {
         val event = form.toEvent() ?: return
-        viewModelScope.launch { events.save(event) }
+        viewModelScope.launch {
+            events.save(event)
+            // sync 是幂等的「先清后设」：改提醒、改日期、取消提醒都由它一次收敛
+            withContext(Dispatchers.IO) { reminders.sync(event) }
+        }
     }
 
     // ---- M2c：详情页操作（全部进入 6 秒撤销队列）----
@@ -168,6 +176,7 @@ class EventViewModel(
         viewModelScope.launch {
             val event = events.findById(id) ?: return@launch
             events.delete(id)
+            withContext(Dispatchers.IO) { reminders.cancel(id) }
             pushUndo(UndoKind.DELETE, "已删除「${event.title}」", listOf(event))
         }
     }
@@ -175,7 +184,10 @@ class EventViewModel(
     fun toggleEventCompleted(id: String) {
         viewModelScope.launch {
             val event = events.findById(id) ?: return@launch
-            events.save(event.copy(isCompleted = !event.isCompleted))
+            val updated = event.copy(isCompleted = !event.isCompleted)
+            events.save(updated)
+            // 完成即静音：sync 对已完成事件返回空排期，会把手上的闹钟清掉
+            withContext(Dispatchers.IO) { reminders.sync(updated) }
             pushUndo(
                 kind = UndoKind.TOGGLE_COMPLETED,
                 message = if (event.isCompleted) {
@@ -205,6 +217,7 @@ class EventViewModel(
             val done = events.loadAll().filter { it.isCompleted }
             if (done.isEmpty()) return@launch
             events.deleteMany(done.map { it.id })
+            withContext(Dispatchers.IO) { done.forEach { reminders.cancel(it.id) } }
             pushUndo(UndoKind.CLEAR_COMPLETED, "已清理 ${done.size} 个已完成事件", done)
         }
     }
@@ -214,13 +227,18 @@ class EventViewModel(
             val all = events.loadAll()
             if (all.isEmpty()) return@launch
             events.clearAll()
+            withContext(Dispatchers.IO) { all.forEach { reminders.cancel(it.id) } }
             pushUndo(UndoKind.CLEAR_ALL, "已清空 ${all.size} 个事件", all)
         }
     }
 
     /** 撤销最近一次操作；窗口过期或无事可撤时静默忽略（撤销条本身已消失）。 */
     fun undoLast() {
-        viewModelScope.launch { undo.undo() }
+        viewModelScope.launch {
+            undo.undo()
+            // 回填的事件可能带提醒，整体对账一次比逐条猜测更稳（撤销是低频动作）
+            withContext(Dispatchers.IO) { reminders.syncAll(events.loadAll()) }
+        }
     }
 
     /** 详情页点「编辑」时取完整事件用于回填表单。 */
@@ -244,10 +262,11 @@ class EventViewModel(
             events: EventRepository,
             settings: SettingsRepository,
             undo: UndoRepository,
+            reminders: ReminderScheduler,
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                EventViewModel(events, settings, undo) as T
+                EventViewModel(events, settings, undo, reminders) as T
         }
     }
 }

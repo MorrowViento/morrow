@@ -6,8 +6,12 @@ import com.jiuxina.ying.data.EventRepository
 import com.jiuxina.ying.data.category.CategoryRepository
 import com.jiuxina.ying.data.db.YingDatabase
 import com.jiuxina.ying.data.legacy.LegacyDataMigrator
+import com.jiuxina.ying.data.reminder.AlarmReminderScheduler
+import com.jiuxina.ying.data.reminder.ReminderPermissions
+import com.jiuxina.ying.data.reminder.ReminderScheduler
 import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.undo.UndoRepository
+import com.jiuxina.ying.reminder.ReminderNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +37,15 @@ class YingApp : Application() {
     lateinit var undoRepository: UndoRepository
         private set
 
+    lateinit var reminderScheduler: ReminderScheduler
+        private set
+
+    lateinit var reminderNotifier: ReminderNotifier
+        private set
+
+    lateinit var reminderPermissions: ReminderPermissions
+        private set
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -43,6 +56,11 @@ class YingApp : Application() {
         categoryRepository = CategoryRepository(settingsRepository, eventRepository)
         undoRepository = UndoRepository(settingsRepository, eventRepository, appScope)
 
+        // M4：提醒链路。渠道必须在任何通知投递前建好，否则通知会被系统静默丢弃
+        reminderScheduler = AlarmReminderScheduler(this)
+        reminderNotifier = ReminderNotifier(this).also { it.ensureChannel() }
+        reminderPermissions = ReminderPermissions(this)
+
         // M1：启动即执行旧版数据迁移（幂等，失败不阻断启动）
         appScope.launch {
             val report = LegacyDataMigrator(this@YingApp, database.eventDao(), settingsRepository)
@@ -51,6 +69,12 @@ class YingApp : Application() {
 
             // M2c：恢复未过期的待撤销项（窗口 6 秒，跨进程重启仍有效）
             undoRepository.restore()
+
+            // M4：启动对账——被强制停止、清理加速或卸载重装后闹钟都可能丢失，
+            // 每次冷启动重排一遍是最省事的自愈手段（sync 幂等）
+            val events = eventRepository.loadAll()
+            reminderScheduler.syncAll(events)
+            Log.i(TAG, "已对账 ${events.size} 个事件的提醒排期")
         }
     }
 

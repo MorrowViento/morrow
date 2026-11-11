@@ -6,11 +6,11 @@
 
 ## 当前阶段
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（101 项 0 失败），APK 75 MB。
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（113 项 0 失败），APK 76 MB。
 
 仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
 
-下一步：`M4` 提醒通知（先补 `work-runtime-ktx`）；`M2a`–`M2d` 的真机验收仍挂着（本机无设备/模拟器）。
+下一步：`M5` 桌面小部件；`M2a`–`M2d` 与 `M4` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 是**唯一必须真机才能验证**的里程碑。
 
 ## 移植范围（2026-11-11 二次定稿）
 
@@ -42,7 +42,8 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 - [x] **M2b2 分类管理** —— 已实现：`EventCategory`（预置 7 类）+ `CategoryRules` 纯函数（归一化/合并孤儿/增删改校验/至少保留一项/12 字上限）+ `CategoryCodec`（DataStore `category_list_v1` 存 JSON）+ `CategoryRepository` + `CategorySheet` 浮层（列表、行内重命名、删除迁移确认）；表单 chips 改读仓库并新增「管理分类…」入口。**策略已定**：分类以名字为身份，重命名级联更新事件（历史事件显示新名）；删除被占用分类必须先选迁移目标，不做静默丢弃。验收：规则层 15 项 + 编解码 6 项单测通过；`assembleDebug + lintDebug` 通过；**浮层交互待真机**。
 - [x] **M2c 详情页与 6 秒撤销** —— 已实现：`UndoOperation` + `UndoCodec` + `UndoRepository`（5 类操作统一为事件快照，`expiresAt` 持久化，重启后按剩余时间恢复）；`EventDetailScreen` 浮层（全字段 + 完成/置顶/编辑/删除）；`UndoBar` 倒计时复用每秒时间源；「⋯」菜单提供清空已完成/清空全部（后者二次确认）。**与原文的偏差**：改为「立即落库 + 快照回填」，而非「窗口内不真正落库」——延迟删除在进程被杀后无法重建意图，而快照 + 到期时刻可以持久化，且删除与状态切换能共用同一条回滚路径。验收：72 项单测 0 失败；删除/批量清理/状态切换均入队，新操作顶替旧操作不叠加；`assembleDebug + lintDebug` 通过；**真机交互待验**。
 - [x] **M2d 日历视图** —— 已实现：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖零包体增量）+ `ui/calendar/`（月视图 42 格 / 年视图 12 月卡片 / 按月分组列表）；农历与星期副标题、节日优先显示；首页标题栏新增日历入口，日历整页覆盖且与首页共用同一个 `EventViewModel` 与 backdrop。**与原文的偏差**：农历不引库而自实现——`android.icu.util.ChineseCalendar` 无法在纯 JVM 单测里跑，第三方库为这点功能要带上整套干支表；年表仅 201 个 int，并已用 2019–2031 春节日期与 6 个闰月年份交叉校验。验收：101 项单测 0 失败（农历 13 + 日历 16）；重复事件按当年周年落位（2 月 29 日平年夹到 28 日、不早于首次目标）已单测锁定；**农历与系统日历的人工比对、三视图视觉待真机**。
-- [ ] **M4 提醒通知** —— `AlarmManager.setExactAndAllowWhileIdle` 精确闹钟（全天事件锚点 09:00）+ `BOOT_COMPLETED` 重建闹钟 + 通知动作（完成/稍后）+ 通知权限与精确闹钟权限引导 + 电池优化白名单引导页 + **提醒诊断页**（逐条列出已排闹钟与下次触发时刻）；验收：真机锁屏准时触发、通知动作可用、重启后闹钟自动重建、跨午夜与跨年重复事件触发日期正确、诊断页与实际闹钟一致。
+- [x] **M4 提醒通知** —— 已完成。`ReminderPlan` 纯函数排期（全天锚点 09:00；年度重复按当次周年；单事件 2 次落点 × 5 条提醒 = 10 个闹钟上限）+ `AlarmReminderScheduler`（槽位 requestCode + `Intent.data` 区分事件，`setExactAndAllowWhileIdle`，无精确权限时退化不精确）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟）+ `ReminderBootReceiver`（开机、覆盖安装、时间与时区变更全量对账）+ `ReminderNotifier`（高优先级渠道、日期取当次落点）+ `ReminderPermissions`（两项权限探测与跳转）+ 提醒诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动全量对账。**未真机验收。**
+  剩余验收项（只能在真机做）：锁屏与 Doze 下准时触发、通知「完成」「稍后 10 分钟」动作生效、重启后闹钟自动重建、跨年重复事件落点正确、时间/时区变更后不漂移、诊断页条目与实际闹钟一致。
 - [ ] **M5 桌面小部件** —— 迁移 `DaymarkWidgetProvider`（总览）+ `DaymarkDetailWidgetProvider`（单事件）+ `MidnightRefreshScheduler` + `Widget*Protocol`，数据通道由 method channel 改为进程内直读 Room；配置台按范围保留样式预设 + 字号 + 配色 + 元素显隐；验收：小部件显示当前事件、跨天午夜自动刷新、点击可跳转详情，旧用户已选样式可映射到预设不丢。
 - [ ] **M6 设置中心** —— `glasmio-preference` 偏好行 + 二级分类页 + 主题/排序/减少透明度/减少动效（键名已沿用 Flutter 原始键）+ 备份导入导出（兼容旧版格式）+ 关于页；**不做**字体库、头像 Emoji、单位文案、相册背景、赞助页；验收：设置项对照清单逐项勾验，各开关即时生效并持久化，备份可跨设备双向还原。
 - [ ] **M7 更新与发布** —— GitHub Releases 检查 + 镜像源测速选路 + WorkManager 断点续传下载 + `PackageInstaller` 应用内安装 + 更新弹窗与进度 UI + 真机全量回归（Android 13/14/15/16）+ 正式签名与 ABI 拆分 + `lint.abortOnError = true`；验收：真机完成「检查→下载→安装→升级」全流程，回归清单逐项通过，旧用户升级后数据与小部件无感迁移。
@@ -58,7 +59,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 | M2b2 | `ui/category/{CategorySheet,CategoryViewModel}.kt`（新建）、`data/category/{CategoryRepository,CategoryRules,CategoryCodec}.kt`（新建）、`domain/model/EventCategory.kt`（新建）、`ui/component/GlassControls.kt`（新建，两个浮层共用）、`data/db/{EventDao,CategoryUsage}.kt`、`ui/event/EventEditSheet.kt` |
 | M2c | `ui/event/{EventDetailScreen,UndoBar,EventActions,EventViewModel,HomeUiState}.kt`、`data/undo/{UndoRepository,UndoCodec}.kt`（新建）、`domain/model/UndoOperation.kt`（新建）、`ui/home/{HomeScreen,EventCardView}.kt` |
 | M2d | `ui/calendar/{CalendarUiState,CalendarActions,CalendarScreen}.kt`（新建）、`domain/time/LunarCalendar.kt`（新建）、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt`、`MainActivity.kt` |
-| M4 | `service/notification/`（新建）、`AndroidManifest.xml`（权限 + receiver） |
+| M4 | `domain/time/ReminderPlan.kt`、`data/reminder/{ReminderScheduler,AlarmReminderScheduler,ReminderPermissions}.kt`、`reminder/{ReminderNotifier,ReminderReceiver,ReminderBootReceiver}.kt`、`ui/reminder/{ReminderUiState,ReminderViewModel,ReminderSheet}.kt`、`AndroidManifest.xml`（权限 + 两个 receiver）、`res/drawable/ic_notification.xml`、`YingApp.kt`、`MainActivity.kt`、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt` |
 | M5 | `widget/`、`service/widget/`（均由旧工程迁移） |
 | M6 | `ui/settings/`、`data/settings/SettingsRepository.kt`、`service/backup/` |
 | M7 | `service/update/`、`app/build.gradle.kts`（签名 / ABI 拆分 / lint） |
@@ -76,4 +77,4 @@ T0 → M2a → M2b → M2b2 → M2c → M2d
 
 - 阻塞：`M2a` 是后续所有页面的地基；`M2b2` 依赖 `M2b` 的表单分类入口；`M4` 依赖 `M2b` 产生的提醒数据；`M7` 必须最后。
 - 可并行：`M5` 与 `M6` 互不依赖（均只依赖已完成的 M1）。
-- 顺序铁律：**先补依赖再写页面**（`androidx.navigation:navigation-compose`、`androidx.work:work-runtime-ktx`、`material-icons-extended` 目前均未引入）。
+- 顺序铁律：**先补依赖再写页面**（`androidx.navigation:navigation-compose`、`material-icons-extended` 目前均未引入）。`work-runtime-ktx` 经 M4 评估后确认**不需要**：WorkManager 同样排不出精确闹钟，重建改由「冷启动 + 开机 + 时间/时区变更」三处对账承担。

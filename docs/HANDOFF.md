@@ -17,11 +17,12 @@
 9. **文档**：`README.md`（决策表 + 包结构 + Glasmio 版本差异）、`docs/TODO.md`、`docs/CHANGELOG.md`、本文件。
 10. **M2c 详情页 + 6 秒撤销**：`UndoOperation`/`UndoCodec`/`UndoRepository`（立即落库 + 快照回填 + `expiresAt` 持久化 + 启动按剩余时间恢复）+ `EventDetailScreen` + `UndoBar` + `EventActions`；首页卡片可点开详情，标题右侧「⋯」菜单含清空已完成/清空全部（后者二次确认）。72 项单测全绿。**未真机验收。**
 11. **M2d 日历三视图**：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖：换算 / 月名日名 / 农历节日 / 除夕）+ `CalendarPresentation`（纯函数：42 格月网格、重复事件按当年周年落位、年视图 12 月汇总、按月分组）+ `CalendarScreen`（月/年/列表三视图、分段切换、`‹ ›` 翻页、回到今天）+ `CalendarNav`/`CalendarActions`；`EventViewModel` 增按天刷新的 `calendar` 状态流；首页标题栏新增日历入口（Canvas 图标），日历整页覆盖并与首页共用 backdrop，`BackHandler` 优先关日历。101 项单测全绿。**未真机验收。**
+12. **M4 提醒通知**：`ReminderPlan`（纯函数：锚点 = 全天 09:00 / 否则目标时刻；每条提醒 = 锚点 − 提前分钟；年度重复按当次周年；单事件最多 2 次落点 × 5 条 = 10 个闹钟上限，靠触发后立即重排自转）+ `AlarmReminderScheduler`（槽位模型：`requestCode` = 槽位下标、`Intent.data` 带事件 id；有精确权限走 `setExactAndAllowWhileIdle`，无则退化 `setAndAllowWhileIdle`）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟三 action 共用，`goAsync` + IO 读库）+ `ReminderBootReceiver`（开机、覆盖安装、时间/时区变更全量对账）+ `ReminderNotifier`（高优先级渠道，日期取当次落点）+ `ReminderPermissions` + `ui/reminder/` 诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动对账；通知点击经 `singleTop` + `StateFlow` 直达详情页。113 项单测全绿。**未真机验收——这是唯一必须真机才能验证的里程碑。**
 
 ## 未完成清单（按顺序，可直接执行）
 
 1. `M2a/M2b/M2b2/M2c/M2d` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类增删改与删除迁移弹层、详情页、6 秒撤销（含杀进程重启后窗口内仍可撤销）、日历三视图与农历（抽 3 个典型月份与系统日历比对）。
-2. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
+2. `M4` 真机验收（与上一条同机同轮）：锁屏/Doze 准时触发、通知「完成」与「稍后 10 分钟」动作、重启后闹钟自动重建、跨年重复事件落点、时间/时区变更后不漂移、诊断页条目与实际排期一致、无精确闹钟权限时的降级行为。
 3. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
 4. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
 5. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
@@ -47,6 +48,10 @@
 | — | 新建走 FAB → 同页表单浮层；点卡片 → 详情浮层；日历从标题栏图标进入（整页覆盖） | 所有层都在同一个 backdrop 内，独立窗口/独立 Destination 会让玻璃材质失效 |
 | — | 进度环 = `createdAt → target` 的已完成比例，重复事件不画 | 重复事件的 target 每年前移，进度无稳定语义 |
 | — | 表单做成同页面浮层，不用 `ModalBottomSheet`/`Dialog` | 玻璃材质靠 `GlassBackdropHost` 采样，独立窗口会切断 backdrop，材质直接失效 |
+| — | 提醒用 `AlarmManager` 槽位模型（`requestCode` = 槽位下标，`Intent.data` 带事件 id） | 取消无需额外持久化索引，扫 0..9 即可全清；事件之间即使槽位号相同，`filterEquals` 因 data 不同也不会互相覆盖 |
+| — | **不引入 `work-runtime-ktx`**（对原计划的修订） | WorkManager 同样排不出精确闹钟，强制停止后也不跑；重建靠「冷启动 + 开机 + 时间/时区变更」三处对账已足够 |
+| — | 无精确闹钟权限时降级为 `setAndAllowWhileIdle`，不拒绝排期 | 宁可迟到几分钟也别完全不提醒；降级状态在诊断页明说，不静默 |
+| — | 单事件最多 2 次落点 × 5 条提醒 = 10 个闹钟，触发后立即重排下一次 | 年度重复若一次排满会被闹钟数量拖垮；「触发即重排」让排期自转，且系统里始终只有少量闹钟 |
 | — | 滚轮自行实现（五列 + snap fling） | Glasmio 0.1.2 无此组件，Material3 无 iOS 式滚轮；日期日数随年月动态变化 |
 | — | 分类以**名字**为唯一标识，重命名级联 `UPDATE events SET category` | 避免为一个展示性字段升 Room schema 并回填旧数据；用户可见效果与 id 引用一致 |
 | — | 分类列表 = 存储列表 ∪ 事件里出现过的「孤儿分类」 | 旧数据里的自定义分类不能凭空消失，否则用户会觉得"分类丢了" |
@@ -67,14 +72,15 @@
 
 ```
 app/src/main/java/com/jiuxina/ying/
-  MainActivity.kt              # 入口：装配 EventViewModel + CategoryViewModel + HomeScreen（首页/日历共用同一个 EventViewModel）
-  YingApp.kt                   # 手写 DI 容器 + 启动迁移
+  MainActivity.kt              # 入口：装配 EventViewModel + CategoryViewModel + ReminderViewModel + HomeScreen；通知点击经单例 intent 直达详情
+  YingApp.kt                   # 手写 DI 容器 + 启动迁移 + 提醒渠道与冷启动排期对账
   ui/glass/GlassTheme.kt       # 唯一允许 import Glasmio 的地方（GlassTheme/GlassBackdropHost/GlassPanel/GlassCirclePanel/glassTextPrimary/glassTextSecondary）
   ui/home/                     # HomeScreen（折叠标题/排序/分区/空态）+ EventCardView（徽章与进度环）
   ui/event/                    # HomeUiState + EventPresentation（纯函数层，可单测）+ EventViewModel
   ui/calendar/                 # CalendarScreen + CalendarUiState/CalendarPresentation（纯函数）+ CalendarActions
   ui/category/                 # CategorySheet + CategoryViewModel
   ui/component/                # GlassControls（浮层共用控件）/ WheelPicker（五列滚轮）
+  ui/reminder/                 # ReminderSheet（诊断页）+ ReminderUiState + ReminderViewModel
   ui/settings/                 # 待建（M6）
   data/EventRepository.kt      # 对外只暴露领域模型 + Flow
   data/db/                     # EventEntity / EventDao / EventMapper / YingDatabase / CategoryUsage
@@ -82,9 +88,11 @@ app/src/main/java/com/jiuxina/ying/
   data/settings/               # SettingsRepository / LegacySettingsKeys
   data/category/               # CategoryRepository / CategoryRules / CategoryCodec
   data/undo/                   # UndoRepository / UndoCodec
+  data/reminder/               # ReminderScheduler（接口）/ AlarmReminderScheduler / ReminderPermissions
+  reminder/                    # ReminderNotifier / ReminderReceiver（投递 + 通知动作）/ ReminderBootReceiver
   domain/model/                # CountdownEvent / EventReminder / CountDirection / RepeatType / SortMode / EventCategory / UndoOperation
-  domain/time/                 # CalendarMath / RepeatRule / LunarCalendar（1900–2100 农历年表）
-  service/  widget/            # M4/M5/M6/M7 待建
+  domain/time/                 # CalendarMath / RepeatRule / LunarCalendar（1900–2100 农历年表）/ ReminderPlan（排期纯函数）
+  widget/                      # M5 待建
 ```
 
 **外部参考（务必按此为准）**
@@ -110,13 +118,18 @@ app/src/main/java/com/jiuxina/ying/
 1. ~~**[阻塞级] 远程与本地分叉**~~ **已解决（T0）**：根因不是内容差异，而是 Windows `core.autocrlf=true` 让本地提交把 README 存成了 CRLF。`.gitattributes` 落地后差异自动消失，本地与远程同点于 `548edad`。**后续新增文件若再出现"整文件被改"，先查行尾，不要逐行比对。**
 2. **Glasmio 的 main 分支 ≠ 0.1.2**：`GlasmioBackdropHost` 在 main 上多一个 `(sampledColor, modifier, overlayContent)` 重载，v0.1.2 没有。照 main 写会编译失败。
 3. **`lint.abortOnError = false`**：M0 阶段有意放宽，M7 前必须改回 `true`，否则发布包可能带 lint 错误。
-4. **依赖缺口**：`work-runtime-ktx` 未引入（M4 先补）；`navigation-compose` **已不需要**——首页/日历用同页整页覆盖 + `BackHandler` 实现，多一个导航图反而要额外处理 backdrop 采样源。M2a 也刻意绕开了 `material-icons-extended`，图标用 Canvas/文字自绘。
+4. **依赖缺口**：`work-runtime-ktx` **经 M4 评估确认不需要**（见决策表）；`navigation-compose` **已不需要**——首页/日历用同页整页覆盖 + `BackHandler` 实现，多一个导航图反而要额外处理 backdrop 采样源。M2a 也刻意绕开了 `material-icons-extended`，图标用 Canvas/文字自绘。
 5. **`robolectric` 已在 version catalog 声明但从未启用**：当前单测是纯 JVM（迁移测试直接测解析器，不碰 Context）。需要跑 DAO/Context 测试时再加 `testImplementation(libs.robolectric)` 与 `@RunWith`。
 6. **迁移只在首启跑一次**：靠 `migration.legacy_v1_done` 幂等；调试迁移逻辑必须清应用数据，否则看不到任何动作。
 7. ~~**撤销窗口跨进程重启的策略未定**~~ **已定（M2c）**：按 `expiresAt` 持久化恢复，重启后 6 秒窗口内仍可撤销；代价是必须「立即落库 + 快照回填」，不能延迟删除。
 8. **低端机玻璃性能未实测**：Glasmio 有 FPS Counter，M7 前需在低端机验证，并确认「关闭玻璃特效」降级开关是否要做（会影响 M6 设置项设计）。
 9. **分类默认值「生活」、未知枚举回落默认值是刻意行为**：为与 Dart 侧一致，改动会导致旧数据语义漂移，勿"优化"。
 10. **Flutter 原始源码不在本机**：只有上一级 `.ref/` 的 6 个 Dart 文件（模型 + storage service）可对照，其余页面行为需以计划文档的文件清单为线索。逐模块裁剪决策见 `docs/TODO.md` 的「移植范围」章节。
+11. **`LocalDate.ofInstant` 在 Android 上要 API 34**（lint `NewApi` 抓出，minSdk 只有 33，真机会崩）。统一写 `Instant.ofEpochMilli(x).atZone(zone).toLocalDate()`；`LocalDateTime.ofInstant` 是 API 26，可放心用。新增时间 API 前先跑 lint 看 `NewApi`。
+12. **PendingIntent 的身份 = action + data + component + requestCode，不含 extras**：同一事件的多条通知若 requestCode 相同又不设 data，会被系统合并成同一个，后写的覆盖先写的。因此 data 里必须带事件 id；重排时必须用 `FLAG_UPDATE_CURRENT`，否则新 extras 不生效、闹钟响了还是旧日期。
+13. **通知渠道重要性建完即固定**：`reminders` 渠道是 HIGH。日后要调重要性必须换新 channelId 并做迁移，改代码对已安装用户无效。
+14. **精确闹钟默认被拒**：Android 14+ 新装应用 `SCHEDULE_EXACT_ALARM` 默认拒绝，`canScheduleExactAlarms()` 为 false 时直接调 `setExact*` 会抛 `SecurityException`。已做 try/catch + 降级，并在诊断页引导开启。
+15. **`goAsync()` 只给广播约 10 秒**：接收器里读 Room 必须走 IO 协程，并在 `finally` 里 `pending.finish()`，否则系统判超时杀进程。
 11. **本机无设备也无模拟器**（`adb devices` 为空，`.toolchain/sdk` 未装 emulator）：所有视觉/交互验收只能等真机，构建链只保证编译、单测、lint 通过。
 12. ~~**M2a/M2b 尚未提交**~~ **已解决（T0）**：`548edad` 已推送，upstream 已建立。后续每个里程碑结束各自提交，避免再次堆积。
 13. **滚轮吸附未实机校准**：`WheelColumn` 依赖 `itemHeight`(34dp) 与实际行高一致才能居中吸附，`rememberSnapFlingBehavior` 在停止滚动后回写下标；真机上若出现偏移一行的现象，调 `itemHeight` 或改用 `firstVisibleItemIndex + 偏移判断`。

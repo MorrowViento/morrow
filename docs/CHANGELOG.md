@@ -2,6 +2,14 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] M4 提醒通知
+
+- 改动：新增 `ReminderPlan`（纯函数排期：锚点 = 全天 09:00 / 否则目标时刻，每条提醒 = 锚点 − 提前分钟；年度重复按当次周年推导，单事件最多两次落点 × 5 条提醒 = 10 个闹钟上限，超过上限由「触发后立即重排」自转）；`ReminderScheduler` 接口 + `AlarmReminderScheduler`（槽位模型：`requestCode` = 槽位下标、`Intent.data` 带事件 id，因此取消只需扫 0..9、事件之间也不会互相覆盖；有精确闹钟权限走 `setExactAndAllowWhileIdle`，没有则退化 `setAndAllowWhileIdle`）；`ReminderReceiver`（触发投递 / 通知「完成」/「稍后 10 分钟」三 action 共用，`goAsync` + IO 读库避免 ANR，触发后立即 `sync` 补下一次落点）；`ReminderBootReceiver`（`BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` / `TIME_SET` / `TIMEZONE_CHANGED` 全量对账）；`ReminderNotifier`（`reminders` 高优先级渠道、通知日期取**当次落点**而非首次目标、通知里自带 self-check 权限守卫）；`ReminderPermissions`（通知 / 精确闹钟状态探测与设置页跳转，ROM 裁掉设置页时回落应用详情页）；`ui/reminder/`（诊断页：权限两行状态 + 排期列表 + 发测试通知 + 手动重排期，回前台自动重读权限）；`EventViewModel` 在保存/删除/完成/批量清理/撤销后同步闹钟；`YingApp` 冷启动全量对账；通知点击经 `singleTop` + `StateFlow` 直达详情页。
+- 涉及文件：`domain/time/ReminderPlan.kt`（新建）、`data/reminder/{ReminderScheduler,AlarmReminderScheduler,ReminderPermissions}.kt`（新建）、`reminder/{ReminderNotifier,ReminderReceiver,ReminderBootReceiver}.kt`（新建）、`ui/reminder/{ReminderUiState,ReminderViewModel,ReminderSheet}.kt`（新建）、`res/drawable/ic_notification.xml`（新建）、`AndroidManifest.xml`、`YingApp.kt`、`MainActivity.kt`、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt`、`res/values/strings.xml`
+- 决策：**不引入 `work-runtime-ktx`**。原计划用它兜底重建，但 WorkManager 本身也排不出精确闹钟，且强制停止后同样不跑；实际有效的自愈点是「冷启动 + 开机 + 时间/时区变更」三处对账，全部用 `AlarmManager` 就能覆盖，省掉一个依赖与一套 Worker 生命周期。
+- 验证：`assembleDebug + testDebugUnitTest + lintDebug` 通过；113 项单测 0 失败（新增 12 项，全部是排期纯函数）；lint 与上一版完全一致无新增（过程中 lint 抓出 `LocalDate.ofInstant` 需 API 34 而 minSdk 33 的崩溃隐患，已改为 `Instant.atZone`）；debug APK 76 MB（零新依赖）
+- 状态：代码完成，**必须真机验收**——锁屏准时、通知动作、重启重建、跨年重复落点都无法用单测证明
+
 ## [2026-11-11] M2d 日历三视图与农历
 
 - 改动：新增 `LunarCalendar`（1900–2100 压缩年表，**自实现零依赖**：农历换算 / 月名日名 / 春节元宵端午七夕中元中秋重阳腊八 / 除夕按腊月实际天数判定 / 闰月不过节）；新增 `ui/calendar/` 三件套——月视图（固定 42 格 6 行、事件圆点、今日描边、选中高亮、节日优先的农历副标题）、年视图（12 个月卡片 + 事件数 + 标题样例，点卡片跳月视图）、按月分组列表；重复事件按当年周年落位（2 月 29 日平年夹到 28 日，且不早于首次目标日期）；`EventViewModel` 增日历状态流（独立的按天刷新 `dayTick`，刻意不复用每秒时间源）与 6 个动作；首页标题栏新增日历入口（Canvas 画图标，不依赖字体的日历字形），日历整页覆盖、与首页共用同一个 backdrop，返回键优先关日历。

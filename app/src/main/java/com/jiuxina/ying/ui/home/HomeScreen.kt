@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +71,9 @@ import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.GlassTheme
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
+import com.jiuxina.ying.ui.reminder.ReminderActions
+import com.jiuxina.ying.ui.reminder.ReminderSheet
+import com.jiuxina.ying.ui.reminder.ReminderUiState
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -88,9 +92,14 @@ fun HomeScreen(
     categories: List<CategoryItem>,
     categoryActions: CategoryActions,
     eventActions: EventActions,
+    reminders: ReminderUiState,
+    reminderActions: ReminderActions,
     onToggleCompleted: () -> Unit,
     onSortChange: (SortMode) -> Unit,
     onSaveEvent: (EventFormState) -> Unit,
+    /** 从提醒通知点进来时要直接打开的事件；消费后由调用方清零。 */
+    openDetailRequest: String? = null,
+    onDetailRequestConsumed: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -100,7 +109,15 @@ fun HomeScreen(
     var showMoreMenu by remember { mutableStateOf(false) }
     var confirmClearAll by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
+    var showReminders by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
+
+    // 通知点进来时数据可能还没加载完：先记下 id，等列表到位后 detailCard 自然会匹配上
+    LaunchedEffect(openDetailRequest) {
+        val id = openDetailRequest ?: return@LaunchedEffect
+        detailId = id
+        onDetailRequestConsumed()
+    }
 
     // 日历盖在首页之上，返回键应先关日历而不是退出应用
     BackHandler(enabled = showCalendar) { showCalendar = false }
@@ -219,6 +236,10 @@ fun HomeScreen(
                         MoreMenu(
                             completedCount = state.completed.size,
                             totalCount = state.totalCount,
+                            onOpenReminders = {
+                                showMoreMenu = false
+                                showReminders = true
+                            },
                             onClearCompleted = {
                                 showMoreMenu = false
                                 eventActions.clearCompleted()
@@ -239,6 +260,14 @@ fun HomeScreen(
                                 eventActions.clearAll()
                             },
                             onDismiss = { confirmClearAll = false },
+                        )
+                    }
+
+                    if (showReminders) {
+                        ReminderSheet(
+                            state = reminders,
+                            actions = reminderActions,
+                            onDismiss = { showReminders = false },
                         )
                     }
 
@@ -547,6 +576,7 @@ private fun CreateButton(modifier: Modifier, onClick: () -> Unit) {
 private fun MoreMenu(
     completedCount: Int,
     totalCount: Int,
+    onOpenReminders: () -> Unit,
     onClearCompleted: () -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit,
@@ -565,6 +595,7 @@ private fun MoreMenu(
                 .padding(horizontal = 16.dp, vertical = 24.dp),
         ) {
             Column(Modifier.padding(vertical = 6.dp)) {
+                MenuRow(label = "提醒", enabled = true, onClick = onOpenReminders)
                 MenuRow(
                     label = "清空已完成（$completedCount）",
                     enabled = completedCount > 0,
