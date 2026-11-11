@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +63,15 @@ fun WheelColumn(
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
 
+    // 关键：下方 `LaunchedEffect(state)` 只在首次组合启动一次，若直接捕获 `values` / `onSelect`，
+    // 拿到的永远是**第一帧**的列表与回调。
+    // 而回调用的是第一帧的日期/时间（新建表单即「今天 09:00」），于是：
+    // 滚了「时」→ 回调把时设成新值但分取第一帧的值；再滚「分」→ 回调又把时写回第一帧的 09，
+    // 表现就是「滚哪里都自己调回 2026.11.11 09:00」。
+    // rememberUpdatedState 让 collector 每次读到最新的一份。
+    val latestValues by rememberUpdatedState(values)
+    val latestOnSelect by rememberUpdatedState(onSelect)
+
     LaunchedEffect(selectedIndex) {
         if (!state.isScrollInProgress && state.firstVisibleItemIndex != safeIndex) {
             state.scrollToItem(safeIndex)
@@ -70,7 +81,7 @@ fun WheelColumn(
     LaunchedEffect(state) {
         snapshotFlow { state.isScrollInProgress to state.firstVisibleItemIndex }
             .collect { (scrolling, index) ->
-                if (!scrolling && index in values.indices) onSelect(index)
+                if (!scrolling && index in latestValues.indices) latestOnSelect(index)
             }
     }
 
