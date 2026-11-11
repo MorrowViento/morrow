@@ -25,6 +25,27 @@ class EventRepository(private val dao: EventDao) {
 
     suspend fun count(): Int = dao.count()
 
+    // ---- 撤销快照（M2c）----
+
+    suspend fun loadAll(): List<CountdownEvent> = dao.loadAll().map { EventMapper.toDomain(it) }
+
+    suspend fun deleteMany(ids: List<String>) {
+        if (ids.isNotEmpty()) dao.deleteByIds(ids)
+    }
+
+    /** 清空全部事件（调用方需先自行取快照，用于撤销）。 */
+    suspend fun clearAll() = dao.clear()
+
+    /**
+     * 撤销回填：整批 upsert。
+     *
+     * 对「删除类」操作等于重新插入；对「状态切换」等于覆盖回旧值——两种撤销共用同一入口。
+     * 使用 REPLACE 冲突策略，因此重复回填不会产生冲突行。
+     */
+    suspend fun restore(events: List<CountdownEvent>) {
+        if (events.isNotEmpty()) dao.upsertAll(events.map { EventMapper.toEntity(it) })
+    }
+
     // ---- 分类（M2b2）----
 
     /**

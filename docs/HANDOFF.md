@@ -15,16 +15,16 @@
 7. **T0 远程对齐**：根因是 `core.autocrlf=true` 导致 README 整文件换行符差异；加 `.gitattributes`（`eol=lf`）→ `reset --mixed origin/main` → 两次提交（`c02adc9` 行尾 / `548edad` M2a+M2b+docs）→ `push -u origin main`。本地与远程齐平于 `548edad`，CI 全绿。
 8. **M2b2 分类管理**：`EventCategory`（预置 7 类、12 字上限）+ `CategoryRules`（纯函数规则）+ `CategoryCodec`（DataStore `category_list_v1` JSON）+ `CategoryRepository`（存储列表 ∪ 旧事件孤儿分类，删除需迁移目标）+ `CategoryViewModel` + `CategorySheet` 浮层；Room 增分类统计/级联更新三条查询；`EventEditSheet` 改读仓库并加「管理分类…」；抽出 `GlassControls`。62 项单测全绿。**未真机验收。**
 9. **文档**：`README.md`（决策表 + 包结构 + Glasmio 版本差异）、`docs/TODO.md`、`docs/CHANGELOG.md`、本文件。
+10. **M2c 详情页 + 6 秒撤销**：`UndoOperation`/`UndoCodec`/`UndoRepository`（立即落库 + 快照回填 + `expiresAt` 持久化 + 启动按剩余时间恢复）+ `EventDetailScreen` + `UndoBar` + `EventActions`；首页卡片可点开详情，标题右侧「⋯」菜单含清空已完成/清空全部（后者二次确认）。72 项单测全绿。**未真机验收。**
 
 ## 未完成清单（按顺序，可直接执行）
 
-1. `M2a/M2b/M2b2` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类浮层的增删改与删除迁移弹层（本机无设备，纯视觉与交互项全压在这）。
-2. `M2c` 详情页 + 6 秒撤销（四类操作：delete / toggleCompleted / clearCompleted / clearAll）。
-3. `M2d` 日历三视图（月/年/按月分组列表）+ 农历星期副标题，与首页共享 ViewModel。
-4. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
-5. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
-6. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
-7. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
+1. `M2a/M2b/M2b2/M2c` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类增删改与删除迁移弹层、详情页、6 秒撤销（含杀进程重启后窗口内仍可撤销）。
+2. `M2d` 日历三视图（月/年/按月分组列表）+ 农历星期副标题，与首页共享 ViewModel。
+3. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
+4. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
+5. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
+6. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
 
 验收标准与涉及文件见 `docs/TODO.md`，此处不重复。
 
@@ -52,6 +52,10 @@
 | — | 分类列表 = 存储列表 ∪ 事件里出现过的「孤儿分类」 | 旧数据里的自定义分类不能凭空消失，否则用户会觉得"分类丢了" |
 | — | 删除被占用分类必须先选迁移目标，禁止静默删事件 | 数据安全优先；候选为空时提示先新建一个分类 |
 | — | 分类浮层同样做同页浮层，叠在表单之上 | 与表单同一个 backdrop 约束；独立窗口会让玻璃材质失效 |
+| — | 撤销＝**立即落库 + 快照回填**，不做延迟删除 | 延迟删除在进程被杀后无法重建意图；`expiresAt` 可持久化，快照回填还能让删除与状态切换共用一条回滚路径 |
+| — | 撤销只保留**最近一次**，新操作顶替旧的 | 旧操作效果已落库；多重撤销需要栈式回滚，复杂度远高于收益 |
+| — | `UndoBar` 最后绘制（盖在详情/表单浮层之上） | 浮层开着时 6 秒窗口照样在走，被遮住等于白给 |
+| — | 保存表单**不进**撤销队列 | 保存是用户主动确认的动作，且可用「编辑」改回；撤销只服务删除/批量清理这类难复原操作 |
 
 ## 关键文件路径与约定
 
@@ -111,3 +115,7 @@ app/src/main/java/com/jiuxina/ying/
 15. **表单打开期间改名/删除其所属分类**：表单持有的是旧名字符串，保存后事件会挂回旧名、重新变成孤儿分类（管理页显示「旧数据中的分类」）。不阻断、不丢数据，属刻意取舍；若后续觉得刺眼，需把表单的 category 改成跟随仓库解析。
 16. **孤儿分类会被任意一次分类编辑「收编」**：`add/rename/delete` 都以「存储列表 ∪ 孤儿」的合并结果为基准并整体落盘，所以旧分类会被写进 `category_list_v1`。这是预期行为——否则重名校验会失效。
 17. **分类浮层沿用 `WhileSubscribed(5s)` 状态流**：冷启动瞬间 `categories` 为空列表，此时立刻点 + 打开表单，分类 chips 只会显示当前值；数据流毫秒级就会补齐。属已知瞬态，不影响落库。
+18. **`UndoBar` 的 z-order 是硬约束**：它必须留在 `HomeScreen` 最外层最后绘制。详情页占 0.88 高、表单占 0.94 高，一旦把撤销条放回它们之前，撤销窗口会在浮层下白白流逝。调整浮层顺序时先看这条。
+19. **撤销的跨进程恢复依赖启动时序**：`YingApp.onCreate` 在迁移之后调用 `undoRepository.restore()`。若把它挪到 `MainActivity` 里，首帧会先闪一次"没有撤销条"，随后才出现；视觉上是可感知的抖动。
+20. **带偏移量的时间戳按绝对时刻换算**：`UndoCodec` 对 `Z` / `+08:00` 用 `atZoneSameInstant` 落到本地时区。这与 `LegacyEventParser`（`OffsetDateTime.toLocalDateTime()` 丢偏移）**不一致**，但后者是旧数据兼容的既有实现，改动会改变旧事件日期解释，**不要顺手统一**。
+21. **撤销不是"编辑回滚"**：`save()` 有意不入队；若日后要给编辑加撤销，需要把 `UndoKind` 扩到编辑语义，并注意"撤销编辑"与"撤销删除"同时存在时的顶替关系。

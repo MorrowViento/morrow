@@ -31,6 +31,10 @@ interface EventDao {
     @Query("DELETE FROM events WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    /** 批量删除（撤销条的场景需要一次性删掉一批已完成事件）。 */
+    @Query("DELETE FROM events WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>): Int
+
     @Query("DELETE FROM events")
     suspend fun clear()
 

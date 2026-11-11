@@ -6,11 +6,11 @@
 
 ## 当前阶段
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（62 项 0 失败），APK 75 MB。
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（72 项 0 失败），APK 75 MB。
 
 仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 本地与远程齐平于 `548edad`（T0 已对齐）· 版本 `4.0.0-alpha1 (40)`
 
-下一步：`M2c` 详情页 + 6 秒撤销；`M2a/M2b/M2b2` 的真机验收仍挂着（本机无设备/模拟器）。
+下一步：`M2d` 日历三视图；`M2a/M2b/M2b2/M2c` 的真机验收仍挂着（本机无设备/模拟器）。
 
 ## 移植范围（2026-11-11 二次定稿）
 
@@ -40,7 +40,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 - [ ] **M2a/M2b 真机验收** —— 安装 `app/build/outputs/apk/debug/app-debug.apk`（本机无设备/模拟器，未经实机确认）；验收：① 卡片玻璃材质正常、倒计时逐秒跳动、今日事件显示剩余时分秒、排序 chip 循环三档且杀进程后保持、已完成折叠、空库空态；② 点 + 打开表单，滚轮年/月/日/时/分能选中并吸附居中（`itemHeight` 34dp 与实际行高需实机校准），空标题点保存有红字提示，保存后列表立即可见，杀进程重启仍在，全天事件提醒锚点为 09:00。
 - [x] **M2b 事件新建/编辑表单** —— 已实现：`EventFormState`（纯函数：校验/落库映射/日期夹取/提醒增删去重上限/快捷日期）、`WheelDateTimePicker`（年/月/日/时/分五列滚轮 + snap fling，全天隐藏时间列）、`EventEditSheet`（同页面浮层而非 ModalBottomSheet，避免 backdrop 断裂导致玻璃失效；标题/滚轮/全天/方向/每年重复/快捷日期/分类 chips/提醒 chips/备注）、`EventViewModel.save`、首页 FAB 接入。验收：9 项表单单测 + 41 项总计全绿，`assembleDebug + lintDebug` 通过；真机交互待上条验收。
 - [x] **M2b2 分类管理** —— 已实现：`EventCategory`（预置 7 类）+ `CategoryRules` 纯函数（归一化/合并孤儿/增删改校验/至少保留一项/12 字上限）+ `CategoryCodec`（DataStore `category_list_v1` 存 JSON）+ `CategoryRepository` + `CategorySheet` 浮层（列表、行内重命名、删除迁移确认）；表单 chips 改读仓库并新增「管理分类…」入口。**策略已定**：分类以名字为身份，重命名级联更新事件（历史事件显示新名）；删除被占用分类必须先选迁移目标，不做静默丢弃。验收：规则层 15 项 + 编解码 6 项单测通过；`assembleDebug + lintDebug` 通过；**浮层交互待真机**。
-- [ ] **M2c 详情页与 6 秒撤销** —— 详情页展示全字段 + 撤销队列，覆盖旧版四类操作：`delete` / `toggleCompleted` / `clearCompleted` / `clearAll`（撤销窗口内不真正落库删除）；验收：删除后 6 秒内可还原，超时后彻底删除不可还原，批量清理已完成可整体还原，撤销条展示期间连续操作不互相覆盖。
+- [x] **M2c 详情页与 6 秒撤销** —— 已实现：`UndoOperation` + `UndoCodec` + `UndoRepository`（5 类操作统一为事件快照，`expiresAt` 持久化，重启后按剩余时间恢复）；`EventDetailScreen` 浮层（全字段 + 完成/置顶/编辑/删除）；`UndoBar` 倒计时复用每秒时间源；「⋯」菜单提供清空已完成/清空全部（后者二次确认）。**与原文的偏差**：改为「立即落库 + 快照回填」，而非「窗口内不真正落库」——延迟删除在进程被杀后无法重建意图，而快照 + 到期时刻可以持久化，且删除与状态切换能共用同一条回滚路径。验收：72 项单测 0 失败；删除/批量清理/状态切换均入队，新操作顶替旧操作不叠加；`assembleDebug + lintDebug` 通过；**真机交互待验**。
 - [ ] **M2d 日历视图** —— 月视图（日期格标记当日事件数）+ 年视图 + 按月分组列表 + 农历与星期副标题（农历需引入库或自实现，注意包体增量），与首页共享同一 ViewModel 数据源；验收：切换月份/年份数据正确，点选日期过滤出当天事件，重复事件按当年周年落位，农历日期与系统日历对照一致，抽 3 个典型月份人工比对。
 - [ ] **M4 提醒通知** —— `AlarmManager.setExactAndAllowWhileIdle` 精确闹钟（全天事件锚点 09:00）+ `BOOT_COMPLETED` 重建闹钟 + 通知动作（完成/稍后）+ 通知权限与精确闹钟权限引导 + 电池优化白名单引导页 + **提醒诊断页**（逐条列出已排闹钟与下次触发时刻）；验收：真机锁屏准时触发、通知动作可用、重启后闹钟自动重建、跨午夜与跨年重复事件触发日期正确、诊断页与实际闹钟一致。
 - [ ] **M5 桌面小部件** —— 迁移 `DaymarkWidgetProvider`（总览）+ `DaymarkDetailWidgetProvider`（单事件）+ `MidnightRefreshScheduler` + `Widget*Protocol`，数据通道由 method channel 改为进程内直读 Room；配置台按范围保留样式预设 + 字号 + 配色 + 元素显隐；验收：小部件显示当前事件、跨天午夜自动刷新、点击可跳转详情，旧用户已选样式可映射到预设不丢。
@@ -56,7 +56,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 | M2a | `ui/event/{HomeUiState,EventViewModel}.kt`、`ui/home/{HomeScreen,EventCardView}.kt`、`domain/model/SortMode.kt`、`ui/glass/GlassTheme.kt`、`MainActivity.kt` |
 | M2b | `ui/event/EventEditSheet.kt`、`ui/component/WheelDateTimePicker.kt`（新建）、`data/EventRepository.kt` |
 | M2b2 | `ui/category/{CategorySheet,CategoryViewModel}.kt`（新建）、`data/category/{CategoryRepository,CategoryRules,CategoryCodec}.kt`（新建）、`domain/model/EventCategory.kt`（新建）、`ui/component/GlassControls.kt`（新建，两个浮层共用）、`data/db/{EventDao,CategoryUsage}.kt`、`ui/event/EventEditSheet.kt` |
-| M2c | `ui/event/EventDetailScreen.kt`、`ui/event/UndoBar.kt`、`domain/model/UndoOperation.kt`（新建） |
+| M2c | `ui/event/{EventDetailScreen,UndoBar,EventActions,EventViewModel,HomeUiState}.kt`、`data/undo/{UndoRepository,UndoCodec}.kt`（新建）、`domain/model/UndoOperation.kt`（新建）、`ui/home/{HomeScreen,EventCardView}.kt` |
 | M2d | `ui/calendar/`（月/年/列表三视图）、`domain/time/LunarCalendar.kt`（新建）、`domain/time/RepeatRule.kt` |
 | M4 | `service/notification/`（新建）、`AndroidManifest.xml`（权限 + receiver） |
 | M5 | `widget/`、`service/widget/`（均由旧工程迁移） |

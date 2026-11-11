@@ -26,6 +26,7 @@ data class EventCardModel(
     val isCountingUp: Boolean,
     val isPinned: Boolean,
     val isAllDay: Boolean,
+    val isCompleted: Boolean,
     val repeatsYearly: Boolean,
     /** 创建→目标的进度，0f..1f；仅非重复事件有效（重复事件恒为 0f）。 */
     val progress: Float,
@@ -35,6 +36,12 @@ data class EventCardModel(
     val days: Int get() = abs(dayDelta)
 }
 
+/** 撤销条状态。[remainingSeconds] 由每秒时间源算出，用于展示剩余可撤销时间。 */
+data class UndoUiState(
+    val message: String,
+    val remainingSeconds: Int,
+)
+
 /** 首页状态。加载中、空态、错误态都在这一个结构里，避免页面里散落 boolean。 */
 data class HomeUiState(
     val active: List<EventCardModel> = emptyList(),
@@ -43,6 +50,7 @@ data class HomeUiState(
     val sortMode: SortMode = SortMode.DISTANCE,
     val isLoading: Boolean = true,
     val error: String? = null,
+    val undo: UndoUiState? = null,
 ) {
     val isEmpty: Boolean get() = active.isEmpty() && completed.isEmpty()
     val totalCount: Int get() = active.size + completed.size
@@ -83,6 +91,7 @@ object EventPresentation {
             isCountingUp = event.direction == CountDirection.COUNTUP || dayDelta < 0,
             isPinned = event.isPinned,
             isAllDay = event.isAllDay,
+            isCompleted = event.isCompleted,
             repeatsYearly = event.repeatsYearly,
             progress = progress,
             remainingToday = remainingToday(event, target, today, now),

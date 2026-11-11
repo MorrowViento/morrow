@@ -7,6 +7,7 @@ import com.jiuxina.ying.data.category.CategoryRepository
 import com.jiuxina.ying.data.db.YingDatabase
 import com.jiuxina.ying.data.legacy.LegacyDataMigrator
 import com.jiuxina.ying.data.settings.SettingsRepository
+import com.jiuxina.ying.data.undo.UndoRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,9 @@ class YingApp : Application() {
     lateinit var categoryRepository: CategoryRepository
         private set
 
+    lateinit var undoRepository: UndoRepository
+        private set
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -37,12 +41,16 @@ class YingApp : Application() {
         eventRepository = EventRepository(database.eventDao())
         settingsRepository = SettingsRepository(this)
         categoryRepository = CategoryRepository(settingsRepository, eventRepository)
+        undoRepository = UndoRepository(settingsRepository, eventRepository, appScope)
 
         // M1：启动即执行旧版数据迁移（幂等，失败不阻断启动）
         appScope.launch {
             val report = LegacyDataMigrator(this@YingApp, database.eventDao(), settingsRepository)
                 .migrateIfNeeded()
             Log.i(TAG, "迁移结果: $report")
+
+            // M2c：恢复未过期的待撤销项（窗口 6 秒，跨进程重启仍有效）
+            undoRepository.restore()
         }
     }
 

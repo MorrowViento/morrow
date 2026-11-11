@@ -1,6 +1,7 @@
 package com.jiuxina.ying.ui.home
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,11 +40,19 @@ import androidx.compose.foundation.background
  * 视觉靠 [GlassPanel] 提供模糊/折射，内部不画背景色，否则会盖住材质。
  */
 @Composable
-fun EventCardView(card: EventCardModel, modifier: Modifier = Modifier) {
+fun EventCardView(
+    card: EventCardModel,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
 
-    GlassPanel(modifier = modifier.fillMaxWidth()) {
+    GlassPanel(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
