@@ -23,6 +23,9 @@ import com.jiuxina.ying.ui.glass.glassTextSecondary
  *
  * 倒计时由首页每秒时间源统一驱动（[UndoUiState.remainingSeconds]），自身不持有计时器，
  * 避免撤销条消失后仍残留一个协程。
+ *
+ * 这 6 秒算的是**前台可见时间**：应用切到后台时窗口冻结，回来接着走
+ * （[com.jiuxina.ying.data.undo.UndoRepository.pauseWindow]），否则用户切出去一下就再也点不到撤销。
  */
 @Composable
 fun UndoBar(

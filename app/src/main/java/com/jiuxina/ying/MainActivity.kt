@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jiuxina.ying.ui.calendar.CalendarActions
 import com.jiuxina.ying.ui.category.CategoryActions
@@ -21,6 +22,7 @@ import com.jiuxina.ying.ui.settings.SettingsActions
 import com.jiuxina.ying.ui.settings.SettingsViewModel
 import com.jiuxina.ying.util.StartupTrace
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * 应用入口。首页、日历与提醒诊断的数据都来自 [YingApp] 装配的仓库，
@@ -177,6 +179,23 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingDetailId.value = intent.getStringExtra(EXTRA_EVENT_ID)
+    }
+
+    /**
+     * 撤销窗口只在前台走动。
+     *
+     * 删完事件切出去看别的（或按 Home），6 秒墙钟窗口照样流走，回来时撤销条已经消失——
+     * 用户根本没机会点。所以离开前台时冻结、回来时把离开的时长补回（见 UndoRepository）。
+     */
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { (application as YingApp).undoRepository.resumeWindow() }
+    }
+
+    override fun onStop() {
+        // 先冻结再交给系统：onStop 之后用户就看不到撤销条了，继续倒计时等于白烧窗口
+        (application as YingApp).undoRepository.pauseWindow()
+        super.onStop()
     }
 
     companion object {
