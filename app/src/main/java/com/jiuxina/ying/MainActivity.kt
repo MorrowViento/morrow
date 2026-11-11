@@ -193,8 +193,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        // 先冻结再交给系统：onStop 之后用户就看不到撤销条了，继续倒计时等于白烧窗口
-        (application as YingApp).undoRepository.pauseWindow()
+        // 先冻结再交给系统：onStop 之后用户就看不到撤销条了，继续倒计时等于白烧窗口。
+        // 冻结时刻要落盘（划掉最近任务＝进程终止，只留内存值等于什么都没冻）
+        lifecycleScope.launch { (application as YingApp).undoRepository.pauseWindow() }
         super.onStop()
     }
 

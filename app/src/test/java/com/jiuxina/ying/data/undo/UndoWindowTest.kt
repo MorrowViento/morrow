@@ -1,8 +1,6 @@
 package com.jiuxina.ying.data.undo
 
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.core.Preferences
 import com.jiuxina.ying.data.EventRepository
 import com.jiuxina.ying.data.db.CategoryUsage
 import com.jiuxina.ying.data.db.EventDao
@@ -34,9 +32,10 @@ import org.robolectric.annotation.Config
 /**
  * 撤销窗口的「前台计时」语义。
  *
- * 真机反馈：删完事件切到别的应用（或按 Home）超过 6 秒再回来，撤销条已经消失，用户根本没机会点。
+ * 真机反馈：删完事件切到别的应用（或按 Home），超过 6 秒回来撤销条已经消失，用户根本没机会点。
  * 这里把窗口改成前台可见时间：离开时 [UndoRepository.pauseWindow] 冻结，回来时
- * [UndoRepository.resumeWindow] 把这段时间补回到期时刻。
+ * [UndoRepository.resumeWindow] 把这段时间补回到期时刻；冻结时刻本身也落盘，
+ * 所以「划掉最近任务再重开」同样接得上。
  *
  * 时间全部走可控时钟 + 虚拟调度器：仓库内部的到期任务挂在 `backgroundScope` 上，
  * 不会被真实墙钟提前触发（否则这类测试会在慢机器上偶发失败）。
@@ -59,18 +58,20 @@ class UndoWindowTest {
         storeScope.cancel()
     }
 
-    private fun TestScope.repository(): UndoRepository {
-        // DataStore 不接受「已存在但内容为空」的文件，每次用新名字
-        val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = storeScope) {
+    /** DataStore 不接受「已存在但内容为空」的文件，每次用新名字。 */
+    private fun newSettings(): SettingsRepository = SettingsRepository(
+        PreferenceDataStoreFactory.create(scope = storeScope) {
             File(temp.root, "undo-${UUID.randomUUID()}.preferences_pb")
-        }
-        return UndoRepository(
-            settings = SettingsRepository(store),
+        },
+    )
+
+    private fun TestScope.repository(settings: SettingsRepository = newSettings()): UndoRepository =
+        UndoRepository(
+            settings = settings,
             events = EventRepository(FakeEventDao()),
             scope = backgroundScope,
             clock = { now },
         )
-    }
 
     private fun operation(expiresAt: Long) = UndoOperation(
         id = "u",
@@ -103,6 +104,42 @@ class UndoWindowTest {
         now += 120_000
         // 冻结中：没有定时任务把它清掉（清掉就是用户看到的那次「回来就没了」）
         assertNotNull(repo.pending.value)
+    }
+
+    /**
+     * 用户最常见的操作其实是「划掉最近任务」——那是进程终止，不是回到后台。
+     * 只留内存里的冻结时刻，重开时又会按墙钟判过期，所以冻结时刻必须落盘。
+     */
+    @Test
+    fun `后台被杀后重开，冻结时长补回，撤销条仍在`() = runTest {
+        val settings = newSettings()
+        val before = repository(settings)
+        before.push(operation(expiresAt = now + UndoOperation.WINDOW_MILLIS))
+        now += 2_000
+        before.pauseWindow()
+        now += 60_000 // 后台待 1 分钟，随后进程被杀：不会再有 resumeWindow
+
+        // 新进程：读同一份落盘数据，仓库实例是新的
+        val after = repository(settings)
+        after.restore()
+
+        val pending = after.pending.value
+        assertNotNull("重开后仍应看到撤销条（now=$now）", pending)
+        assertEquals(4_000L, pending!!.remainingMillis(now))
+    }
+
+    @Test
+    fun `后台超过十分钟再重开，不再恢复撤销条`() = runTest {
+        val settings = newSettings()
+        val before = repository(settings)
+        before.push(operation(expiresAt = now + UndoOperation.WINDOW_MILLIS))
+        before.pauseWindow()
+        now += UndoRepository.MAX_FROZEN_MILLIS + 1_000
+
+        val after = repository(settings)
+        after.restore()
+
+        assertNull("搁太久的撤销条弹出来只会像 bug", after.pending.value)
     }
 
     @Test
