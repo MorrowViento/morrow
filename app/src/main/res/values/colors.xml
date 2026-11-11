@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 小部件首帧 / previewLayout 的兜底文字色。真实颜色每次刷新由 WidgetRefresher 覆盖，
+         这里只是避免"数据还没到"时白字黑底或黑字深底。 -->
+    <color name="widget_text_primary">#FFFFFFFF</color>
+    <color name="widget_text_secondary">#9EFFFFFF</color>
+</resources>

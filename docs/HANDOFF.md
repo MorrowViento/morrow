@@ -18,12 +18,13 @@
 10. **M2c 详情页 + 6 秒撤销**：`UndoOperation`/`UndoCodec`/`UndoRepository`（立即落库 + 快照回填 + `expiresAt` 持久化 + 启动按剩余时间恢复）+ `EventDetailScreen` + `UndoBar` + `EventActions`；首页卡片可点开详情，标题右侧「⋯」菜单含清空已完成/清空全部（后者二次确认）。72 项单测全绿。**未真机验收。**
 11. **M2d 日历三视图**：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖：换算 / 月名日名 / 农历节日 / 除夕）+ `CalendarPresentation`（纯函数：42 格月网格、重复事件按当年周年落位、年视图 12 月汇总、按月分组）+ `CalendarScreen`（月/年/列表三视图、分段切换、`‹ ›` 翻页、回到今天）+ `CalendarNav`/`CalendarActions`；`EventViewModel` 增按天刷新的 `calendar` 状态流；首页标题栏新增日历入口（Canvas 图标），日历整页覆盖并与首页共用 backdrop，`BackHandler` 优先关日历。101 项单测全绿。**未真机验收。**
 12. **M4 提醒通知**：`ReminderPlan`（纯函数：锚点 = 全天 09:00 / 否则目标时刻；每条提醒 = 锚点 − 提前分钟；年度重复按当次周年；单事件最多 2 次落点 × 5 条 = 10 个闹钟上限，靠触发后立即重排自转）+ `AlarmReminderScheduler`（槽位模型：`requestCode` = 槽位下标、`Intent.data` 带事件 id；有精确权限走 `setExactAndAllowWhileIdle`，无则退化 `setAndAllowWhileIdle`）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟三 action 共用，`goAsync` + IO 读库）+ `ReminderBootReceiver`（开机、覆盖安装、时间/时区变更全量对账）+ `ReminderNotifier`（高优先级渠道，日期取当次落点）+ `ReminderPermissions` + `ui/reminder/` 诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动对账；通知点击经 `singleTop` + `StateFlow` 直达详情页。113 项单测全绿。**未真机验收——这是唯一必须真机才能验证的里程碑。**
+13. **M5 桌面小部件**：`WidgetSnapshotBuilder`（纯函数：未完成事件 → 小部件行，置顶优先 / 未来按临近升序 / 已过排队尾，徽章文案「今天 / N 天 / 已过 N」与首页一致）+ `WidgetStyle`/`WidgetStyleCodec`（预设 1/3/5 行 × 字号三档 × 配色四套 × 分类/日期/进度三开关，逐字段容错解码 + 旧键尽力映射）+ `WidgetConfigStore`（`widget.<id>.style` 单键 JSON，复用同一 DataStore）+ `WidgetRefresher`（唯一刷新入口：一次性查 Room → 拼 RemoteViews → setTextColor/setTextViewTextSize/setBackgroundResource 全套用）+ `YingWidgetProvider`/`YingDetailWidgetProvider` + `MidnightRefreshScheduler`/`WidgetMidnightReceiver`（本地零点刷一次再排下一次，有精确权限走 `setExactAndAllowWhileIdle` 否则降级）+ `WidgetConfigActivity`（玻璃风配置台，LazyColumn 承载，含实时预览与事件绑定）。142 项单测全绿（新增 29：快照 17 + 样式 12）。**未真机验收。**
 
 ## 未完成清单（按顺序，可直接执行）
 
 1. `M2a/M2b/M2b2/M2c/M2d` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类增删改与删除迁移弹层、详情页、6 秒撤销（含杀进程重启后窗口内仍可撤销）、日历三视图与农历（抽 3 个典型月份与系统日历比对）。
 2. `M4` 真机验收（与上一条同机同轮）：锁屏/Doze 准时触发、通知「完成」与「稍后 10 分钟」动作、重启后闹钟自动重建、跨年重复事件落点、时间/时区变更后不漂移、诊断页条目与实际排期一致、无精确闹钟权限时的降级行为。
-3. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
+3. `M5` 真机验收：两种小部件添加到桌面、改数据后立即刷新、跨零点天数翻转、点行直达详情、长按「编辑」重开配置台。
 4. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
 5. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
 
@@ -65,6 +66,10 @@
 | — | 日历用**整页覆盖**（`AnimatedVisibility` + `BackHandler`），不引 `navigation-compose` | 必须留在同一个 `GlassBackdropHost` 内，独立 Destination/窗口会切断采样源；数据本就共用一个 ViewModel，导航图收益为零 |
 | — | 日历状态按天刷新（独立 `dayTick`），不复用每秒 ticker | 42 格加三个月落点映射没必要每秒重算 |
 | — | 月视图整月只套一个 `GlassPanel`，格子状态靠文字色/浅色块 | 42 个独立玻璃面在中低端机大概率掉帧，材质表现力并不因此提升 |
+| — | 小部件数据源走**进程内只读快照**，不订阅 `EventRepository.observeAll()` | RemoteViews 拼完即弃，挂着的 Flow 只会在进程回收前白占一个协程与一个 Room 观察者 |
+| — | 小部件刷新复用 M4 的对账链路 + 午夜闹钟，`updatePeriodMillis=0` | 系统周期更新最短 30 分钟且对齐上次刷新时刻，跨天那一刻必然错；主动推送才能让「明天→今天」当场翻转 |
+| — | 小部件布局用 **5 组写死的行**，不用 `RemoteViewsService` 集合 | 为 1~5 行引入整套 Service 生命周期不划算；多出来的行刷新时 GONE |
+| — | 配色在代码里按 `uiMode` 判明暗，不用 `values-night` | RemoteViews 读不到主题属性，`values-night` 对 `setBackgroundResource` 不生效 |
 
 ## 关键文件路径与约定
 
@@ -151,3 +156,10 @@ app/src/main/java/com/jiuxina/ying/
 29. **`verticalScroll` 里不能放 `LazyColumn`**：纵向约束是 infinity，Lazy 组件在测量阶段直接抛 `IllegalStateException: ... infinity maximum height constraints`。M2b 的点 + 号必崩就是这么来的（表单是 `verticalScroll`，日期滚轮是 `LazyColumn`）。现在 `WheelColumn` 自己定高（`itemHeight * visibleRows`），新增任何可滚列表进浮层前先确认高度有界。
 30. **日历页的 FAB 不能复用首页那颗**：日历不透明后会把首页 FAB 整个盖住，所以 `CalendarScreen` 有自己的 `CreateFab`（新建日期 = 选中日，没选中就今天）。两处共用 `ui/component` 里的 `CreateFab`，别再各写一份。
 31. **切视图/改布局后先想「有没有第二层整页」**：目前只有首页与日历两层。若日后加设置中心（M6）等整页界面，同样要在根节点铺 `GlassBackdrop` 并处理返回键，否则会复现本次的重叠。
+32. **`BroadcastReceiver` 没有 `context` 属性**：`WidgetRefreshRunner.run()` 必须把 `onReceive`/`onUpdate` 的 context 显式传进来，想从 receiver 上取 `receiver.context` 会编译不过（`Unresolved reference: context`）。
+33. **小部件行数与小部件高度强绑定**：RemoteViews 不滚动，塞不下就是裁掉。预设 1/3/5 行分别对应 2/3/5 格高，`widget_overview_info.xml` 的 `minHeight=150dp/targetCellHeight=3` 是按「标准 3 行」定的；改预设行数时必须同步想一遍默认高度，否则用户一添加就少一行。
+34. **`updatePeriodMillis=0` 才是对的**：小部件的跨天刷新由 `MidnightRefreshScheduler` 主动驱动。别为了「省事」把它改回 1800000——系统周期最短 30 分钟并对齐上次刷新时刻，零点那一次必然滞后。
+35. **小部件配色不能用 `values-night`**：RemoteViews 拿不到主题属性，明暗必须在 `WidgetStyle.colors()` 里按 `Configuration.UI_MODE_NIGHT_*` 判断，再用 `setInt(root, "setBackgroundResource", …)` 换 drawable。
+36. **别给配置 Activity 加 `APPWIDGET_CONFIGURE` 的 intent-filter**：两个小部件共用两个配置页，加了 filter 会让启动器在配置时弹出二选一。入口只由 `appwidget-provider` 的 `android:configure` 指定，重配置靠 `android:widgetFeatures="reconfigurable"` + 长按菜单。
+37. **`widgetId` 会被系统回收复用**：`onDeleted` 必须删掉对应配置，否则新添加的小部件会继承上一任的样式与绑定事件。
+38. **旧版小部件样式键名无法确认**：`.ref/` 只有 6 个 Dart 模型/存储文件，没有 widget 代码。`WidgetStyleCodec.fromLegacy` 是「尽力映射 + 回落默认」，键名候选集中在 `WidgetStyle.LEGACY_KEY_CANDIDATES`；将来拿到真实旧键名只改那张表，不要动样式模型。旧配置按 widgetId 对不上，因此只当默认值用，不写回新键。

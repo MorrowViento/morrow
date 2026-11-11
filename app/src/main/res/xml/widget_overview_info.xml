@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  updatePeriodMillis = 0：系统最短 30 分钟一次，跨天刷新必然不准，因此完全关闭系统的周期更新，
+  改由「数据变更 → 立即刷 + 午夜闹钟 → 主动刷」两条链路驱动（见 MidnightRefreshScheduler）。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="com.jiuxina.ying.widget.WidgetConfigActivity"
+    android:description="@string/widget_overview_desc"
+    android:initialLayout="@layout/widget_overview"
+    android:minWidth="250dp"
+    android:minHeight="150dp"
+    android:previewLayout="@layout/widget_overview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:updatePeriodMillis="0"
+    android:widgetFeatures="reconfigurable"
+    android:widgetCategory="home_screen" />

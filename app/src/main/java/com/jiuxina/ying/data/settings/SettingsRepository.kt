@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.yingSettings: DataStore<Preferences> by preferencesDataStore(name = "ying_settings")
@@ -45,6 +46,20 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     // ---- 原始读写（供尚未建模的旧设置项透传）----
 
     fun rawString(key: String): Flow<String?> = store.data.map { it[stringPreferencesKey(key)] }
+
+    /**
+     * 一次性读取字符串。
+     *
+     * 面向小部件 / 广播接收器这类**短生命周期**调用方：它们没有可依附的
+     * `repeatOnLifecycle`，订阅 Flow 只会留下一个不会被收集的协程。
+     */
+    suspend fun stringOnce(key: String): String? = store.data.first()[stringPreferencesKey(key)]
+
+    /** 一次性读出所有以 [prefix] 开头的字符串键（用于按 widgetId 批量取配置）。 */
+    suspend fun stringsOnce(prefix: String): Map<String, String> =
+        store.data.first().asMap().entries.mapNotNull { (key, value) ->
+            (value as? String)?.let { key.name to it }
+        }.filter { it.first.startsWith(prefix) }.toMap()
 
     suspend fun putString(key: String, value: String) {
         store.edit { it[stringPreferencesKey(key)] = value }

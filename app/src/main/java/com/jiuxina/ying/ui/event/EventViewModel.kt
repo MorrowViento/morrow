@@ -8,6 +8,7 @@ import com.jiuxina.ying.data.reminder.ReminderScheduler
 import com.jiuxina.ying.data.settings.LegacySettingsKeys
 import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.undo.UndoRepository
+import com.jiuxina.ying.data.widget.WidgetRefreshTrigger
 import com.jiuxina.ying.domain.model.CountdownEvent
 import com.jiuxina.ying.domain.model.SortMode
 import com.jiuxina.ying.domain.model.UndoKind
@@ -17,6 +18,7 @@ import com.jiuxina.ying.ui.calendar.CalendarPresentation
 import com.jiuxina.ying.ui.calendar.CalendarUiState
 import com.jiuxina.ying.ui.calendar.CalendarView
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +27,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -44,14 +48,32 @@ import java.util.UUID
  * 「秒级刷新」用时间源驱动重算，而不是让每个卡片各自起协程：卡顿面更小，
  * 且跨午夜时天数会自动翻转（时间源本身就变了）；撤销条倒计时同时复用这个源。
  */
+@OptIn(FlowPreview::class)
 class EventViewModel(
     private val events: EventRepository,
     private val settings: SettingsRepository,
     private val undo: UndoRepository,
     private val reminders: ReminderScheduler,
+    private val widgetRefresh: WidgetRefreshTrigger = WidgetRefreshTrigger.NONE,
 ) : ViewModel() {
 
     private val completedExpanded = MutableStateFlow(false)
+
+    /**
+     * 数据一变就刷小部件。
+     *
+     * 挂在 `observeAll()` 上而不是逐个 save/delete/undo 里调用：撤销、批量清理、表单保存
+     * 最终都会落到这张表，一处订阅就不会漏掉后来新增的写路径。`drop(1)` 跳过首次快照
+     * （那时小部件刚由 onUpdate 刷过），`debounce` 把「删除 + 撤销」这种连击合并成一次。
+     */
+    init {
+        viewModelScope.launch {
+            events.observeAll()
+                .drop(1)
+                .debounce(300)
+                .collect { widgetRefresh.refreshAll() }
+        }
+    }
 
     /** 每秒一发的时间源；只在有订阅者时跑（见 stateIn 的 WhileSubscribed）。 */
     private val ticker: Flow<LocalDateTime> = flow {
@@ -263,10 +285,11 @@ class EventViewModel(
             settings: SettingsRepository,
             undo: UndoRepository,
             reminders: ReminderScheduler,
+            widgetRefresh: WidgetRefreshTrigger,
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                EventViewModel(events, settings, undo, reminders) as T
+                EventViewModel(events, settings, undo, reminders, widgetRefresh) as T
         }
     }
 }

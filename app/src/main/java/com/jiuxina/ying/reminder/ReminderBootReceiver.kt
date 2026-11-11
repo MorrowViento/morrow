@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.jiuxina.ying.YingApp
+import com.jiuxina.ying.widget.MidnightRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,13 @@ class ReminderBootReceiver : BroadcastReceiver() {
                 val events = app.eventRepository.loadAll()
                 app.reminderScheduler.syncAll(events)
                 Log.i(TAG, "已重建 ${events.size} 个事件的提醒排期（${intent.action}）")
+
+                // M5：同一个自愈窗口顺手把小部件与跨天闹钟也对一遍——
+                // 重启/改时间后小部件上的天数与"明天零点"都可能已经过期
+                if (MidnightRefreshScheduler.hasAnyWidget(context)) {
+                    app.widgetRefresher.refreshAll()
+                    MidnightRefreshScheduler.schedule(context)
+                }
             } catch (t: Throwable) {
                 Log.w(TAG, "重建提醒排期失败", t)
             } finally {

@@ -6,13 +6,13 @@
 
 ## 当前阶段
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（113 项 0 失败），APK 76 MB。
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件已完成。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过（142 项 0 失败），APK 76 MB。
 
 真机首轮反馈的两个运行时问题已修：日历整页覆盖缺底色导致与首页重叠、日期滚轮所在的 `verticalScroll` 表单里 `LazyColumn` 无界高导致点 + 号闪退（详见 `docs/CHANGELOG.md` 同名条目）。
 
 仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
 
-下一步：`M5` 桌面小部件；`M2a`–`M2d` 与 `M4` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 是**唯一必须真机才能验证**的里程碑。
+下一步：`M6` 设置中心；`M2a`–`M5` 的真机验收仍挂着（本机无设备/模拟器），其中 M4 与小部件的「跨零点刷新」必须真机才能验证。
 
 ## 移植范围（2026-11-11 二次定稿）
 
@@ -46,7 +46,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 - [x] **M2d 日历视图** —— 已实现：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖零包体增量）+ `ui/calendar/`（月视图 42 格 / 年视图 12 月卡片 / 按月分组列表）；农历与星期副标题、节日优先显示；首页标题栏新增日历入口，日历整页覆盖且与首页共用同一个 `EventViewModel` 与 backdrop。**与原文的偏差**：农历不引库而自实现——`android.icu.util.ChineseCalendar` 无法在纯 JVM 单测里跑，第三方库为这点功能要带上整套干支表；年表仅 201 个 int，并已用 2019–2031 春节日期与 6 个闰月年份交叉校验。验收：101 项单测 0 失败（农历 13 + 日历 16）；重复事件按当年周年落位（2 月 29 日平年夹到 28 日、不早于首次目标）已单测锁定；**农历与系统日历的人工比对、三视图视觉待真机**。
 - [x] **M4 提醒通知** —— 已完成。`ReminderPlan` 纯函数排期（全天锚点 09:00；年度重复按当次周年；单事件 2 次落点 × 5 条提醒 = 10 个闹钟上限）+ `AlarmReminderScheduler`（槽位 requestCode + `Intent.data` 区分事件，`setExactAndAllowWhileIdle`，无精确权限时退化不精确）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟）+ `ReminderBootReceiver`（开机、覆盖安装、时间与时区变更全量对账）+ `ReminderNotifier`（高优先级渠道、日期取当次落点）+ `ReminderPermissions`（两项权限探测与跳转）+ 提醒诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动全量对账。**未真机验收。**
   剩余验收项（只能在真机做）：锁屏与 Doze 下准时触发、通知「完成」「稍后 10 分钟」动作生效、重启后闹钟自动重建、跨年重复事件落点正确、时间/时区变更后不漂移、诊断页条目与实际闹钟一致。
-- [ ] **M5 桌面小部件** —— 迁移 `DaymarkWidgetProvider`（总览）+ `DaymarkDetailWidgetProvider`（单事件）+ `MidnightRefreshScheduler` + `Widget*Protocol`，数据通道由 method channel 改为进程内直读 Room；配置台按范围保留样式预设 + 字号 + 配色 + 元素显隐；验收：小部件显示当前事件、跨天午夜自动刷新、点击可跳转详情，旧用户已选样式可映射到预设不丢。
+- [x] **M5 桌面小部件** —— 已完成（未迁移旧 Kotlin 实现，按裁剪范围重写）：总览 + 单事件两个 provider、`MidnightRefreshScheduler` 跨天刷新、进程内只读快照替代 method channel；配置台保留样式预设 + 字号 + 配色 + 元素显隐 + 单事件绑定。验收项（显示/跨天刷新/点击跳转/旧样式映射）待真机确认。
 - [ ] **M6 设置中心** —— `glasmio-preference` 偏好行 + 二级分类页 + 主题/排序/减少透明度/减少动效（键名已沿用 Flutter 原始键）+ 备份导入导出（兼容旧版格式）+ 关于页；**不做**字体库、头像 Emoji、单位文案、相册背景、赞助页；验收：设置项对照清单逐项勾验，各开关即时生效并持久化，备份可跨设备双向还原。
 - [ ] **M7 更新与发布** —— GitHub Releases 检查 + 镜像源测速选路 + WorkManager 断点续传下载 + `PackageInstaller` 应用内安装 + 更新弹窗与进度 UI + 真机全量回归（Android 13/14/15/16）+ 正式签名与 ABI 拆分 + `lint.abortOnError = true`；验收：真机完成「检查→下载→安装→升级」全流程，回归清单逐项通过，旧用户升级后数据与小部件无感迁移。
 - [ ] **M0 遗留（可选）** —— 计划里承诺的 ktlint/detekt 尚未接入；做法：加 `spotless` 或 `ktlint` Gradle 插件并接入 CI；验收：CI 增一步静态检查且不阻断当前代码。建议在 M2 结束、代码量上来之前做。

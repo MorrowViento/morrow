@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 小部件深色底：与 App 深色主题的渐变同色系，但压得更暗，避免小部件上白字发灰。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="22dp" />
+    <gradient
+        android:angle="315"
+        android:endColor="#2B1030"
+        android:startColor="#1B1533" />
+</shape>

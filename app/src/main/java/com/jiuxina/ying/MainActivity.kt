@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                     app.settingsRepository,
                     app.undoRepository,
                     app.reminderScheduler,
+                    app.widgetRefresher,
                 ),
             )
             val categoryViewModel: CategoryViewModel = viewModel(

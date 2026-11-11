@@ -9,4 +9,18 @@
     <string name="reminder_action_snooze">稍后 10 分钟</string>
     <string name="reminder_test_title">测试提醒</string>
     <string name="reminder_test_body">通知链路正常，到点会以这条形式提醒你</string>
+
+    <!-- M5 小部件 -->
+    <string name="widget_overview_label">萤 · 总览</string>
+    <string name="widget_overview_desc">最近要到的几个倒数日，一行一个</string>
+    <string name="widget_detail_label">萤 · 单事件</string>
+    <string name="widget_detail_desc">盯住一个重要日子的大天数</string>
+    <string name="widget_header_title">萤</string>
+    <string name="widget_loading">载入中…</string>
+    <string name="widget_empty">还没有倒数日</string>
+    <string name="widget_detail_unbound">未选择事件</string>
+    <string name="widget_detail_missing">事件已删除</string>
+    <string name="widget_config_title">小部件设置</string>
+    <string name="widget_config_done">完成</string>
+    <string name="widget_config_cancel">取消</string>
 </resources>

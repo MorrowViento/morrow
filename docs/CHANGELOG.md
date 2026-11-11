@@ -2,6 +2,14 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-11] M5 桌面小部件
+
+- 改动：新增 `data/widget/WidgetSnapshot`（纯函数：未完成事件 → 小部件行，置顶优先 → 未来按临近升序 → 已过排队尾，徽章「今天 / N 天 / 已过 N」与首页同规则，进度百分比只在非重复事件上算）+ `WidgetRefreshTrigger`（接口，给 ViewModel 用，避免 ui 层依赖 widget 包）；新增 `widget/` 包——`WidgetStyle`（预设 1/3/5 行 × 字号三档 × 配色四套（跟随系统/深色/浅色/品牌色）× 分类/日期/进度三开关，`colors()` 按 `uiMode` 在 ARGB 层判明暗）+ `WidgetStyleCodec`（逐字段容错解码 + 旧键尽力映射）+ `WidgetConfigStore`（`widget.<id>.style` 单键 JSON，复用 `ying_settings` 同一个 DataStore）+ `WidgetRefresher`（**唯一刷新入口**：一次性查 Room → 拼 RemoteViews → 统一套背景/文字色/字号/显隐/进度 tint，两个小部件共用）+ `YingWidgetProvider` / `YingDetailWidgetProvider`（onUpdate / onAppWidgetOptionsChanged / onDeleted 清配置 / onEnabled 排闹钟）+ `MidnightRefreshScheduler` + `WidgetMidnightReceiver`（本地零点刷一次并排下一次；有精确权限走 `setExactAndAllowWhileIdle`，否则 `setAndAllowWhileIdle`）+ `WidgetRefreshRunner`（`goAsync` + IO 协程，超时必 `finish`）+ `WidgetConfigActivity` / `DetailWidgetConfigActivity`（玻璃风配置台：实时预览 + 预设/字号/配色/显隐 + 单事件绑定，整页 LazyColumn 承载）；资源新增 `widget_overview.xml`（5 组写死行）、`widget_detail.xml`、两个 appwidget-provider、三套圆角渐变底、`WidgetText` 文字样式。
+- 涉及文件：`data/widget/{WidgetSnapshot,WidgetRefreshTrigger}.kt`（新建）、`widget/{WidgetStyle,WidgetConfigStore,WidgetRefresher,WidgetRefreshRunner,YingWidgetProvider,MidnightRefreshScheduler,WidgetMidnightReceiver,WidgetConfigActivity}.kt`（新建）、`res/layout/widget_{overview,detail}.xml`（新建）、`res/xml/widget_{overview,detail}_info.xml`（新建）、`res/drawable/widget_bg_{dark,light,accent}.xml`（新建）、`res/values/{colors,widget_styles}.xml`（新建）、`res/values/strings.xml`、`AndroidManifest.xml`、`YingApp.kt`、`MainActivity.kt`、`ui/event/EventViewModel.kt`、`reminder/ReminderBootReceiver.kt`、`data/settings/SettingsRepository.kt`
+- 决策：按用户确认走**只读快照 + 复用 M4 对账链路**。① 数据源直读 Room 一次性查询，不订阅 `observeAll()`——RemoteViews 刷完即弃，挂 Flow 只会在进程回收前白占协程与观察者；② 刷新由「系统 onUpdate + 数据变更（ViewModel 在 `observeAll` 上 `drop(1)+debounce(300)` 统一触发，比逐个写路径加更不易漏）+ 午夜闹钟 + 开机/改时间对账」四路驱动，`updatePeriodMillis` 置 0（系统周期最短 30 分钟且对齐上次刷新，跨天必然错）；③ 布局用 5 组写死的行，不为 1~5 行引入 `RemoteViewsService` 集合；④ 配色在代码里按 `uiMode` 判明暗，`values-night` 对 `setBackgroundResource` 不生效。
+- 验证：`assembleDebug + testDebugUnitTest + lintDebug` 通过；**142 项单测 0 失败**（新增 29：快照排序/徽章/元信息/进度 17 + 样式预设/配色/编解码/旧键映射 12）；lint 11 项与基线完全一致（过程中新引入的 `DisableBaselineAlignment`/`SmallSp`/`UseKtx`/`UnusedResources` 共 21 项已全部消除）；debug APK 76 MB（零新依赖）
+- 状态：代码完成，**待真机验收**——小部件添加/尺寸裁切、跨零点天数翻转、点行直达详情、长按重配置、四种配色在深浅桌面上的观感都必须上机看
+
 ## [2026-11-11] 修复：日历与主界面重叠 + 点 + 号闪退
 
 - 改动：`GlassBackdrop`（新增，渐变底色只保留这一份）——首页放进 `sampledContent`，日历页在根 `Box` 里重铺一层不透明同款渐变；`CalendarScreen` 根节点由裸 `Column` 改为 `Box`，并新增 `onCreate(LocalDate)` 回调与自己的 `CreateFab`（整页不透明后会盖住首页那颗按钮）；`CreateFab` 从 `HomeScreen` 的私有 `CreateButton` 提到 `ui/component/GlassControls.kt` 供两处共用，日历页用它按「选中日 → 今天」的顺序开表单；`WheelColumn` 的 `LazyColumn` 改为 `modifier.height(itemHeight * visibleRows)` 固定高度。

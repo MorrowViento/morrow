@@ -12,6 +12,8 @@ import com.jiuxina.ying.data.reminder.ReminderScheduler
 import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.undo.UndoRepository
 import com.jiuxina.ying.reminder.ReminderNotifier
+import com.jiuxina.ying.widget.MidnightRefreshScheduler
+import com.jiuxina.ying.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +48,10 @@ class YingApp : Application() {
     lateinit var reminderPermissions: ReminderPermissions
         private set
 
+    /** M5：小部件刷新入口。Provider / ViewModel / 午夜闹钟共用这一个实例。 */
+    lateinit var widgetRefresher: WidgetRefresher
+        private set
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -61,6 +67,9 @@ class YingApp : Application() {
         reminderNotifier = ReminderNotifier(this).also { it.ensureChannel() }
         reminderPermissions = ReminderPermissions(this)
 
+        // M5：小部件刷新器（数据源直读 Room，不订阅 Flow——RemoteViews 刷完即弃）
+        widgetRefresher = WidgetRefresher(this, settingsRepository, eventRepository)
+
         // M1：启动即执行旧版数据迁移（幂等，失败不阻断启动）
         appScope.launch {
             val report = LegacyDataMigrator(this@YingApp, database.eventDao(), settingsRepository)
@@ -75,6 +84,13 @@ class YingApp : Application() {
             val events = eventRepository.loadAll()
             reminderScheduler.syncAll(events)
             Log.i(TAG, "已对账 ${events.size} 个事件的提醒排期")
+
+            // M5：冷启动可能是「重启后桌面小部件还在但状态过期」，顺便刷一次；
+            // 跨天闹钟也在这里排上（幂等，没有小部件时排了也不会醒——接收器会自己取消）
+            widgetRefresher.refreshAll()
+            if (MidnightRefreshScheduler.hasAnyWidget(this@YingApp)) {
+                MidnightRefreshScheduler.schedule(this@YingApp)
+            }
         }
     }
 

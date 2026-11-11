@@ -43,6 +43,56 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- ============ M5 桌面小部件 ============ -->
+
+        <!-- 总览小部件。exported=true 是硬要求：APPWIDGET_UPDATE 由系统进程投递 -->
+        <receiver
+            android:name=".widget.YingWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_overview_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_overview_info" />
+        </receiver>
+
+        <!-- 单事件小部件 -->
+        <receiver
+            android:name=".widget.YingDetailWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_detail_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_detail_info" />
+        </receiver>
+
+        <!--
+          配置台：由 appwidget-provider 的 android:configure 显式指向，
+          因此**不要**加 APPWIDGET_CONFIGURE 的 intent-filter，
+          否则两个配置页会同时响应，启动器可能弹出二选一。
+        -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.Ying" />
+
+        <activity
+            android:name=".widget.DetailWidgetConfigActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.Ying" />
+
+        <!-- 跨天刷新闹钟。exported=false：只接受本应用 PendingIntent 的投递 -->
+        <receiver
+            android:name=".widget.WidgetMidnightReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>
