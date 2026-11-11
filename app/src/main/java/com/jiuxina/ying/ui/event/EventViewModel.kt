@@ -11,6 +11,10 @@ import com.jiuxina.ying.domain.model.CountdownEvent
 import com.jiuxina.ying.domain.model.SortMode
 import com.jiuxina.ying.domain.model.UndoKind
 import com.jiuxina.ying.domain.model.UndoOperation
+import com.jiuxina.ying.ui.calendar.CalendarNav
+import com.jiuxina.ying.ui.calendar.CalendarPresentation
+import com.jiuxina.ying.ui.calendar.CalendarUiState
+import com.jiuxina.ying.ui.calendar.CalendarView
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -19,11 +23,15 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 import java.util.UUID
 
 /**
@@ -76,6 +84,65 @@ class EventViewModel(
 
     fun toggleCompletedSection() {
         completedExpanded.value = !completedExpanded.value
+    }
+
+    // ---- M2d：日历三视图（与首页共用同一份 Room 数据流）----
+
+    private val calendarNav = MutableStateFlow(CalendarNav.initial(LocalDate.now()))
+
+    /**
+     * 日历只需按天刷新：跨午夜后 today 变化，格子标记、重复事件落点与天数差一并重算。
+     * 刻意不复用每秒时间源——月视图 42 格每秒重组一次毫无收益。
+     */
+    private val dayTick: Flow<LocalDate> = flow {
+        while (currentCoroutineContext().isActive) {
+            emit(LocalDate.now())
+            delay(30_000L)
+        }
+    }.distinctUntilChanged()
+
+    val calendar: StateFlow<CalendarUiState> = combine(
+        events.observeAll(),
+        calendarNav,
+        dayTick,
+    ) { list, nav, today ->
+        CalendarPresentation.build(list, nav, today)
+    }
+        .catch { emit(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败")) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState(isLoading = true))
+
+    fun setCalendarView(view: CalendarView) {
+        calendarNav.update { it.copy(view = view) }
+    }
+
+    /** 月视图翻月。选区一并清空，否则会停在一个看不见的日期上。 */
+    fun shiftCalendarMonth(delta: Long) {
+        calendarNav.update {
+            it.copy(month = CalendarNav.clamp(it.month.plusMonths(delta)), selected = null)
+        }
+    }
+
+    /** 年视图/列表视图翻年。 */
+    fun shiftCalendarYear(delta: Long) {
+        calendarNav.update {
+            it.copy(month = CalendarNav.clamp(it.month.plusYears(delta)), selected = null)
+        }
+    }
+
+    /** 再点一次同一天视为取消选中。 */
+    fun selectCalendarDay(date: LocalDate) {
+        calendarNav.update { it.copy(selected = if (it.selected == date) null else date) }
+    }
+
+    fun openCalendarMonth(month: YearMonth) {
+        calendarNav.update {
+            it.copy(view = CalendarView.MONTH, month = CalendarNav.clamp(month), selected = null)
+        }
+    }
+
+    fun calendarGoToToday() {
+        val today = LocalDate.now()
+        calendarNav.update { it.copy(month = CalendarNav.clamp(YearMonth.from(today)), selected = today) }
     }
 
     fun setSortMode(mode: SortMode) {

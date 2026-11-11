@@ -2,6 +2,9 @@ package com.jiuxina.ying.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,16 +40,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jiuxina.ying.data.category.CategoryItem
 import com.jiuxina.ying.domain.model.SortMode
+import com.jiuxina.ying.ui.calendar.CalendarActions
+import com.jiuxina.ying.ui.calendar.CalendarScreen
+import com.jiuxina.ying.ui.calendar.CalendarUiState
 import com.jiuxina.ying.ui.category.CategoryActions
 import com.jiuxina.ying.ui.category.CategorySheet
 import com.jiuxina.ying.ui.event.EventActions
@@ -74,6 +83,8 @@ import java.time.LocalDate
 @Composable
 fun HomeScreen(
     state: HomeUiState,
+    calendar: CalendarUiState,
+    calendarActions: CalendarActions,
     categories: List<CategoryItem>,
     categoryActions: CategoryActions,
     eventActions: EventActions,
@@ -88,7 +99,11 @@ fun HomeScreen(
     var showCategories by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var confirmClearAll by remember { mutableStateOf(false) }
+    var showCalendar by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
+
+    // 日历盖在首页之上，返回键应先关日历而不是退出应用
+    BackHandler(enabled = showCalendar) { showCalendar = false }
 
     // 详情页依赖最新卡片（每秒刷新会换新对象）；事件被删后自动失配 → 浮层自行关闭
     val detailCard = detailId?.let { id ->
@@ -110,6 +125,7 @@ fun HomeScreen(
                             state = state,
                             listState = listState,
                             onSortChange = onSortChange,
+                            onCalendar = { showCalendar = true },
                             onMore = { showMoreMenu = true },
                         )
                         Box(
@@ -142,6 +158,22 @@ fun HomeScreen(
                             .padding(end = 20.dp, bottom = 26.dp),
                         onClick = { editingForm = EventFormState(date = LocalDate.now()) },
                     )
+
+                    // 日历是整页替换（不是浮层）：盖住列表与 FAB，但与列表共用同一个 backdrop，
+                    // 换成独立窗口会切断采样源让玻璃材质失效。
+                    AnimatedVisibility(
+                        visible = showCalendar,
+                        modifier = Modifier.fillMaxSize(),
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        CalendarScreen(
+                            state = calendar,
+                            actions = calendarActions,
+                            onOpenEvent = { detailId = it },
+                            onDismiss = { showCalendar = false },
+                        )
+                    }
 
                     detailCard?.let { card ->
                         EventDetailScreen(
@@ -232,6 +264,7 @@ private fun HomeHeader(
     state: HomeUiState,
     listState: LazyListState,
     onSortChange: (SortMode) -> Unit,
+    onCalendar: () -> Unit,
     onMore: () -> Unit,
 ) {
     val collapsed by remember {
@@ -263,7 +296,58 @@ private fun HomeHeader(
         }
         SortChip(state.sortMode, onSortChange)
         Spacer(Modifier.size(6.dp))
+        CalendarButton(onCalendar)
+        Spacer(Modifier.size(6.dp))
         MoreButton(onMore)
+    }
+}
+
+/** 日历入口。图标用 Canvas 画，避免依赖字体里是否有日历字形。 */
+@Composable
+private fun CalendarButton(onClick: () -> Unit) {
+    val primary = glassTextPrimary()
+    GlassCirclePanel(modifier = Modifier.size(32.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.size(13.dp)) {
+                val stroke = 1.2.dp.toPx()
+                val corner = 2.dp.toPx()
+                val top = size.height * 0.16f
+                drawRoundRect(
+                    color = primary,
+                    topLeft = Offset(0f, top),
+                    size = Size(size.width, size.height - top),
+                    cornerRadius = CornerRadius(corner, corner),
+                    style = Stroke(width = stroke),
+                )
+                drawLine(
+                    color = primary,
+                    start = Offset(0f, size.height * 0.4f),
+                    end = Offset(size.width, size.height * 0.4f),
+                    strokeWidth = stroke,
+                )
+                // 顶部两个挂环
+                drawLine(
+                    color = primary,
+                    start = Offset(size.width * 0.3f, 0f),
+                    end = Offset(size.width * 0.3f, size.height * 0.26f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = primary,
+                    start = Offset(size.width * 0.7f, 0f),
+                    end = Offset(size.width * 0.7f, size.height * 0.26f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
     }
 }
 

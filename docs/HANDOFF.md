@@ -16,15 +16,15 @@
 8. **M2b2 分类管理**：`EventCategory`（预置 7 类、12 字上限）+ `CategoryRules`（纯函数规则）+ `CategoryCodec`（DataStore `category_list_v1` JSON）+ `CategoryRepository`（存储列表 ∪ 旧事件孤儿分类，删除需迁移目标）+ `CategoryViewModel` + `CategorySheet` 浮层；Room 增分类统计/级联更新三条查询；`EventEditSheet` 改读仓库并加「管理分类…」；抽出 `GlassControls`。62 项单测全绿。**未真机验收。**
 9. **文档**：`README.md`（决策表 + 包结构 + Glasmio 版本差异）、`docs/TODO.md`、`docs/CHANGELOG.md`、本文件。
 10. **M2c 详情页 + 6 秒撤销**：`UndoOperation`/`UndoCodec`/`UndoRepository`（立即落库 + 快照回填 + `expiresAt` 持久化 + 启动按剩余时间恢复）+ `EventDetailScreen` + `UndoBar` + `EventActions`；首页卡片可点开详情，标题右侧「⋯」菜单含清空已完成/清空全部（后者二次确认）。72 项单测全绿。**未真机验收。**
+11. **M2d 日历三视图**：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖：换算 / 月名日名 / 农历节日 / 除夕）+ `CalendarPresentation`（纯函数：42 格月网格、重复事件按当年周年落位、年视图 12 月汇总、按月分组）+ `CalendarScreen`（月/年/列表三视图、分段切换、`‹ ›` 翻页、回到今天）+ `CalendarNav`/`CalendarActions`；`EventViewModel` 增按天刷新的 `calendar` 状态流；首页标题栏新增日历入口（Canvas 图标），日历整页覆盖并与首页共用 backdrop，`BackHandler` 优先关日历。101 项单测全绿。**未真机验收。**
 
 ## 未完成清单（按顺序，可直接执行）
 
-1. `M2a/M2b/M2b2/M2c` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类增删改与删除迁移弹层、详情页、6 秒撤销（含杀进程重启后窗口内仍可撤销）。
-2. `M2d` 日历三视图（月/年/按月分组列表）+ 农历星期副标题，与首页共享 ViewModel。
-3. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
-4. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
-5. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
-6. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
+1. `M2a/M2b/M2b2/M2c/M2d` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类增删改与删除迁移弹层、详情页、6 秒撤销（含杀进程重启后窗口内仍可撤销）、日历三视图与农历（抽 3 个典型月份与系统日历比对）。
+2. `M4` 提醒通知（AlarmManager + 通知动作 + 权限引导 + 重启重建 + 提醒诊断页）。**先补 `work-runtime-ktx`。**
+3. `M5` 桌面小部件（总览 + 单事件；配置台保留预设/字号/配色/显隐）。
+4. `M6` 设置中心（glasmio-preference + 备份导入导出 + 关于页）。
+5. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
 
 验收标准与涉及文件见 `docs/TODO.md`，此处不重复。
 
@@ -44,7 +44,7 @@
 | — | 旧数据单调对齐 Dart 的 `fromJson` 兜底 | 缺 `category` 默认「生活」、未知枚举回落默认值、无 `reminders` 读旧字段 `reminderMinutes` |
 | — | 排序语义：置顶 > `distance`（未来升序，已过沉底且「刚过去」优先）> `targetDate` 升序 > `createdAt` 倒序，同序按标题 | 已过事件堆在最前会让首页变成"回忆录"；`distance` 排序下旧版行为如此 |
 | — | 秒级刷新用**单一时间源**驱动整页重算（`combine` + 1s ticker） | 每个卡片各起协程会放大帧率抖动；单源还能顺带解决跨午夜天数翻转 |
-| — | 新建走 FAB → 同页表单浮层；卡片点击暂不响应 | 表单已可用；详情页属 M2c，先不给假入口 |
+| — | 新建走 FAB → 同页表单浮层；点卡片 → 详情浮层；日历从标题栏图标进入（整页覆盖） | 所有层都在同一个 backdrop 内，独立窗口/独立 Destination 会让玻璃材质失效 |
 | — | 进度环 = `createdAt → target` 的已完成比例，重复事件不画 | 重复事件的 target 每年前移，进度无稳定语义 |
 | — | 表单做成同页面浮层，不用 `ModalBottomSheet`/`Dialog` | 玻璃材质靠 `GlassBackdropHost` 采样，独立窗口会切断 backdrop，材质直接失效 |
 | — | 滚轮自行实现（五列 + snap fling） | Glasmio 0.1.2 无此组件，Material3 无 iOS 式滚轮；日期日数随年月动态变化 |
@@ -56,6 +56,10 @@
 | — | 撤销只保留**最近一次**，新操作顶替旧的 | 旧操作效果已落库；多重撤销需要栈式回滚，复杂度远高于收益 |
 | — | `UndoBar` 最后绘制（盖在详情/表单浮层之上） | 浮层开着时 6 秒窗口照样在走，被遮住等于白给 |
 | — | 保存表单**不进**撤销队列 | 保存是用户主动确认的动作，且可用「编辑」改回；撤销只服务删除/批量清理这类难复原操作 |
+| — | 农历**自实现**（1900–2100 压缩年表，201 个 int，约 1.6 KB） | `android.icu.util.ChineseCalendar` 在纯 JVM 单测里跑不了；第三方库会为这点功能带整套干支/八字表。自实现可纯 JVM 测，且零包体增量 |
+| — | 日历用**整页覆盖**（`AnimatedVisibility` + `BackHandler`），不引 `navigation-compose` | 必须留在同一个 `GlassBackdropHost` 内，独立 Destination/窗口会切断采样源；数据本就共用一个 ViewModel，导航图收益为零 |
+| — | 日历状态按天刷新（独立 `dayTick`），不复用每秒 ticker | 42 格加三个月落点映射没必要每秒重算 |
+| — | 月视图整月只套一个 `GlassPanel`，格子状态靠文字色/浅色块 | 42 个独立玻璃面在中低端机大概率掉帧，材质表现力并不因此提升 |
 
 ## 关键文件路径与约定
 
@@ -63,18 +67,23 @@
 
 ```
 app/src/main/java/com/jiuxina/ying/
-  MainActivity.kt              # 入口：装配 EventViewModel + HomeScreen，FAB 目前只弹提示
+  MainActivity.kt              # 入口：装配 EventViewModel + CategoryViewModel + HomeScreen（首页/日历共用同一个 EventViewModel）
   YingApp.kt                   # 手写 DI 容器 + 启动迁移
   ui/glass/GlassTheme.kt       # 唯一允许 import Glasmio 的地方（GlassTheme/GlassBackdropHost/GlassPanel/GlassCirclePanel/glassTextPrimary/glassTextSecondary）
   ui/home/                     # HomeScreen（折叠标题/排序/分区/空态）+ EventCardView（徽章与进度环）
   ui/event/                    # HomeUiState + EventPresentation（纯函数层，可单测）+ EventViewModel
-  ui/calendar/  ui/settings/   # 待建
+  ui/calendar/                 # CalendarScreen + CalendarUiState/CalendarPresentation（纯函数）+ CalendarActions
+  ui/category/                 # CategorySheet + CategoryViewModel
+  ui/component/                # GlassControls（浮层共用控件）/ WheelPicker（五列滚轮）
+  ui/settings/                 # 待建（M6）
   data/EventRepository.kt      # 对外只暴露领域模型 + Flow
-  data/db/                     # EventEntity / EventDao / EventMapper / YingDatabase
+  data/db/                     # EventEntity / EventDao / EventMapper / YingDatabase / CategoryUsage
   data/legacy/                 # LegacyDataMigrator / LegacyEventParser / LegacyPrefsSplitter
   data/settings/               # SettingsRepository / LegacySettingsKeys
-  domain/model/                # CountdownEvent / EventReminder / CountDirection / RepeatType / SortMode
-  domain/time/                 # CalendarMath / RepeatRule
+  data/category/               # CategoryRepository / CategoryRules / CategoryCodec
+  data/undo/                   # UndoRepository / UndoCodec
+  domain/model/                # CountdownEvent / EventReminder / CountDirection / RepeatType / SortMode / EventCategory / UndoOperation
+  domain/time/                 # CalendarMath / RepeatRule / LunarCalendar（1900–2100 农历年表）
   service/  widget/            # M4/M5/M6/M7 待建
 ```
 
@@ -101,10 +110,10 @@ app/src/main/java/com/jiuxina/ying/
 1. ~~**[阻塞级] 远程与本地分叉**~~ **已解决（T0）**：根因不是内容差异，而是 Windows `core.autocrlf=true` 让本地提交把 README 存成了 CRLF。`.gitattributes` 落地后差异自动消失，本地与远程同点于 `548edad`。**后续新增文件若再出现"整文件被改"，先查行尾，不要逐行比对。**
 2. **Glasmio 的 main 分支 ≠ 0.1.2**：`GlasmioBackdropHost` 在 main 上多一个 `(sampledColor, modifier, overlayContent)` 重载，v0.1.2 没有。照 main 写会编译失败。
 3. **`lint.abortOnError = false`**：M0 阶段有意放宽，M7 前必须改回 `true`，否则发布包可能带 lint 错误。
-4. **依赖缺口**：`navigation-compose`、`work-runtime-ktx` 未引入（M2a 刻意绕开了 `material-icons-extended`，图标用 Canvas/文字自绘）；M2b/M2c 先补 `navigation-compose`，M4 先补 `work-runtime-ktx`。
+4. **依赖缺口**：`work-runtime-ktx` 未引入（M4 先补）；`navigation-compose` **已不需要**——首页/日历用同页整页覆盖 + `BackHandler` 实现，多一个导航图反而要额外处理 backdrop 采样源。M2a 也刻意绕开了 `material-icons-extended`，图标用 Canvas/文字自绘。
 5. **`robolectric` 已在 version catalog 声明但从未启用**：当前单测是纯 JVM（迁移测试直接测解析器，不碰 Context）。需要跑 DAO/Context 测试时再加 `testImplementation(libs.robolectric)` 与 `@RunWith`。
 6. **迁移只在首启跑一次**：靠 `migration.legacy_v1_done` 幂等；调试迁移逻辑必须清应用数据，否则看不到任何动作。
-7. **撤销窗口跨进程重启的策略未定**：待确认是「重启即失效」还是「按 `expiresAt` 恢复」；`UndoOperation` 带 `expiresAt`，倾向后者，但需在 M2c 明确并写入 TODO 验收。
+7. ~~**撤销窗口跨进程重启的策略未定**~~ **已定（M2c）**：按 `expiresAt` 持久化恢复，重启后 6 秒窗口内仍可撤销；代价是必须「立即落库 + 快照回填」，不能延迟删除。
 8. **低端机玻璃性能未实测**：Glasmio 有 FPS Counter，M7 前需在低端机验证，并确认「关闭玻璃特效」降级开关是否要做（会影响 M6 设置项设计）。
 9. **分类默认值「生活」、未知枚举回落默认值是刻意行为**：为与 Dart 侧一致，改动会导致旧数据语义漂移，勿"优化"。
 10. **Flutter 原始源码不在本机**：只有上一级 `.ref/` 的 6 个 Dart 文件（模型 + storage service）可对照，其余页面行为需以计划文档的文件清单为线索。逐模块裁剪决策见 `docs/TODO.md` 的「移植范围」章节。
@@ -119,3 +128,9 @@ app/src/main/java/com/jiuxina/ying/
 19. **撤销的跨进程恢复依赖启动时序**：`YingApp.onCreate` 在迁移之后调用 `undoRepository.restore()`。若把它挪到 `MainActivity` 里，首帧会先闪一次"没有撤销条"，随后才出现；视觉上是可感知的抖动。
 20. **带偏移量的时间戳按绝对时刻换算**：`UndoCodec` 对 `Z` / `+08:00` 用 `atZoneSameInstant` 落到本地时区。这与 `LegacyEventParser`（`OffsetDateTime.toLocalDateTime()` 丢偏移）**不一致**，但后者是旧数据兼容的既有实现，改动会改变旧事件日期解释，**不要顺手统一**。
 21. **撤销不是"编辑回滚"**：`save()` 有意不入队；若日后要给编辑加撤销，需要把 `UndoKind` 扩到编辑语义，并注意"撤销编辑"与"撤销删除"同时存在时的顶替关系。
+22. **农历年表覆盖的是「农历年」1900–2100，不是公历年**：公历上界一直延伸到 2101 年初（`2101-01-01` = 农历 2100 腊月初二，合法可算），真正的越界点是 2101 年春节之后。写测试别拿 `2101-01-01` 当越界样本。
+23. **`LunarCalendar.cellLabel` 节日优先于月名**：正月初一显示「春节」而不是「正月」，八月十五显示「中秋」而不是「十五」——这是日历格子的既定展示规则，不是 bug。
+24. **日历状态按天刷新，不要接回每秒时间源**：`EventViewModel.calendar` 用独立 `dayTick`（30 秒轮询 + `distinctUntilChanged` 到 `LocalDate`）。若改成 `ticker`，42 格加三个月的落点映射会每秒重算并整页重组。
+25. **日历条目刻意不复用 `EventCardModel`**：卡片带 `remainingToday`/`progress` 这类依赖 `now` 的字段，放进按天刷新的状态里要么立刻变味、要么每秒触发重组。`CalendarEntry` 只存「哪天、差几天」。
+26. **月视图整月只套一个 `GlassPanel`**：42 个独立玻璃面在中低端机大概率掉帧，格子状态用文字色/浅色块表达即可。若确要"每格玻璃"，先在真机量帧再改，别直接动结构。
+27. **年视图/列表视图共用 `CalendarNav.month` 作锚点**：切换视图不新建位置状态，避免三套游标互相不同步；翻页一律走 `CalendarNav.clamp`，防止用户翻到没有农历数据的年份。
