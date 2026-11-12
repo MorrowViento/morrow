@@ -17,7 +17,6 @@ import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.settings.ThemeMode
 import com.jiuxina.ying.data.widget.WidgetRefreshTrigger
 import com.jiuxina.ying.domain.model.CountdownEvent
-import com.jiuxina.ying.widget.PlacedWidget
 import com.jiuxina.ying.widget.WidgetConfigStore
 import com.jiuxina.ying.widget.WidgetEntries
 import kotlinx.coroutines.Dispatchers
@@ -80,27 +79,26 @@ class SettingsViewModel(
     }
 
     /**
-     * 重读桌面上的小部件实例。
+     * 重读桌面上的小部件实例，并合并成设置页的行。
      *
      * 单事件小部件要显示它绑了哪个事件：配置里存的是事件 id，标题得回事件表查，
      * 所以这一步是异步的。查不到（事件已删 / 还没绑）就留空，UI 显示「未选择事件」。
+     *
+     * **同类合并**：总览卡片没有可区分的信息，桌面上放两个就会列出两行一模一样的
+     * 「总览 / 编辑」（真机反馈），既分不清也选不错。索性一类只给一行，保存时对该类
+     * 所有实例一起生效。单事件按绑定的事件分组，绑同一事件的多张卡片也合成一行。
      */
     fun refreshWidgets() {
         viewModelScope.launch {
             val placed = runCatching {
-                val overview = WidgetEntries.ids(appContext, isDetail = false)
-                    .map { PlacedWidget(it, isDetail = false) }
                 val allEvents = events.loadAll()
                 val store = WidgetConfigStore(settings)
-                val detail = WidgetEntries.ids(appContext, isDetail = true).map { id ->
-                    val bound = store.load(id).eventId
-                    PlacedWidget(
-                        id = id,
-                        isDetail = true,
-                        eventTitle = allEvents.firstOrNull { it.id == bound }?.title,
-                    )
+                val overviewIds = WidgetEntries.ids(appContext, isDetail = false)
+                val detailBindings = WidgetEntries.ids(appContext, isDetail = true)
+                    .associateWith { id -> store.load(id).eventId }
+                WidgetEntries.rows(overviewIds, detailBindings) { eventId ->
+                    allEvents.firstOrNull { it.id == eventId }?.title
                 }
-                overview + detail
             }.getOrDefault(emptyList())
             local.update { it.copy(widgets = placed) }
         }

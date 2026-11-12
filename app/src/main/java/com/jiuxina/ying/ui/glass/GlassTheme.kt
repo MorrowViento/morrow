@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.glass.GlassSurface
@@ -42,7 +45,12 @@ val LocalGlassDark = staticCompositionLocalOf { false }
 /** 用户是否要求减弱动效（无障碍「移除动画」）。页面切换据此跳过淡入淡出。 */
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
-/** 用户是否要求减弱透明（无障碍「降低透明度」）。底色据此压平，玻璃本身不降级。 */
+/**
+ * 用户是否要求减弱透明（无障碍「降低透明度」）。
+ *
+ * 只作用于**玻璃面板内侧**（见 [glassVeil]）：让面板更实、文字更清晰；
+ * 页面底色的蓝紫粉渐变在任何模式下都原样保留。
+ */
 val LocalReduceTransparency = staticCompositionLocalOf { false }
 
 /**
@@ -52,10 +60,11 @@ val LocalReduceTransparency = staticCompositionLocalOf { false }
  *   设置里选了浅色/深色时直接传对应值（见 `AppSettings.isDark`）。
  * @param reduceTransparency 减弱透明：**不交给 Glasmio**。
  *   库内建的 `GlassAppearance(reduceTransparency = true)` 会让 `getUsesBackdrop()`
- *   返回 false，`GlassSurface` 直接放弃背景采样与折射，退化成一块纯黑 / 纯白面板——
- *   真机上「打开减弱透明后控件变成纯色块、玻璃效果全没了」就是这么来的。
- *   这里只压平被采样的底色（见 [GlassBackdrop]），玻璃材质完整保留，
- *   既降低背景干扰、提高文字对比度，又不会把控件变成色块。
+ *   与 `getUsesRefraction()` 一起返回 false，`GlassSurface` 放弃背景采样与折射，
+ *   退化成一块纯黑 / 纯白面板——真机上「打开减弱透明后控件变成纯色块」就是这么来的。
+ *   这里始终保持 `GlassAppearance()`（液态玻璃全开），只在玻璃面板内侧加一层
+ *   柔和色纱（见 [glassVeil]）。**不动背景渐变**：真机上曾把「压平整个底色」
+ *   当成减弱透明，结果浅色变整屏近白、深色变整屏近黑，颜色全丢了，那是错的。
  */
 @Composable
 fun GlassTheme(
@@ -93,24 +102,33 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     } else {
         listOf(Color(0xFF3B6FE0), Color(0xFF9B4BE8), Color(0xFFE84B8A))
     }
-    Box(modifier.fillMaxSize().background(Brush.linearGradient(colors))) {
-        if (LocalReduceTransparency.current) {
-            // 「减弱透明」的正确落点是**被采样的内容**，不是玻璃材质本身：
-            // 压平高饱和渐变后，玻璃仍会折射/高光/模糊，只是背后不再有花哨色块穿过，
-            // 面板上的文字对比度随之提高。刻意保留一层柔和渐变，避免又退化成纯黑/纯白。
-            val quiet = if (dark) {
-                listOf(Color(0xFF20263F), Color(0xFF2C2743))
-            } else {
-                listOf(Color(0xFFF3F4F9), Color(0xFFE7E9F3))
-            }
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .background(Brush.linearGradient(quiet.map { it.copy(alpha = 0.88f) })),
-            )
-        }
+    // 渐变永远画满，不受「减弱透明」影响：那是面板的事，不是背景的事。
+    // 曾经在这里叠过一层 alpha 0.88 的中性色，真机上浅色直接整屏泛白、深色整屏发黑，
+    // 等于把应用的配色抹掉——已废弃。
+    Box(modifier.fillMaxSize().background(Brush.linearGradient(colors)))
+}
+
+/**
+ * 「减弱透明」的落点：盖在玻璃**内侧**的一层柔和不透明色纱。
+ *
+ * 玻璃材质（模糊 / 折射 / 高光）由 Glasmio 正常绘制，色纱只把透过面板看到的
+ * 背景压低到约 45%，面板因此更实、文字对比度更高；面板之外的彩色渐变、以及
+ * 从色纱透出来的那部分颜色都还在，不会变成纯黑 / 纯白色块。
+ *
+ * 取带一点紫的浅色 / 深色而不是纯白 / 纯黑，是为了和蓝紫粉渐变同色系。
+ */
+@Composable
+private fun glassVeil(): Color? {
+    if (!LocalReduceTransparency.current) return null
+    return if (LocalGlassDark.current) {
+        Color(0xFF24213F).copy(alpha = 0.55f)
+    } else {
+        Color(0xFFF7F3FF).copy(alpha = 0.55f)
     }
 }
+
+/** 与 Glasmio 默认 `ContinuousRoundedRectangle(26.dp)` 对齐，色纱自己也要裁剪圆角。 */
+private val PanelShape = RoundedCornerShape(26.dp)
 
 /** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */
 @Composable
@@ -184,11 +202,18 @@ fun GlassPanel(
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val veil = glassVeil()
     GlassSurface(
         modifier = modifier,
         contentAlignment = contentAlignment,
-        content = content,
-    )
+    ) {
+        // 色纱是 content 的第一个子项，因此盖住玻璃绘制、又垫在真正的内容下面。
+        // matchParentSize 是 BoxScope 的成员函数，不需要（也不能）import。
+        if (veil != null) {
+            Box(Modifier.matchParentSize().clip(PanelShape).background(veil))
+        }
+        content()
+    }
 }
 
 /** 圆形玻璃面板（悬浮按钮用）。 */
@@ -197,10 +222,15 @@ fun GlassCirclePanel(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val veil = glassVeil()
     GlassSurface(
         modifier = modifier,
         shape = CircleShape,
         contentAlignment = Alignment.Center,
-        content = content,
-    )
+    ) {
+        if (veil != null) {
+            Box(Modifier.matchParentSize().clip(CircleShape).background(veil))
+        }
+        content()
+    }
 }

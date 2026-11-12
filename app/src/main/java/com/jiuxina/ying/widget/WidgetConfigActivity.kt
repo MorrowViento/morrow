@@ -72,6 +72,9 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
 
+    /** 这一次保存要落到哪些实例上。设置页把同类卡片合成一行，会带一组 id 过来。 */
+    private var appWidgetIds = intArrayOf()
+
     /**
      * 桌面还没分配 id，说明这是「先设置、再落桌面」的入口（长按图标 / 设置页添加）。
      *
@@ -88,7 +91,14 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
             AppWidgetManager.EXTRA_APPWIDGET_ID,
             AppWidgetManager.INVALID_APPWIDGET_ID,
         ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
-        pinMode = appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID
+        // 系统 / 长按菜单只带单个 id；设置页的一行可能代表多个同类实例。
+        val grouped = intent?.getIntArrayExtra(WidgetEntries.EXTRA_WIDGET_IDS)
+        appWidgetIds = when {
+            grouped != null && grouped.isNotEmpty() -> grouped
+            appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID -> intArrayOf(appWidgetId)
+            else -> intArrayOf()
+        }
+        pinMode = appWidgetIds.isEmpty()
         enableEdgeToEdge()
 
         val app = application as YingApp
@@ -133,9 +143,10 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                                     adding = true
                                     scope.launch {
                                         if (!pinMode) {
-                                            store.save(appWidgetId, style)
+                                            // 一行可能代表多个同类实例：样式逐个落盘，再整组刷新。
+                                            appWidgetIds.forEach { id -> store.save(id, style) }
                                             // 配置完成时系统还没走 onUpdate，先主动刷一次，点完成就能看到效果
-                                            app.widgetRefresher.refreshIds(intArrayOf(appWidgetId), isDetail)
+                                            app.widgetRefresher.refreshIds(appWidgetIds, isDetail)
                                             setResult(
                                                 RESULT_OK,
                                                 Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),

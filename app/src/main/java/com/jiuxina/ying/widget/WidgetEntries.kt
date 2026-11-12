@@ -7,15 +7,25 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * 桌面上一个已放置的小部件实例。
+ * 设置页里的一行小部件设置。
  *
- * [id] 由桌面宿主分配，只在换机 / 重装前稳定；[eventTitle] 仅单事件小部件有意义。
+ * [ids] 是这一行要一起编辑的桌面实例：桌面上可能放了**多个一模一样**的总览卡片，
+ * 逐个列成「总览 / 编辑」「总览 / 编辑」既看不出区别也没法选，所以合成一行、保存时
+ * 对整组生效。[id] 只是组里第一个，用于配置台回传结果。
+ * [eventTitle] 仅单事件小部件有意义。
  */
 data class PlacedWidget(
-    val id: Int,
+    val ids: List<Int>,
     val isDetail: Boolean,
     val eventTitle: String? = null,
-)
+) {
+    init {
+        require(ids.isNotEmpty()) { "一行小部件至少要有一个 widgetId" }
+    }
+
+    val id: Int get() = ids.first()
+    val count: Int get() = ids.size
+}
 
 /**
  * 小部件配置台的统一入口。
@@ -36,6 +46,36 @@ object WidgetEntries {
             if (isDetail) YingDetailWidgetProvider::class.java else YingWidgetProvider::class.java,
         )
         return manager.getAppWidgetIds(component).toList()
+    }
+
+    /**
+     * 把桌面实例折叠成设置页的行（纯逻辑，不碰系统 API）。
+     *
+     * 总览卡片之间没有任何可区分的信息，桌面上放两个就列出两行一模一样的
+     * 「总览 / 编辑」，用户既分不清也选不对——所以一类只出一行，行里带着全部 id，
+     * 保存时对整组生效。单事件按**绑定的事件**分组，绑同一事件的多张卡片也合成一行。
+     *
+     * @param detailBindings 单事件 widgetId → 绑定的事件 id（没有绑定就是 null）。
+     */
+    fun rows(
+        overviewIds: List<Int>,
+        detailBindings: Map<Int, String?>,
+        eventTitleOf: (String?) -> String? = { null },
+    ): List<PlacedWidget> = buildList {
+        if (overviewIds.isNotEmpty()) {
+            add(PlacedWidget(ids = overviewIds, isDetail = false))
+        }
+        detailBindings.entries
+            .groupBy { it.value }
+            .forEach { (eventId, entries) ->
+                add(
+                    PlacedWidget(
+                        ids = entries.map { it.key },
+                        isDetail = true,
+                        eventTitle = eventTitleOf(eventId),
+                    ),
+                )
+            }
     }
 
     /**
@@ -63,7 +103,16 @@ object WidgetEntries {
             if (widget.isDetail) DetailWidgetConfigActivity::class.java else WidgetConfigActivity::class.java
         val intent = Intent(context, target)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widget.id)
+            .putExtra(EXTRA_WIDGET_IDS, widget.ids.toIntArray())
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(intent) }
     }
+
+    /**
+     * 一次编辑多个实例时传的 id 列表。
+     *
+     * 单独的 `EXTRA_APPWIDGET_ID` 仍保留：系统 / 长按菜单拉起配置台时只会带它，
+     * 配置台据此回落成「只改这一个」，两条路共用同一个 Activity。
+     */
+    const val EXTRA_WIDGET_IDS = "com.jiuxina.ying.widget.EXTRA_WIDGET_IDS"
 }

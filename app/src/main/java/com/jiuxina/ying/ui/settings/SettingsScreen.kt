@@ -113,13 +113,18 @@ fun SettingsScreen(
                     if (state.widgets.isNotEmpty()) {
                         state.widgets.forEach { widget ->
                             Divider()
+                            val together = if (widget.count > 1) "（共 ${widget.count} 个，一起生效）" else ""
                             ActionRow(
                                 title = if (widget.isDetail) {
                                     "单事件 · ${widget.eventTitle ?: "未选择事件"}"
                                 } else {
                                     "总览"
                                 },
-                                summary = if (widget.isDetail) "修改样式，或换绑另一个事件" else "修改样式与显示行数",
+                                summary = if (widget.isDetail) {
+                                    "修改样式，或换绑另一个事件$together"
+                                } else {
+                                    "修改样式与显示行数$together"
+                                },
                                 value = "编辑",
                                 onClick = { WidgetEntries.openConfig(context, widget) },
                             )
@@ -157,7 +162,7 @@ fun SettingsScreen(
                         Divider()
                         SwitchRow(
                             title = "减弱透明",
-                            summary = "压平玻璃背后的渐变，保留玻璃质感，文字更清晰",
+                            summary = "让玻璃面板更实、文字更清晰，背景配色保持不变",
                             checked = state.settings.reduceTransparency,
                             onCheckedChange = actions.setReduceTransparency,
                         )
