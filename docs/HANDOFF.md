@@ -4,17 +4,18 @@
 
 把「朝夕」（Morrow）倒数日应用从 Flutter 重写为 Kotlin/Compose + Glasmio Liquid Glass（Android 13+）。2026-11-12 品牌重塑后 `applicationId` 为 `com.morrowviento.morrow`，**不再**沿用 Flutter 版的 `com.jiuxina.ying`，升级方式见 `docs/SIGNING.md`。
 
-## 当前进度快照（2026-11-12 14:30，交接以此为准）
+## 当前进度快照（2026-11-12 15:20，交接以此为准）
 
 | 项 | 状态 |
 |---|---|
 | 阶段 | **M7 应用内更新与发布**；M0–M6 代码完成，**M2a–M6 真机验收基本通过**（用户 2026-11-12 确认） |
 | 品牌 | 应用名「**朝夕**」；项目 / Gradle 根名 / 目录 / 包名后缀均为 `morrow`，`applicationId` = `com.morrowviento.morrow`；图标为自绘「晨昏日轮」自适应图标 |
-| 版本 / 分支 | `4.0.0-alpha1 (40)` / `main`；本地与 `origin/main` 同为 `a525f2a`（品牌重塑提交之后另记） |
-| 验证 | 228 项单测全绿；lint **0 errors / 9 warnings**（`abortOnError = true`）；debug APK 约 76 MB |
-| 交付 | 上级目录 `morrow-4.0.0-alpha1-debug-year-range-m7.apk`；本机无 adb/模拟器，真机由用户在 OnePlus PJZ110 / Android 17 验收 |
+| 版本 / 分支 | `4.0.0-alpha2 (41)` / `main`；发版提交 `0294154`，其后一笔仅同步更新清单与本文档 |
+| Release | GitHub `v4.0.0-alpha2-41`（**正式** Release：`/releases/latest` 不返回预发布，标成 prerelease 应用就检测不到）；资产 `morrow-41-4.0.0-alpha2-debug.apk`，79,389,680 B，SHA-256 `04d81bdc…1fd83ed6` |
+| 验证 | 228 项单测全绿；lint **0 errors / 9 warnings**（`abortOnError = true`）；debug APK 约 76 MB；`aapt2` 确认 `versionCode=41`、`versionName=4.0.0-alpha2`、`label=朝夕` |
+| 交付 | 上级目录 `morrow-41-4.0.0-alpha2-debug.apk`（与 Release 资产同一份）；本机无 adb/模拟器，真机由用户在 OnePlus PJZ110 / Android 17 验收 |
 | 工作区 | 仅 `docs/MANUAL-TEST.md` 有用户本地勾选的 40 项验收记录，**按用户要求暂不提交、不推送** |
-| 下一步 | 发布首个带 APK 资产的 GitHub Release → 真机走 N1–N9 → 全量回归与签名发版 |
+| 下一步 | 真机走 N1–N9（检查→下载→安装→升级）→ 自有密钥出正式包 → Android 13/14/15/16 全量回归 |
 
 > `a525f2a` 的推送在代理 502 下后台重试第 24 次才成功；推送不稳定是环境常态，失败时挂后台重试即可，代码本身无需改动。
 

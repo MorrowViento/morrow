@@ -1,8 +1,15 @@
 {
-  "tag_name": "v4.0.0-alpha1-40",
-  "name": "4.0.0-alpha1 (40)",
-  "body": "当前仓库尚未发布 GitHub Release。发布新版本时请把本文件同步成最新 Release 的内容，或直接由 CI 生成。字段形状与 GitHub Releases API 的 /releases/latest 一致，客户端复用同一个解析器。",
-  "published_at": "2026-11-12T00:00:00Z",
-  "prerelease": true,
-  "assets": []
+  "tag_name": "v4.0.0-alpha2-41",
+  "name": "朝夕 4.0.0-alpha2 (41)",
+  "body": "首个可安装的「朝夕」版本：品牌更名为朝夕、包名切到 com.morrowviento.morrow、新增自适应图标；应用内更新链路（三路探测 + 断点续传 + 校验 + 会话安装）首次有真实 Release 可检测；新建事件年份范围扩到 1900–2100，并包含前几轮真机反馈的全部修复。本资产为 debug 签名的通用包，可直接覆盖旧的 debug 安装。",
+  "published_at": "2026-11-12T07:17:46Z",
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "morrow-41-4.0.0-alpha2-debug.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.0.0-alpha2-41/morrow-41-4.0.0-alpha2-debug.apk",
+      "size": 79389680,
+      "digest": "sha256:04d81bdc7e67745dbb54864f8a7802b6c9465eed36b02a7ba275313f1fd83ed6"
+    }
+  ]
 }
