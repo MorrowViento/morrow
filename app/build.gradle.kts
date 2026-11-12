@@ -51,8 +51,8 @@ android {
         minSdk = 33
         targetSdk = 37
         // 版本号只增不减：应用内更新靠 versionCode 判定，发版前必须上调
-        versionCode = 49
-        versionName = "4.0.0-alpha10"
+        versionCode = 50
+        versionName = "4.0.0-alpha11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // 镜像前缀写进 BuildConfig，避免把第三方代理域名硬编码进代码（这类域名寿命短）。
@@ -78,11 +78,31 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            // 代码裁完之后必然留下一批没人引用的资源（图标、字体、layout）。
+            // 只在开启 minify 时生效，debug 完全不受影响。
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // 没有注入 keystore 时保持未签名的 release，本地/CI 的 debug 构建完全不受影响
             if (releaseKeystoreFile != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
+        }
+        debug {
+            // 调试包不开 minify，但把 PNG 压一遍没有任何调试损失，安装包小一截、写入也快
+            isCrunchPngs = true
+        }
+    }
+
+    // 依赖里的许可证 / 元数据文件会被打进 APK，运行时用不到
+    // （不排 *.kotlin_module：Kotlin 反射靠它定位顶层声明，删了会在奇怪的地方炸）
+    packaging {
+        resources {
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/LICENSE*",
+                "/META-INF/NOTICE*",
+            )
         }
     }
 

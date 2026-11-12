@@ -82,7 +82,9 @@ fun EventCardView(
                 }
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    text = metaLine(card),
+                    // 元信息在模型里就算好了（见 EventCardModel.meta）：这里不再
+                    // 每帧调用两次 String.format
+                    text = card.meta,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontSize = 12.sp, color = secondary),
@@ -160,11 +162,4 @@ private fun CountdownBadge(card: EventCardModel) {
     }
 }
 
-/** 元信息行：分类 · 日期 · 重复/全天标记。 */
-private fun metaLine(card: EventCardModel): String {
-    val date = "%d月%d日".format(card.target.monthValue, card.target.dayOfMonth)
-    val parts = mutableListOf(card.category, if (card.repeatsYearly) "每年 $date" else date)
-    if (card.isAllDay) parts += "全天"
-    else parts += "%02d:%02d".format(card.target.hour, card.target.minute)
-    return parts.joinToString(" · ")
-}
+/** 右侧天数徽章；非重复事件在外圈画进度环，重复事件不画（进度无意义）。 */

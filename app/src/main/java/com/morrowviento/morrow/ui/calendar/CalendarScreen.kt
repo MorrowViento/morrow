@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -217,6 +216,15 @@ private fun CalendarPage(
     }
 }
 
+/**
+ * 视图切换的项：常量，不必在每次重组时重新 map 一遍。
+ *
+ * `GlassSegmentedControl` 会把 items 当作参数比较，每帧换一个新 List
+ * （内容相同但引用不同）会让它一直认为「选项变了」。
+ */
+private val CalendarViewItems: List<Pair<CalendarView, String>> =
+    CalendarView.entries.map { it to it.label }
+
 /** 当前浏览的周期是否已经包含今天（是则「今天」按钮置灰）。 */
 private fun onTodayPeriod(state: CalendarUiState): Boolean =
     if (state.view == CalendarView.MONTH) {
@@ -281,7 +289,7 @@ private fun CalendarHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         GlassSegmentedControl(
-            items = CalendarView.entries.map { it to it.label },
+            items = CalendarViewItems,
             selected = state.view,
             onSelected = { actions.setView(it) },
             modifier = Modifier.weight(1f),

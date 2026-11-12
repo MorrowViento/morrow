@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -75,6 +76,9 @@ class ReminderViewModel(
         lastDelivery,
     ) { list, _, now, delivery -> build(list, now, delivery) }
         .catch { emit(ReminderUiState(isLoading = false)) }
+        // build() 里全是 Binder 调用（通知/精确闹钟/电池策略/下一个系统闹钟），
+        // 30 秒一次落在主线程上会和绘制抢帧；挪到后台线程算，结果照样是状态流。
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReminderUiState())
 
     fun refresh() {

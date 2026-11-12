@@ -54,6 +54,25 @@ private val WheelRowHeight = 34.dp
 private const val WheelVisibleRows = 5
 
 /**
+ * 滚轮文案表的常量部分。
+ *
+ * 这些列表以前是**每次重组都重建一遍**的：`years.map { "$it" }` 201 个对象、
+ * 时分各 60 次 `String.format`。而滚轮每滚一格就会重组一次（日期/时间状态在变），
+ * 于是滚一下就产生上千个临时字符串。年、月、时、分与选中值无关，一次建好即可；
+ * 只有「日」随当月天数变化，按天数缓存。
+ */
+private val MonthValues: List<Int> = (1..12).toList()
+private val HourValues: List<Int> = (0..23).toList()
+private val MinuteValues: List<Int> = (0..59).toList()
+private val YearLabels: List<String> by lazy { CalendarMath.SELECTABLE_YEARS.map(Int::toString) }
+private val MonthLabels: List<String> by lazy { MonthValues.map(Int::toString) }
+private val HourLabels: List<String> by lazy { HourValues.map { it.pad() } }
+private val MinuteLabels: List<String> by lazy { MinuteValues.map { it.pad() } }
+
+/** 两位补零（`%02d` 的等价物，但不走 `String.format` 的格式串解析）。 */
+private fun Int.pad(): String = if (this < 10) "0$this" else toString()
+
+/**
  * 单列滚轮。选中项固定在中间，滑动停止后回写选中下标。
  *
  * 说明：对齐依赖 `itemHeight` 与实际行高一致，改字号时要同步改 `itemHeight`；
@@ -174,11 +193,9 @@ fun WheelDateTimePicker(
     // 年份不再是「去年..今年+20」：与农历年表 / 日历页共用 1900–2100，
     // 纪念类事件（出生年、历史日期）才选得到。见 CalendarMath.SELECTABLE_YEARS。
     val years = CalendarMath.SELECTABLE_YEARS
-    val months = (1..12).toList()
     val maxDay = YearMonth.of(date.year, date.monthValue).lengthOfMonth()
-    val days = (1..maxDay).toList()
-    val hours = (0..23).toList()
-    val minutes = (0..59).toList()
+    // 「日」随年月变化：按天数缓存，31 天以内只建一次
+    val dayLabels = remember(maxDay) { (1..maxDay).map(Int::toString) }
     val safeDay = date.dayOfMonth.coerceAtMost(maxDay)
 
     // 五个滚轮的状态由这里持有：既能给每个滚轮注入同一份，也能汇总出「有没有人在滑」
@@ -210,7 +227,7 @@ fun WheelDateTimePicker(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 WheelColumn(
-                    values = years.map { "$it" },
+                    values = YearLabels,
                     selectedIndex = CalendarMath.yearIndex(date.year),
                     state = yearState,
                     onSelect = { index ->
@@ -224,41 +241,41 @@ fun WheelDateTimePicker(
                     modifier = Modifier.weight(1.3f),
                 )
                 WheelColumn(
-                    values = months.map { "$it" },
+                    values = MonthLabels,
                     selectedIndex = date.monthValue - 1,
                     state = monthState,
                     onSelect = { index ->
-                        val month = months.getOrNull(index) ?: date.monthValue
+                        val month = MonthValues.getOrNull(index) ?: date.monthValue
                         onDateChange(CalendarMath.dateClamped(date.year, month, safeDay))
                     },
                     modifier = Modifier.weight(1f),
                 )
                 WheelColumn(
-                    values = days.map { "$it" },
+                    values = dayLabels,
                     selectedIndex = safeDay - 1,
                     state = dayState,
                     onSelect = { index ->
-                        val day = days.getOrNull(index) ?: safeDay
+                        val day = index + 1
                         onDateChange(CalendarMath.dateClamped(date.year, date.monthValue, day))
                     },
                     modifier = Modifier.weight(1f),
                 )
                 if (!isAllDay) {
                     WheelColumn(
-                        values = hours.map { "%02d".format(it) },
+                        values = HourLabels,
                         selectedIndex = time.hour,
                         state = hourState,
                         onSelect = { index ->
-                            onTimeChange(time.withHour(hours.getOrNull(index) ?: time.hour))
+                            onTimeChange(time.withHour(HourValues.getOrNull(index) ?: time.hour))
                         },
                         modifier = Modifier.weight(0.9f),
                     )
                     WheelColumn(
-                        values = minutes.map { "%02d".format(it) },
+                        values = MinuteLabels,
                         selectedIndex = time.minute,
                         state = minuteState,
                         onSelect = { index ->
-                            onTimeChange(time.withMinute(minutes.getOrNull(index) ?: time.minute))
+                            onTimeChange(time.withMinute(MinuteValues.getOrNull(index) ?: time.minute))
                         },
                         modifier = Modifier.weight(0.9f),
                     )

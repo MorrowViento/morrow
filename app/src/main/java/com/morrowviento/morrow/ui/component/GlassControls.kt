@@ -178,24 +178,3 @@ fun ChipRow(content: @Composable () -> Unit) {
         content()
     }
 }
-
-/**
- * 新建事件的主按钮（日历页右下角玻璃圆钮）。
- *
- * 首页不再用它——首页的新建入口在底栏中央（见 `HomeBottomBar`）。
- * 日历是整页覆盖且有不透明底色，会把首页底栏整个盖住，因此日历页必须自己再放一颗。
- */
-@Composable
-fun CreateFab(modifier: Modifier = Modifier, prominent: Boolean = false, accent: Color? = null, onClick: () -> Unit) {
-    GlassCirclePanel(
-        modifier = modifier.size(60.dp),
-        prominent = prominent,
-        accent = accent,
-        onClick = onClick,
-    ) {
-        Text(
-            text = "+",
-            style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Light, color = glassTextPrimary()),
-        )
-    }
-}

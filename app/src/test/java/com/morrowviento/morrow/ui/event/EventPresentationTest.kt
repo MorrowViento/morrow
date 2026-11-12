@@ -183,4 +183,75 @@ class EventPresentationTest {
         assertEquals(SortMode.DISTANCE, SortMode.fromPref(null))
         assertEquals(SortMode.DISTANCE, SortMode.fromPref("unknown"))
     }
+
+    // ---- 每秒刷新相关的纯函数（2026-11-13 性能梳理时新增）----
+
+    @Test
+    fun remainingToday_padsToTwoDigits() {
+        val target = LocalDateTime.of(2026, 11, 11, 9, 5, 3)
+        val early = LocalDateTime.of(2026, 11, 11, 8, 0, 0)
+        assertEquals("01:05:03", EventPresentation.remainingTodayOf(target, false, today, early))
+
+        val evening = LocalDateTime.of(2026, 11, 11, 18, 30, 0)
+        val lateTarget = LocalDateTime.of(2026, 11, 11, 21, 5, 3)
+        assertEquals("02:35:03", EventPresentation.remainingTodayOf(lateTarget, false, today, evening))
+    }
+
+    @Test
+    fun remainingToday_isNullWhenAllDayOrOtherDayOrPassed() {
+        val target = LocalDateTime.of(2026, 11, 11, 9, 0)
+        assertNull(EventPresentation.remainingTodayOf(target, true, today, now))
+        assertNull(
+            EventPresentation.remainingTodayOf(
+                LocalDateTime.of(2026, 11, 12, 9, 0), false, today, now,
+            ),
+        )
+        assertNull(EventPresentation.remainingTodayOf(target, false, today, LocalDateTime.of(2026, 11, 11, 9, 0)))
+    }
+
+    @Test
+    fun progress_isQuantizedSoOneSecondDoesNotChangeIt() {
+        val created = LocalDateTime.of(2026, 1, 1, 0, 0)
+        val target = LocalDateTime.of(2026, 12, 31, 0, 0)
+        val a = EventPresentation.progressOf(created, target, LocalDateTime.of(2026, 6, 1, 12, 0, 0))
+        val b = EventPresentation.progressOf(created, target, LocalDateTime.of(2026, 6, 1, 12, 0, 1))
+        // 364 天跨度下，1 秒的变化远小于 1/256 的一格——量化后必须相等，
+        // 否则 HomeUiState 每秒都不相等，整页跟着每秒重组
+        assertEquals(a, b, 0f)
+        assertTrue(a in 0f..1f)
+    }
+
+    @Test
+    fun progress_isClampedAtBothEnds() {
+        val target = LocalDateTime.of(2026, 12, 31, 0, 0)
+        assertEquals(1f, EventPresentation.progressOf(LocalDateTime.of(2026, 1, 1, 0, 0), target, LocalDateTime.of(2027, 1, 2, 0, 0)), 0f)
+        assertEquals(0f, EventPresentation.progressOf(LocalDateTime.of(2026, 6, 1, 0, 0), target, LocalDateTime.of(2026, 1, 1, 0, 0)), 0f)
+    }
+
+    @Test
+    fun meta_precomputedWithoutStringFormat() {
+        val card = EventPresentation.toCard(
+            event("m1", "年会", LocalDateTime.of(2026, 12, 3, 9, 5), isAllDay = false),
+            today,
+            now,
+        )
+        assertEquals("生活 · 12月3日 · 09:05", card.meta)
+
+        val yearly = EventPresentation.toCard(
+            event(
+                "m2", "生日", LocalDateTime.of(2026, 12, 3, 9, 5),
+                repeatType = RepeatType.YEARLY, repeatMonth = 12, repeatDay = 3,
+            ),
+            today,
+            now,
+        )
+        assertEquals("生活 · 每年 12月3日 · 09:05", yearly.meta)
+
+        val allDay = EventPresentation.toCard(
+            event("m3", "假期", LocalDateTime.of(2026, 12, 3, 0, 0), isAllDay = true),
+            today,
+            now,
+        )
+        assertEquals("生活 · 12月3日 · 全天", allDay.meta)
+    }
 }

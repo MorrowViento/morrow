@@ -184,9 +184,12 @@ private fun SystemAlarmNote(alarm: SystemAlarm) {
     )
 }
 
+/** 格式器提到文件级：`ofPattern` 解析格式串不便宜，而这里每帧都可能被调到。 */
+private val TRIGGER_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
+
 private fun formatTrigger(millis: Long): String =
     LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("M 月 d 日 HH:mm"))
+        .format(TRIGGER_FORMAT)
 
 /**
  * 「最近一次排期」这句话的存在意义：图标只是结果，原因在通道。

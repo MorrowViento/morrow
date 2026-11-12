@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -200,7 +201,8 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
             .drawWithCache {
                 val w = size.width
                 val h = size.height
-                val blobs = listOf(
+                // 定长数组而不是 listOf：绘制时按下标遍历，不产生迭代器对象
+                val blobs = arrayOf(
                     Brush.radialGradient(
                         listOf(warm, warm.copy(alpha = 0f)),
                         center = Offset(w * 0.08f, h * 0.05f),
@@ -252,7 +254,7 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                 val bandSize = Size(w * 3f, h * 3f)
                 onDrawBehind {
                     drawRect(base)
-                    blobs.forEach { drawRect(it) }
+                    for (index in blobs.indices) drawRect(blobs[index])
                     // 倾斜 18°：光带斜穿屏幕，不会被卡片整块盖住而失去参照
                     rotate(-18f, pivot = Offset(w * 0.5f, h * 0.5f)) {
                         drawRect(broad, topLeft = bandLeft, size = bandSize)
@@ -466,7 +468,7 @@ fun GlassTile(
     content: @Composable BoxScope.() -> Unit = {},
 ) {
     val veil = glassVeil()
-    val shape = ContinuousRoundedRectangle(cornerRadius)
+    val shape = remember(cornerRadius) { ContinuousRoundedRectangle(cornerRadius) }
     GlassSurface(
         modifier = modifier,
         shape = shape,
@@ -489,11 +491,15 @@ fun GlassTile(
  *
  * 「常规」必须读 `LocalGlassDimensions`：`GlassSurface` 的默认形状用的就是它，
  * 写死 26.dp 会在库改默认值时悄悄跑偏（色纱和材质就对不上了）。
+ *
+ * 用 `remember` 缓存：形状是**不可变**对象，但每帧都要新建一个
+ * `ContinuousRoundedRectangle` —— 一屏十几块玻璃就是十几份垃圾，
+ * 而它们的圆角半径在一次主题里根本不会变。
  */
 @Composable
-fun glassPanelShape(capsule: Boolean = false): Shape =
-    if (capsule) {
-        Capsule()
-    } else {
-        ContinuousRoundedRectangle(LocalGlassDimensions.current.regularCornerRadius)
+fun glassPanelShape(capsule: Boolean = false): Shape {
+    val corner = LocalGlassDimensions.current.regularCornerRadius
+    return remember(capsule, corner) {
+        if (capsule) Capsule() else ContinuousRoundedRectangle(corner)
     }
+}

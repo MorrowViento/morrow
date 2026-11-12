@@ -140,9 +140,13 @@ fun HomeScreen(
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
-    // 退场动画期间 state.undo 已经清空，靠这份快照把撤销条画完
+    // 退场动画期间 state.undo 已经清空，靠这份快照把撤销条画完。
+    // 不能在组合里直接赋值（`if (state.undo != null) lastUndo = ...`）：
+    // 组合期写状态会让 Compose 再跑一轮组合，撤销条每出现一次就多重组一帧。
     var lastUndo by remember { mutableStateOf(state.undo) }
-    if (state.undo != null) lastUndo = state.undo
+    LaunchedEffect(state.undo) {
+        if (state.undo != null) lastUndo = state.undo
+    }
 
     // 分类改名 / 删除迁移的映射（旧名 → 新名，可链式）。表单状态在面板内部，
     // 只能把「这个名字已经变了」传进去，否则表单会拿着旧名保存，让旧分类以孤儿身份长期存在。
@@ -171,9 +175,13 @@ fun HomeScreen(
     // 日历盖在首页之上，返回键应先关日历而不是退出应用
     BackHandler(enabled = showCalendar) { showCalendar = false }
 
-    // 详情页依赖最新卡片（每秒刷新会换新对象）；事件被删后自动失配 → 浮层自行关闭
-    val detailCard = detailId?.let { id ->
-        (state.active + state.completed).firstOrNull { it.id == id }
+    // 详情页依赖最新卡片（每秒刷新会换新对象）；事件被删后自动失配 → 浮层自行关闭。
+    // 用 remember 缓存：原来每帧都 `active + completed` 拼一次新列表再线性查找，
+    // 列表越长、滚动越频繁，这里产生的垃圾越多。
+    val detailCard = remember(detailId, state.active, state.completed) {
+        detailId?.let { id ->
+            state.active.firstOrNull { it.id == id } ?: state.completed.firstOrNull { it.id == id }
+        }
     }
 
     GlassTheme(
@@ -279,8 +287,9 @@ fun HomeScreen(
                     ) {
                         CalendarScreen(
                             state = calendar.current,
-                            canPrev = calendar.prev != null,
-                            canNext = calendar.next != null,
+                            // 直接用布尔量：邻页现在是惰性的，读 `prev` 会真的去算一整页
+                            canPrev = calendar.canPrev,
+                            canNext = calendar.canNext,
                             actions = calendarActions,
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },

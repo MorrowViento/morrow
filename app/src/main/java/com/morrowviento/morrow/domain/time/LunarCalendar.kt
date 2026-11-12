@@ -44,20 +44,29 @@ object LunarCalendar {
     /** 农历 1900 年正月初一。 */
     private val BASE: LocalDate = LocalDate.of(1900, 1, 31)
 
-    /** 超出 [MIN_YEAR]..[MAX_YEAR] 范围返回 null，调用方按「无农历」处理。 */
+    /**
+     * 超出 [MIN_YEAR]..[MAX_YEAR] 范围返回 null，调用方按「无农历」处理。
+     *
+     * 年份用**累计天数表 + 二分**定位，不再从 1900 年逐年累加：月视图一次要算 42 格
+     * （且每格还要判节日），逐年累加是 126 次 × 12 个位运算，一屏就是十几万次运算，
+     * 全都落在打开日历的那一帧上。二分之后每格只需 ~8 次比较 + 至多 13 次月循环。
+     */
     fun fromSolar(date: LocalDate): LunarDate? {
         val offset = ChronoUnit.DAYS.between(BASE, date)
         if (offset < 0L) return null
-        var rest = offset.toInt()
+        val starts = YEAR_STARTS
+        // starts 的末位是「MAX_YEAR 结束后的累计天数」，超出即年表之外
+        if (offset >= starts[starts.size - 1]) return null
 
-        var year = MIN_YEAR
-        while (true) {
-            if (year > MAX_YEAR) return null
-            val days = yearDays(year)
-            if (rest < days) break
-            rest -= days
-            year++
+        // 找最后一个 starts[i] <= offset：i 就是农历年相对 MIN_YEAR 的下标
+        var lo = 0
+        var hi = starts.size - 2
+        while (lo < hi) {
+            val mid = (lo + hi + 1) ushr 1
+            if (starts[mid] <= offset) lo = mid else hi = mid - 1
         }
+        val year = MIN_YEAR + lo
+        var rest = offset.toInt() - starts[lo]
 
         val leap = leapMonth(year)
         var month = 1
@@ -87,6 +96,19 @@ object LunarCalendar {
 
     /** 农历节日名；无节日返回 null。闰月不重复过节。 */
     fun festival(date: LocalDate): String? = fromSolar(date)?.let { festival(it) }
+
+    /**
+     * 格子需要的两份信息（副标题 + 是否节日）一次算完。
+     *
+     * 日历月视图每格原本要调 `cellLabel` 与 `festival` 各一次，等于把同一格换算两遍；
+     * 这里共用同一份 [LunarDate]。`isFestival` 与「副标题是节日名」互不冲突——
+     * 有节日时副标题本身就是节日名，粗体标记仍在。
+     */
+    fun cell(date: LocalDate): Pair<String?, Boolean> {
+        val lunar = fromSolar(date) ?: return null to false
+        val festivalName = festival(lunar)
+        return (festivalName ?: lunar.cellLabel) to (festivalName != null)
+    }
 
     fun festival(lunar: LunarDate): String? {
         if (lunar.isLeapMonth) return null
@@ -148,6 +170,25 @@ object LunarCalendar {
     private val MONTH_NAMES = arrayOf("正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊")
     private val DIGITS = arrayOf("一", "二", "三", "四", "五", "六", "七", "八", "九", "十")
     private val TENS = arrayOf("初", "十", "廿")
+
+    /**
+     * 每个农历年正月初一相对 [BASE] 的累计天数（长度 = 年数 + 1，末位是总量）。
+     *
+     * 只在首次换算时建一次（201 次 [yearDays]），之后每次定位年份都是二分。
+     * 建表放在 `by lazy` 里而不是 `init`：小部件、提醒通知这些路径只算一两个日期，
+     * 不值得在 `Application.onCreate` 里多付这份初始化。
+     */
+    private val YEAR_STARTS: IntArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val years = MAX_YEAR - MIN_YEAR + 1
+        val starts = IntArray(years + 1)
+        var sum = 0
+        for (i in 0 until years) {
+            starts[i] = sum
+            sum += yearDays(MIN_YEAR + i)
+        }
+        starts[years] = sum
+        starts
+    }
 
     /** 1900–2100 年压缩年表，每行 10 年。 */
     private val LUNAR_INFO = intArrayOf(

@@ -139,4 +139,18 @@ class LunarCalendarTest {
         assertEquals(29, LunarCalendar.leapDays(2023))
         assertEquals(0, LunarCalendar.leapDays(2026))
     }
+
+    @Test
+    fun `格子信息与单查接口一致`() {
+        // cell() 是 cellLabel() + festival() 的合并版（日历一屏省掉一半换算），
+        // 两者必须永远给出同一份结果，否则格子副标题与粗体会对不上。
+        var date = LocalDate.parse("2026-01-01")
+        val end = LocalDate.parse("2026-12-31")
+        while (!date.isAfter(end)) {
+            val (label, isFestival) = LunarCalendar.cell(date)
+            assertEquals(LunarCalendar.cellLabel(date), label)
+            assertEquals(LunarCalendar.festival(date) != null, isFestival)
+            date = date.plusDays(1)
+        }
+    }
 }

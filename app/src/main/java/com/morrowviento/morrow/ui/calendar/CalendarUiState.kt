@@ -1,5 +1,6 @@
 package com.morrowviento.morrow.ui.calendar
 
+import androidx.compose.runtime.Immutable
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.RepeatType
 import com.morrowviento.morrow.domain.time.CalendarMath
@@ -20,6 +21,7 @@ enum class CalendarView(val label: String) {
  * 三种视图共用一个 [month] 作为锚点：切到年视图看的是该年，切到列表看的是该年，
  * 点年视图里的某个月再回到月视图也只需改 [month]。避免为每个视图各存一个位置后互不同步。
  */
+@Immutable
 data class CalendarNav(
     val view: CalendarView = CalendarView.MONTH,
     val month: YearMonth,
@@ -44,6 +46,7 @@ data class CalendarNav(
 }
 
 /** 月视图的一格。 */
+@Immutable
 data class CalendarCell(
     val date: LocalDate,
     /** 是否属于当前显示月份；相邻月的补位格为 false。 */
@@ -61,6 +64,7 @@ data class CalendarCell(
  * 卡片带「今日剩余时分秒」「进度」这类每秒变化且依赖 now 的字段，
  * 放进按天刷新的日历状态里会立即变味。日历行只需要「那一天是哪天、差几天」。
  */
+@Immutable
 data class CalendarEntry(
     val date: LocalDate,
     val id: String,
@@ -74,6 +78,7 @@ data class CalendarEntry(
 )
 
 /** 年视图的一个月。 */
+@Immutable
 data class MonthSummary(
     val month: YearMonth,
     val eventCount: Int,
@@ -82,11 +87,13 @@ data class MonthSummary(
 )
 
 /** 列表视图的一个月分组。 */
+@Immutable
 data class MonthGroup(
     val month: YearMonth,
     val entries: List<CalendarEntry>,
 )
 
+@Immutable
 data class CalendarUiState(
     val view: CalendarView = CalendarView.MONTH,
     val month: YearMonth = YearMonth.now(),
@@ -110,17 +117,93 @@ data class CalendarUiState(
 /**
  * 当前页 + 左右相邻页。
  *
- * 相邻页是为了让翻页动画**两页同时在屏上**：旧版是「当前页滑出去 → 换数据 → 新页从另一侧滑进来」，
- * 中间有一整屏空白（真机反馈「两个界面之间有一段空白动画间隔」）。现在滑到哪一页、哪一页就已经
- * 渲染在那里，空白期从结构上不存在。
+ * 相邻页原本是为翻页动画准备的（两页同时在屏上，中间不出空白）。翻页实现改成
+ * 「松手即切页、屏上永远只有一个内容来源」之后，**相邻页已经不再被渲染**，
+ * 界面只用到「能不能继续翻」（[canPrev] / [canNext]）。
  *
- * [prev] / [next] 在边界（已到农历年表尽头）为 null，调用方据此不做翻页动画，直接回弹。
+ * 所以这里把相邻页改成**惰性**：`canPrev` / `canNext` 由 [CalendarNav.clamp] 直接判断
+ * （纯月份比较），邻页的 42 格、农历副标题只有真去读 `prev` / `next` 时才构建。
+ * 之前每次数据变化都要多算两整页——日历一屏的农历换算是它的主要成本。
+ *
+ * 仍然保留 `prev` / `next` 的实体：将来若重新引入带位移的翻页动画，直接读它们即可。
  */
-data class CalendarStrip(
+class CalendarStrip private constructor(
     val current: CalendarUiState,
-    val prev: CalendarUiState? = null,
-    val next: CalendarUiState? = null,
-)
+    private val events: List<CountdownEvent>,
+    private val nav: CalendarNav,
+    private val today: LocalDate,
+    /** 还能不能往左 / 往右翻；到农历年表边界时为 false。 */
+    val canPrev: Boolean,
+    val canNext: Boolean,
+) {
+    val prev: CalendarUiState? by lazy(LazyThreadSafetyMode.NONE) {
+        neighbor(-1)
+    }
+
+    val next: CalendarUiState? by lazy(LazyThreadSafetyMode.NONE) {
+        neighbor(1)
+    }
+
+    private fun neighbor(delta: Long): CalendarUiState? {
+        if ((delta < 0 && !canPrev) || (delta > 0 && !canNext)) return null
+        val target = if (nav.view == CalendarView.MONTH) {
+            nav.month.plusMonths(delta)
+        } else {
+            nav.month.plusYears(delta)
+        }
+        // 翻页会清空选区（见 EventViewModel.shiftCalendarMonth），相邻页保持一致
+        return CalendarPresentation.build(
+            events,
+            nav.copy(month = CalendarNav.clamp(target), selected = null),
+            today,
+        )
+    }
+
+    /** 只在当前页上比较：邻页是惰性的，不该为了判等把两页都算出来。 */
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            (other is CalendarStrip && other.current == current && other.canPrev == canPrev && other.canNext == canNext)
+
+    override fun hashCode(): Int = 31 * current.hashCode() + (if (canPrev) 1 else 0) * 2 + (if (canNext) 1 else 0)
+
+    override fun toString(): String =
+        "CalendarStrip(view=${current.view}, month=${current.month}, canPrev=$canPrev, canNext=$canNext)"
+
+    companion object {
+        fun of(
+            events: List<CountdownEvent>,
+            nav: CalendarNav,
+            today: LocalDate,
+        ): CalendarStrip = CalendarStrip(
+            current = CalendarPresentation.build(events, nav, today),
+            events = events,
+            nav = nav,
+            today = today,
+            canPrev = neighborExists(nav, -1),
+            canNext = neighborExists(nav, 1),
+        )
+
+        /** 只包一层「还没有数据 / 读取出错」的壳：不建 42 格，也不建邻页。 */
+        fun shell(state: CalendarUiState): CalendarStrip = CalendarStrip(
+            current = state,
+            events = emptyList(),
+            nav = CalendarNav.initial(state.today),
+            today = state.today,
+            canPrev = false,
+            canNext = false,
+        )
+
+        /** 边界判定与 [CalendarPresentation.build] 无关，只看月份有没有被夹住。 */
+        private fun neighborExists(nav: CalendarNav, delta: Long): Boolean {
+            val target = if (nav.view == CalendarView.MONTH) {
+                nav.month.plusMonths(delta)
+            } else {
+                nav.month.plusYears(delta)
+            }
+            return CalendarNav.clamp(target) != nav.month
+        }
+    }
+}
 
 /**
  * 日历展示逻辑（纯函数，无 Android 依赖）。
@@ -170,35 +253,13 @@ object CalendarPresentation {
         }
 
     /**
-     * 当前页 + 相邻页。
+     * 当前页（+ 惰性相邻页）。
      *
-     * 相邻页只在翻页动画期间被渲染；代价是每次数据变化多算两页（月视图 42 格 × 2），
-     * 换来的是滑动时屏上始终有内容——比省这点计算量重要。
+     * 相邻页只在真被读取时才构建，界面现在只读 [CalendarStrip.canPrev] / [CalendarStrip.canNext]，
+     * 所以一次数据变化只算一页 42 格，而不是三页。
      */
     fun strip(events: List<CountdownEvent>, nav: CalendarNav, today: LocalDate): CalendarStrip =
-        CalendarStrip(
-            current = build(events, nav, today),
-            prev = neighbor(events, nav, today, -1),
-            next = neighbor(events, nav, today, 1),
-        )
-
-    /** 相邻页；已到边界（clamp 后还是本月/今年）返回 null，调用方据此回弹而不是空翻一页。 */
-    private fun neighbor(
-        events: List<CountdownEvent>,
-        nav: CalendarNav,
-        today: LocalDate,
-        delta: Long,
-    ): CalendarUiState? {
-        val target = if (nav.view == CalendarView.MONTH) {
-            nav.month.plusMonths(delta)
-        } else {
-            nav.month.plusYears(delta)
-        }
-        val clamped = CalendarNav.clamp(target)
-        if (clamped == nav.month) return null
-        // 翻页会清空选区（见 EventViewModel.shiftCalendarMonth），相邻页保持一致
-        return build(events, nav.copy(month = clamped, selected = null), today)
-    }
+        CalendarStrip.of(events, nav, today)
 
     private fun buildMonth(
         events: List<CountdownEvent>,
@@ -213,14 +274,17 @@ object CalendarPresentation {
         val marks = months.associateWith { marksOf(events, it) }
 
         val cells = dates.map { date ->
+            val thisMonth = YearMonth.from(date)
+            // 农历只换算一次：副标题与「是否节日」来自同一份 LunarDate
+            val (lunarLabel, isFestival) = LunarCalendar.cell(date)
             CalendarCell(
                 date = date,
-                inMonth = YearMonth.from(date) == nav.month,
+                inMonth = thisMonth == nav.month,
                 isToday = date == today,
                 isSelected = date == selected,
-                lunarLabel = LunarCalendar.cellLabel(date).orEmpty(),
-                isFestival = LunarCalendar.festival(date) != null,
-                eventCount = marks[YearMonth.from(date)]?.get(date).orEmpty().size,
+                lunarLabel = lunarLabel.orEmpty(),
+                isFestival = isFestival,
+                eventCount = marks[thisMonth]?.get(date).orEmpty().size,
             )
         }
         val selectedEntries = if (selected == null) {

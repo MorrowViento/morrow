@@ -101,35 +101,3 @@ fun GlassPage(
         content()
     }
 }
-
-/**
- * 横向翻页（日历月 / 年切换）：方向感知的横向位移 + 淡入。
- *
- * 与 [GlassPage] 同一套弹簧，只是距离短（整宽的 20%），观感是「内容被拨过去」而不是「换页」。
- * [target] 用单调递增的序号（例如「年 × 12 + 月」），据此判断往前还是往后翻。
- */
-@Composable
-fun GlassPageFlip(
-    target: Int,
-    modifier: Modifier = Modifier,
-    reduceMotion: Boolean = LocalReduceMotion.current,
-    content: @Composable (Int) -> Unit,
-) {
-    val spec = GlassMotion.navigationSlide
-    AnimatedContent(
-        targetState = target,
-        modifier = modifier,
-        transitionSpec = {
-            val sign = if (targetState > initialState) 1 else -1
-            if (reduceMotion) {
-                fadeIn(tween(0)) togetherWith fadeOut(tween(0))
-            } else {
-                (slideInHorizontally(spec) { full -> full / 5 * sign } + fadeIn(GlassMotion.enterFade)) togetherWith
-                    (slideOutHorizontally(spec) { full -> -full / 5 * sign } + fadeOut(GlassMotion.enterFade))
-            }
-        },
-        label = "pageFlip",
-    ) { state ->
-        content(state)
-    }
-}

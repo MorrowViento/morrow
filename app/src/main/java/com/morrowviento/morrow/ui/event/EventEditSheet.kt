@@ -181,8 +181,10 @@ fun EventEditSheet(
 
 @Composable
 private fun QuickDateRow(onPick: (java.time.LocalDate) -> Unit) {
+    // 「今天 / 明天 / 下周 / 一个月后」四个候选日期只依赖当天，面板生命周期内算一次即可
+    val quickDates = remember { EventFormState.quickDates() }
     ChipRow {
-        EventFormState.quickDates().forEach { (label, date) ->
+        quickDates.forEach { (label, date) ->
             ChoiceChip(label, false) { onPick(date) }
         }
     }

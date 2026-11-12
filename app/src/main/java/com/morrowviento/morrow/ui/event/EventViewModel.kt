@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -84,13 +85,38 @@ class EventViewModel(
         }
     }
 
-    /** 每秒一发的时间源；只在有订阅者时跑（见 stateIn 的 WhileSubscribed）。 */
+    /**
+     * 每秒一发的时间源；只在有订阅者时跑（见 stateIn 的 WhileSubscribed）。
+     *
+     * 保守地保持 1 秒：真正让这条路变轻的是下面的 [CardsSnapshot]——
+     * 同一秒里没有实质变化时它整批复用旧实例，于是既没有对象分配，
+     * `HomeUiState` 也与上一帧相等、StateFlow 不再向下游发值（Compose 整页跳过）。
+     * 换成「闲时 15 秒一拍」看着更省电，代价是刚建完当天事件要等一拍才开始跳秒，
+     * 反而像个卡住的界面。
+     */
     private val ticker: Flow<LocalDateTime> = flow {
         while (currentCoroutineContext().isActive) {
             emit(LocalDateTime.now())
             delay(1_000L)
         }
     }
+
+    /**
+     * 上一次算出的卡片列表。`events` 用**引用**比较：Room 每次查询都会给出新 List，
+     * 只要还是同一个实例，内容就没变，可以整批复用。
+     *
+     * 复用时只重算今天那几张卡片的 `remainingToday`——它是唯一真正需要秒级刷新的字段；
+     * 进度环也被量化过（见 [EventPresentation.progressOf]），不会每秒变一次。
+     */
+    private class CardsSnapshot(
+        val events: List<CountdownEvent>,
+        val mode: SortMode,
+        val today: LocalDate,
+        val active: List<EventCardModel>,
+        val completed: List<EventCardModel>,
+    )
+
+    private var snapshot: CardsSnapshot? = null
 
     val state: StateFlow<HomeUiState> = combine(
         events.observeAll(),
@@ -101,20 +127,42 @@ class EventViewModel(
     ) { list, sortPref, expanded, pending, now ->
         val mode = SortMode.fromPref(sortPref)
         val today = now.toLocalDate()
-        val (active, completed) = EventPresentation.partition(list, mode, today, now)
         val nowMillis = System.currentTimeMillis()
+
+        val cached = snapshot
+        val cards = if (cached != null && cached.events === list && cached.mode == mode && cached.today == today) {
+            // 同一份数据、同一排序、同一天：只把「今日剩余」推进一秒。
+            // 两份列表都没变时连快照对象也不新建（一秒一个对象的垃圾也省了）。
+            val active = cached.active.refreshClock(today, now)
+            val completed = cached.completed.refreshClock(today, now)
+            if (active === cached.active && completed === cached.completed) {
+                cached
+            } else {
+                CardsSnapshot(list, mode, today, active, completed)
+            }
+        } else {
+            val (active, completed) = EventPresentation.partition(list, mode, today, now)
+            CardsSnapshot(list, mode, today, active, completed)
+        }
+        snapshot = cards
+
+        val undoState = pending
+            ?.takeIf { !it.isExpired(nowMillis) }
+            ?.let { UndoUiState(message = it.message, remainingSeconds = it.remainingSeconds(nowMillis)) }
+
         HomeUiState(
-            active = active,
-            completed = completed,
+            active = cards.active,
+            completed = cards.completed,
             completedExpanded = expanded,
             sortMode = mode,
             isLoading = false,
-            undo = pending
-                ?.takeIf { !it.isExpired(nowMillis) }
-                ?.let { UndoUiState(message = it.message, remainingSeconds = it.remainingSeconds(nowMillis)) },
+            undo = undoState,
         )
     }
         .catch { emit(HomeUiState(isLoading = false, error = it.message ?: "读取事件失败")) }
+        // 映射 + 排序一律离开主线程：每秒一次的重算即使只有几十微秒，
+        // 也不该和绘制挤在同一帧里（stateIn 默认在主线程上游收集）
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     fun toggleCompletedSection() {
@@ -137,9 +185,10 @@ class EventViewModel(
     }.distinctUntilChanged()
 
     /**
-     * 当前页 + 相邻页一起产出：翻页动画期间两页同时渲染，屏上不会出现空白帧。
+     * 当前页（相邻页惰性）：界面只用 `canPrev` / `canNext`，不再需要预先算两页。
      *
-     * 只有一个 Flow，相邻页不额外订阅 Room——否则 events.observeAll() 会被 collect 三次。
+     * 只有一个 Flow，日历不额外订阅 Room——否则 events.observeAll() 会被 collect 多次。
+     * 42 格的农历换算与事件落点放到后台线程算，翻月时不会卡住手势。
      */
     val calendarStrip: StateFlow<CalendarStrip> = combine(
         events.observeAll(),
@@ -148,11 +197,12 @@ class EventViewModel(
     ) { list, nav, today ->
         CalendarPresentation.strip(list, nav, today)
     }
-        .catch { emit(CalendarStrip(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败"))) }
+        .catch { emit(CalendarStrip.shell(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败"))) }
+        .flowOn(Dispatchers.Default)
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
-            CalendarStrip(CalendarUiState(isLoading = true)),
+            CalendarStrip.shell(CalendarUiState(isLoading = true)),
         )
 
     fun setCalendarView(view: CalendarView) {
@@ -297,8 +347,28 @@ class EventViewModel(
         )
     }
 
+    /**
+     * 只推进「今日剩余」这一列，其余卡片原样返回。
+     *
+     * 没有卡片需要变时返回**同一个实例**：这样 `HomeUiState` 与上一帧相等，
+     * `StateFlow` 不会向下游发值，Compose 也就整页跳过重组。
+     */
+    private fun List<EventCardModel>.refreshClock(today: LocalDate, now: LocalDateTime): List<EventCardModel> {
+        var patched: MutableList<EventCardModel>? = null
+        for (index in indices) {
+            val card = this[index]
+            if (card.isAllDay || card.target.toLocalDate() != today) continue
+            val next = EventPresentation.remainingTodayOf(card.target, false, today, now)
+            if (next == card.remainingToday) continue
+            if (patched == null) patched = toMutableList()
+            patched[index] = card.copy(remainingToday = next)
+        }
+        return patched ?: this
+    }
+
     companion object {
         private const val TAG = "MorrowEventVM"
+
 
         fun factory(
             events: EventRepository,

@@ -37,6 +37,20 @@ object StartupTrace {
     @Volatile
     private var dir: File? = null
 
+    /**
+     * 启动日志的常开写入器。
+     *
+     * 原来每写一行都是 `appendText`：open + write + close 三次系统调用，冷启动光
+     * Application.onCreate 就有五步（install / database / repositories / reminder /
+     * widget+backup），加上 Activity 的两步，等于在主线程上开了七八次文件。
+     * 现在一次打开、逐行 flush：每次只剩一次 write，数据同样立刻进内核页缓存，
+     * **native 崩溃（SIGSEGV）也能留在文件里**——这正是当初要求「每步立即落盘」的原因。
+     */
+    private var sink: java.io.BufferedWriter? = null
+
+    /** 本次会话已写入的字节数，超过 [MAX_BYTES] 就重开（与旧行为一致）。 */
+    private var written = 0L
+
     /** 诊断目录（对用户可见）；为空表示不落盘——正式包或落盘不可用时都为空。 */
     fun directory(): File? = dir
 
@@ -65,15 +79,35 @@ object StartupTrace {
             "debug=$debuggable")
     }
 
-    /** 记录一行启动轨迹：同时进 logcat 与 startup.log，且立刻 flush。 */
+    /**
+     * 记录一行启动轨迹：同时进 logcat 与 startup.log，且立刻 flush。
+     *
+     * 写入器常开（见 [sink]）：冷启动期间这行代码会走七八次，每次重开文件
+     * 是主线程上白白多出来的 I/O。
+     */
     fun mark(scope: String, message: String) {
         Log.i(TAG, "[$scope] $message")
         val target = dir ?: return
         runCatching {
-            val file = File(target, "startup.log")
-            if (file.length() > MAX_BYTES) file.delete()
-            file.appendText("${timestamp()} [$scope] $message\n")
+            val line = "${timestamp()} [$scope] $message\n"
+            if (sink == null || written > MAX_BYTES) reopen(target)
+            val out = sink ?: return
+            out.write(line)
+            out.flush()
+            written += line.length
+        }.onFailure {
+            // 写日志失败不该影响任何业务流程，丢掉这次写入即可
+            runCatching { sink?.close() }
+            sink = null
         }
+    }
+
+    private fun reopen(target: File) {
+        runCatching { sink?.close() }
+        val file = File(target, "startup.log")
+        if (file.length() > MAX_BYTES) file.delete()
+        sink = file.bufferedWriter()
+        written = 0L
     }
 
     /** 把异常记进轨迹但不中断流程：用于「这一步失败也不该拖垮启动」的可选步骤。 */
@@ -99,6 +133,8 @@ object StartupTrace {
 
     private fun writeCrash(app: Context, thread: Thread, error: Throwable) {
         val target = dir ?: return
+        // 崩溃前先把常开写入器里的内容落到磁盘，否则 tail 那一段可能缺最后几行
+        runCatching { sink?.flush() }
         val text = buildString {
             appendLine("time    : ${timestamp()}")
             appendLine("thread  : ${thread.name}")

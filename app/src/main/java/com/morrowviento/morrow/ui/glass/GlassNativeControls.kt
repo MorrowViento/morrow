@@ -6,9 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.neoruaa.glasmio.scaffold.GlasmioOverscrollHost
-import io.github.neoruaa.glasmio.ui.GlasmioAdaptiveSlider
 import io.github.neoruaa.glasmio.ui.GlasmioSegmentedControl
-import io.github.neoruaa.glasmio.ui.GlasmioSwitch
 
 /**
  * 分段控件（Glasmio `GlasmioSegmentedControl`）。
@@ -43,57 +41,6 @@ fun <T> GlassSegmentedControl(
         enabled = enabled,
         deferSelection = deferSelection,
         itemContent = itemContent,
-    )
-}
-
-/**
- * 系统样式的玻璃开关（Glasmio `GlasmioSwitch`）。
- *
- * 替换掉设置页自绘的「圆角轨道 + 小圆点 + tween(150)」：库的实现是 iOS 的
- * 胶囊轨道（开态用系统绿）、带按压缩放与透镜折射，关闭「减弱动效」时也会自己降级。
- */
-@Composable
-fun GlassSwitch(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    GlasmioSwitch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        modifier = modifier,
-        enabled = enabled,
-    )
-}
-
-/**
- * 连续滑块（Glasmio `GlasmioAdaptiveSlider`）。
- *
- * iOS 26 那种「按下去整条轨道展开成三段刻度、拖动时跟手、松手弹回胶囊」的滑块，
- * 数值是 0~1 的浮点，正好用来做连续调节。
- *
- * 用它而不是 Material3 的 `Slider`：后者的拇指、轨道、涟漪都是 Material 形状，
- * 和玻璃材质放一起会像两套系统拼起来；库的滑块自带透镜与按压高光。
- *
- * @param labels 必须**正好三段**（库内 `require`），对应 0 / 50 / 100% 三处刻度说明。
- */
-@Composable
-fun GlassSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-    onValueChangeFinished: (() -> Unit)? = null,
-    enabled: Boolean = true,
-    labels: List<String> = listOf("通透", "标准", "厚重"),
-) {
-    GlasmioAdaptiveSlider(
-        value = value.coerceIn(0f, 1f),
-        onValueChange = { onValueChange(it.coerceIn(0f, 1f)) },
-        modifier = modifier,
-        enabled = enabled,
-        onValueChangeFinished = onValueChangeFinished,
-        labels = labels,
     )
 }
 

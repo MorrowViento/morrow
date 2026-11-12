@@ -176,7 +176,7 @@ fun SettingsScreen(
                                 // 图标版分段控件（示例里的 Icon Segmented Control）：选中块的
                                 // 指示器是透镜材质，按下去几乎全透明、边缘把旁边图标折射变形
                                 GlassSegmentedControl(
-                                    items = ThemeMode.entries.map { it to it.label },
+                                    items = ThemeItems,
                                     selected = state.settings.themeMode,
                                     onSelected = actions.setTheme,
                                     modifier = Modifier.fillMaxWidth(),
@@ -195,7 +195,7 @@ fun SettingsScreen(
                                 // 图标版分段控件：四格各画一个圆环——虚线越疏越通透、
                                 // 实线越粗越厚重。库的指示器是透镜材质，按下时把相邻两格折射挤歪。
                                 GlassSegmentedControl(
-                                    items = GlassFrostLevel.entries.map { it to it.label },
+                                    items = FrostItems,
                                     selected = state.frostLevel,
                                     onSelected = actions.setGlassFrostLevel,
                                     modifier = Modifier.fillMaxWidth(),
@@ -218,7 +218,7 @@ fun SettingsScreen(
                                 },
                             ) {
                                 GlassSegmentedControl(
-                                    items = listOf(false to "完整", true to "减弱"),
+                                    items = MotionItems,
                                     selected = state.settings.reduceMotion,
                                     onSelected = actions.setReduceMotion,
                                     modifier = Modifier.fillMaxWidth(),
@@ -350,14 +350,19 @@ fun SettingsScreen(
         }
 
         if (state.update.visible) {
-            UpdateSheet(
-                state = state.update,
-                actions = UpdateActions(
+            // 回调集合只随 actions 变化：更新面板可见时每帧都新建一个对象，
+            // 会让整个弹层的参数一直判为「变了」
+            val updateActions = remember(actions) {
+                UpdateActions(
                     check = actions.checkUpdate,
                     download = actions.downloadUpdate,
                     install = actions.installUpdate,
                     dismiss = actions.dismissUpdate,
-                ),
+                )
+            }
+            UpdateSheet(
+                state = state.update,
+                actions = updateActions,
             )
         }
     }
@@ -724,21 +729,33 @@ private fun ConfirmClearDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     )
 }
 
+/**
+ * 三个分段控件的选项。
+ *
+ * 常量的意义不只是省一次 `map`：`GlassSegmentedControl` 把 items 当参数比较，
+ * 每帧换一个新 List 会让它一直认为选项变了，指示器随之重算位置。
+ */
+private val ThemeItems: List<Pair<ThemeMode, String>> = ThemeMode.entries.map { it to it.label }
+private val FrostItems: List<Pair<GlassFrostLevel, String>> = GlassFrostLevel.entries.map { it to it.label }
+private val MotionItems: List<Pair<Boolean, String>> = listOf(false to "完整", true to "减弱")
+
+/** 开源许可清单：常量，不必在每次打开弹层时重建一遍列表。 */
+private val LicenseEntries: List<Pair<String, String>> = listOf(
+    "Glasmio" to "Liquid Glass 材质与组件，MIT",
+    "AndroidX / Jetpack Compose" to "Apache License 2.0",
+    "Room / DataStore" to "Apache License 2.0",
+    "Gson" to "Apache License 2.0",
+)
+
 @Composable
 private fun LicensesSheet(onDismiss: () -> Unit) {
-    val entries = listOf(
-        "Glasmio" to "Liquid Glass 材质与组件，MIT",
-        "AndroidX / Jetpack Compose" to "Apache License 2.0",
-        "Room / DataStore" to "Apache License 2.0",
-        "Gson" to "Apache License 2.0",
-    )
     GlassSheet(title = "开源许可", onDismiss = onDismiss, fitContent = true) { dismiss ->
         Column(
             Modifier
                 .padding(horizontal = 18.dp, vertical = 8.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            entries.forEach { (name, license) ->
+            LicenseEntries.forEach { (name, license) ->
                 Text(
                     text = name,
                     style = TextStyle(fontSize = 13.sp, color = glassTextPrimary()),
