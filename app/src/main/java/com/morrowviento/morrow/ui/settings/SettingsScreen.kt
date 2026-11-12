@@ -62,7 +62,6 @@ import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassSheet
-import com.morrowviento.morrow.ui.glass.GlassSwitch
 import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -201,12 +200,25 @@ fun SettingsScreen(
                                 )
                             }
                             Divider()
-                            SwitchRow(
-                                title = "减弱动效",
-                                summary = "关闭页面切换的淡入淡出，只保留即时切换",
-                                checked = state.settings.reduceMotion,
-                                onCheckedChange = actions.setReduceMotion,
-                            )
+                            // 布尔项也是两段分段控件（完整 / 减弱），而不是系统绿开关：
+                            // 同一张卡里混着「分段控件 + 绿胶囊」时，绿色是整页唯一的强调色，
+                            // 比玻璃本身还抢眼，和新的中性配色也不搭
+                            SettingBlock(
+                                label = "动效",
+                                hint = if (state.settings.reduceMotion) {
+                                    "只保留即时切换，不做淡入淡出与页面推入"
+                                } else {
+                                    "页面切换、弹层、撤销条都走 iOS 的弹簧曲线"
+                                },
+                            ) {
+                                GlassSegmentedControl(
+                                    items = listOf(false to "完整", true to "减弱"),
+                                    selected = state.settings.reduceMotion,
+                                    onSelected = actions.setReduceMotion,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    height = 34.dp,
+                                )
+                            }
                         }
                     }
 
@@ -440,23 +452,6 @@ private fun SettingBlock(
                 style = TextStyle(fontSize = 11.sp, lineHeight = 15.sp, color = glassTextSecondary()),
             )
         }
-    }
-}
-
-/** 开关行。说明文字限制两行，超出才省略（以前是一行就截断）。 */
-@Composable
-private fun SwitchRow(
-    title: String,
-    summary: String? = null,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    SettingRow(
-        title = title,
-        summary = summary,
-        onClick = { onCheckedChange(!checked) },
-    ) {
-        GlassSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
