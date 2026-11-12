@@ -52,6 +52,8 @@ import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.LocalReduceMotion
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
+import com.jiuxina.ying.ui.update.UpdateActions
+import com.jiuxina.ying.ui.update.UpdateSheet
 import com.jiuxina.ying.widget.WidgetEntries
 import kotlinx.coroutines.delay
 
@@ -237,6 +239,14 @@ fun SettingsScreen(
                             onClick = null,
                         )
                         Divider()
+                        ActionRow(
+                            title = "检查更新",
+                            summary = "从 GitHub Releases 与镜像源比对版本，可在应用内下载安装",
+                            value = if (state.update.busy) "进行中" else "检查",
+                            enabled = !state.update.busy,
+                            onClick = actions.checkUpdate,
+                        )
+                        Divider()
                         ActionRow(title = "开源许可", onClick = actions.showLicenses)
                         Divider()
                         ActionRow(
@@ -285,6 +295,18 @@ fun SettingsScreen(
 
         state.message?.let { message ->
             MessageBar(message = message, onDismiss = actions.consumeMessage)
+        }
+
+        if (state.update.visible) {
+            UpdateSheet(
+                state = state.update,
+                actions = UpdateActions(
+                    check = actions.checkUpdate,
+                    download = actions.downloadUpdate,
+                    install = actions.installUpdate,
+                    dismiss = actions.dismissUpdate,
+                ),
+            )
         }
     }
 }

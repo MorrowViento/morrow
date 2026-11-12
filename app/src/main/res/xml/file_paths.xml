@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  只暴露下载更新用的 cache/updates/ 目录，不开放整个 cache。
+  ACTION_VIEW 兜底安装时由 FileProvider 生成 content:// Uri。
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

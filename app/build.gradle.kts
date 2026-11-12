@@ -5,6 +5,14 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// M7：可选的更新镜像前缀与正式签名，全部由外部注入，仓库里不放任何密钥。
+// gradle.properties 里写 ying.updateMirrors=https://mirror-a/;https://mirror-b/ 即可启用镜像。
+val updateMirrors: String = (project.findProperty("ying.updateMirrors") as? String).orEmpty()
+val abiSplitEnabled: Boolean =
+    (project.findProperty("ying.abiSplit") as? String)?.toBooleanStrictOrNull() ?: false
+val releaseKeystore: String = System.getenv("YING_KEYSTORE")
+    ?: (project.findProperty("ying.keystore") as? String).orEmpty()
+
 android {
     namespace = "com.jiuxina.ying"
     compileSdk = 37
@@ -18,12 +26,46 @@ android {
         versionCode = 40
         versionName = "4.0.0-alpha1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 镜像前缀写进 BuildConfig，避免把第三方代理域名硬编码进代码（这类域名寿命短）。
+        // 默认空 = 只走 GitHub API / jsDelivr / raw 三路直连。
+        buildConfigField(
+            "String",
+            "UPDATE_MIRROR_PREFIXES",
+            "\"${updateMirrors.replace("\"", "").replace("\\", "")}\"",
+        )
+    }
+
+    signingConfigs {
+        if (releaseKeystore.isNotBlank()) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("YING_KEYSTORE_PASSWORD").orEmpty()
+                keyAlias = System.getenv("YING_KEY_ALIAS").orEmpty()
+                keyPassword = System.getenv("YING_KEY_PASSWORD").orEmpty()
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // 没有注入 keystore 时保持未签名的 release，本地/CI 的 debug 构建完全不受影响
+            if (releaseKeystore.isNotBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+
+    // 分 ABI 打包只在显式开启时生效（-Pying.abiSplit=true）。
+    // 默认关闭是为了让日常 assembleDebug 只产出一个 APK；真机安装与交付都按单包走。
+    splits {
+        abi {
+            isEnable = abiSplitEnabled
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
         }
     }
 
@@ -32,11 +74,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     lint {
-        // M0 阶段放宽，M7 发布前收紧为 true（对齐 Glasmio 官方工程）
-        abortOnError = false
+        // M7：发布前收紧。当前基线是 0 errors / 11 warnings，warnings 不阻断构建。
+        abortOnError = true
     }
 
     testOptions {

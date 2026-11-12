@@ -2,6 +2,8 @@ package com.jiuxina.ying.ui.settings
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import java.io.File
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -17,6 +19,12 @@ import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.settings.ThemeMode
 import com.jiuxina.ying.data.widget.WidgetRefreshTrigger
 import com.jiuxina.ying.domain.model.CountdownEvent
+import com.jiuxina.ying.service.update.ApkDownloader
+import com.jiuxina.ying.service.update.ApkInstaller
+import com.jiuxina.ying.service.update.UpdatePolicy
+import com.jiuxina.ying.service.update.UpdateRepository
+import com.jiuxina.ying.ui.update.UpdateStage
+import com.jiuxina.ying.ui.update.UpdateUiState
 import com.jiuxina.ying.widget.WidgetConfigStore
 import com.jiuxina.ying.widget.WidgetEntries
 import kotlinx.coroutines.Dispatchers
@@ -171,6 +179,109 @@ class SettingsViewModel(
     fun openNotificationSettings() = permissions.openNotificationSettings()
 
     fun openExactAlarmSettings() = permissions.openExactAlarmSettings()
+
+    // ---- M7 应用内更新 ----
+
+    private val updateRepository = UpdateRepository()
+    private val apkDownloader = ApkDownloader(appContext)
+    private var downloadedApk: File? = null
+
+    /**
+     * 检查更新：多线路并发探测，取版本号最大的一份。
+     *
+     * 手动触发而不是冷启动自动跑：更新检查要联网、有耗时，静默失败只会变成
+     * 「偶尔弹个错误」；放在设置页由用户主动发起，失败原因也能直接看到。
+     */
+    fun checkUpdate() {
+        if (local.value.update.busy) return
+        val versionLabel = local.value.appVersion
+        local.update {
+            it.copy(update = UpdateUiState(stage = UpdateStage.CHECKING), message = null)
+        }
+        viewModelScope.launch {
+            val result = runCatching { updateRepository.check() }.getOrNull()
+            val release = result?.release
+            val abis = Build.SUPPORTED_ABIS.toList()
+            val localCode = localVersionCode()
+            when {
+                release == null -> failUpdate("检查更新失败，请检查网络后重试")
+                !UpdatePolicy.isUpdateAvailable(release, localCode, abis) -> local.update {
+                    it.copy(
+                        update = UpdateUiState(),
+                        message = "已是最新版本${if (versionLabel.isBlank()) "" else "（$versionLabel）"}",
+                    )
+                }
+                else -> local.update {
+                    it.copy(
+                        update = UpdateUiState(
+                            stage = UpdateStage.AVAILABLE,
+                            release = release,
+                            asset = UpdatePolicy.selectAsset(release.assets, abis),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val asset = local.value.update.asset ?: return
+        if (local.value.update.busy) return
+        local.update {
+            it.copy(
+                update = it.update.copy(
+                    stage = UpdateStage.DOWNLOADING,
+                    doneBytes = 0L,
+                    totalBytes = asset.size,
+                    message = null,
+                ),
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val file = apkDownloader.download(asset) { done, total ->
+                    // 回调在 IO 线程，StateFlow.update 本身是线程安全的
+                    local.update { current ->
+                        current.copy(update = current.update.copy(doneBytes = done, totalBytes = total))
+                    }
+                }
+                downloadedApk = file
+                local.update { it.copy(update = it.update.copy(stage = UpdateStage.READY)) }
+            } catch (t: Throwable) {
+                failUpdate("下载失败：${t.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val apk = downloadedApk
+        if (apk == null || !apk.isFile) {
+            failUpdate("安装包已失效，请重新下载")
+            return
+        }
+        local.update { it.copy(update = it.update.copy(stage = UpdateStage.INSTALLING)) }
+        viewModelScope.launch {
+            // 会话安装要把整个 APK 写进 PackageInstaller 的 session，绝不能在主线程做
+            val ok = withContext(Dispatchers.IO) { ApkInstaller.install(appContext, apk) }
+            if (!ok) {
+                failUpdate("没能启动安装，请稍后重试或用系统安装器打开 ${apk.name}")
+            }
+            // 成功提交后系统还会弹一次确认；面板保留，用户可自行关掉
+        }
+    }
+
+    fun dismissUpdate() = local.update { it.copy(update = UpdateUiState()) }
+
+    private fun failUpdate(reason: String) {
+        local.update {
+            it.copy(update = it.update.copy(stage = UpdateStage.FAILED, message = reason))
+        }
+    }
+
+    /** 读不到本机版本时返回极大值：宁可判「已是最新」，也不能把旧包当新版本反复提示。 */
+    private fun localVersionCode(): Int = runCatching {
+        appContext.packageManager.getPackageInfo(appContext.packageName, 0).longVersionCode.toInt()
+    }.getOrDefault(Int.MAX_VALUE)
 
     // ---- 内部 ----
 

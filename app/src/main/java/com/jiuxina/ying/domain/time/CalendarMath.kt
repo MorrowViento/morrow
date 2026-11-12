@@ -31,4 +31,24 @@ object CalendarMath {
         val maxDay = java.time.YearMonth.of(year, month).lengthOfMonth()
         return LocalDate.of(year, month, day.coerceIn(1, maxDay))
     }
+
+    // ---------------------------------------------------------------- 日期滚轮的年份范围
+
+    /**
+     * 新建/编辑事件时可选的年份。
+     *
+     * 与农历年表、日历页翻页边界共用 [LunarCalendar.MIN_YEAR]..[LunarCalendar.MAX_YEAR]：
+     * 早于此范围的事件在日历里翻不到、农历也查不出来，滚轮给出来只会让用户建一个
+     * 「看不见」的事件。旧版写死「去年..今年+20」（2026 年时最早只能选 2025），
+     * 纪念类倒数日（出生年、纪念日、历史日期）完全选不了。
+     */
+    val SELECTABLE_YEARS: List<Int> = (LunarCalendar.MIN_YEAR..LunarCalendar.MAX_YEAR).toList()
+
+    /** 年份 → 滚轮下标。旧数据越界时夹到最近的一端，不让 `indexOf` 返回 -1。 */
+    fun yearIndex(year: Int): Int =
+        (year - LunarCalendar.MIN_YEAR).coerceIn(0, SELECTABLE_YEARS.lastIndex)
+
+    /** 滚轮下标 → 年份。下标恒来自滚轮，仍做一次夹取防止越界日期。 */
+    fun yearAt(index: Int): Int =
+        SELECTABLE_YEARS.getOrNull(index) ?: LunarCalendar.MAX_YEAR
 }

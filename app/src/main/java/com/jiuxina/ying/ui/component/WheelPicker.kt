@@ -130,8 +130,9 @@ fun WheelDateTimePicker(
     modifier: Modifier = Modifier,
 ) {
     val primary = glassTextPrimary()
-    val thisYear = LocalDate.now().year
-    val years = (thisYear - 1..thisYear + 20).toList()
+    // 年份不再是「去年..今年+20」：与农历年表 / 日历页共用 1900–2100，
+    // 纪念类事件（出生年、历史日期）才选得到。见 CalendarMath.SELECTABLE_YEARS。
+    val years = CalendarMath.SELECTABLE_YEARS
     val months = (1..12).toList()
     val maxDay = YearMonth.of(date.year, date.monthValue).lengthOfMonth()
     val days = (1..maxDay).toList()
@@ -156,10 +157,14 @@ fun WheelDateTimePicker(
             ) {
                 WheelColumn(
                     values = years.map { "$it" },
-                    selectedIndex = years.indexOf(date.year).coerceAtLeast(0),
+                    selectedIndex = CalendarMath.yearIndex(date.year),
                     onSelect = { index ->
-                        val year = years.getOrNull(index) ?: date.year
-                        onDateChange(CalendarMath.dateClamped(year, date.monthValue, safeDay))
+                        val year = CalendarMath.yearAt(index)
+                        // 滚轮首次组合时 snapshotFlow 也会发一次当前下标；若旧数据年份在
+                        // 1900–2100 之外，这一下会把事件悄悄改写成边界年，所以只在真的变了才回写。
+                        if (year != date.year) {
+                            onDateChange(CalendarMath.dateClamped(year, date.monthValue, safeDay))
+                        }
                     },
                     modifier = Modifier.weight(1.3f),
                 )

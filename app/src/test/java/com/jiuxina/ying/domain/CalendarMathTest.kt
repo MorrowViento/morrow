@@ -4,6 +4,7 @@ import com.jiuxina.ying.domain.model.CountdownEvent
 import com.jiuxina.ying.domain.model.EventReminder
 import com.jiuxina.ying.domain.model.RepeatType
 import com.jiuxina.ying.domain.time.CalendarMath
+import com.jiuxina.ying.domain.time.LunarCalendar
 import com.jiuxina.ying.domain.time.RepeatRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -140,5 +141,38 @@ class CalendarMathTest {
         assertEquals("提前 2 小时", EventReminder.labelForMinutes(120))
         assertEquals("提前 3 天", EventReminder.labelForMinutes(4320))
         assertEquals("提前 90 分钟", EventReminder.labelForMinutes(90))
+    }
+
+    // ------------------------------------------------ 日期滚轮年份范围（真机反馈）
+
+    @Test
+    fun `滚轮年份覆盖 1900 到 2100 且与农历边界一致`() {
+        val years = CalendarMath.SELECTABLE_YEARS
+        assertEquals(LunarCalendar.MIN_YEAR, years.first())
+        assertEquals(LunarCalendar.MAX_YEAR, years.last())
+        assertEquals(201, years.size)
+        // 反馈里「只有 2025 年」：旧版最早是去年，纪念类年份必须能选
+        assertTrue(years.contains(1900))
+        assertTrue(years.contains(1949))
+        assertTrue(years.contains(1990))
+        assertTrue(years.contains(2025))
+        assertTrue(years.contains(2100))
+    }
+
+    @Test
+    fun `年份与下标互转且越界夹到两端`() {
+        assertEquals(0, CalendarMath.yearIndex(1900))
+        assertEquals(126, CalendarMath.yearIndex(2026))
+        assertEquals(200, CalendarMath.yearIndex(2100))
+        assertEquals(1900, CalendarMath.yearAt(CalendarMath.yearIndex(1899)))
+        assertEquals(2100, CalendarMath.yearAt(CalendarMath.yearIndex(2200)))
+        assertEquals(1900, CalendarMath.yearAt(0))
+        assertEquals(2026, CalendarMath.yearAt(126))
+    }
+
+    @Test
+    fun `很早的年份也能构造出有效日期`() {
+        assertEquals(LocalDate.of(1900, 2, 28), CalendarMath.dateClamped(1900, 2, 29))
+        assertEquals(LocalDate.of(2000, 2, 29), CalendarMath.dateClamped(2000, 2, 29))
     }
 }

@@ -4,6 +4,7 @@ import com.jiuxina.ying.data.backup.BackupDocument
 import com.jiuxina.ying.data.backup.ImportMode
 import com.jiuxina.ying.data.backup.ImportReport
 import com.jiuxina.ying.data.settings.AppSettings
+import com.jiuxina.ying.ui.update.UpdateUiState
 import com.jiuxina.ying.widget.PlacedWidget
 
 /** 解析成功、等待用户选择「覆盖 / 合并」的备份。 */
@@ -44,6 +45,8 @@ data class SettingsUiState(
     val showLicenses: Boolean = false,
     /** 一次性提示，展示后由 [SettingsActions.consumeMessage] 清掉。 */
     val message: String? = null,
+    /** M7：应用内更新检查 / 下载 / 安装的进度。 */
+    val update: UpdateUiState = UpdateUiState(),
 )
 
 data class SettingsActions(
@@ -64,6 +67,11 @@ data class SettingsActions(
     val consumeMessage: () -> Unit,
     val openNotificationSettings: () -> Unit,
     val openExactAlarmSettings: () -> Unit,
+    /** M7 应用内更新。 */
+    val checkUpdate: () -> Unit,
+    val downloadUpdate: () -> Unit,
+    val installUpdate: () -> Unit,
+    val dismissUpdate: () -> Unit,
 )
 
 /** 导入结果的用户可读摘要。 */

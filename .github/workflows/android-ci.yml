@@ -44,6 +44,10 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
+      # M7：CDN 清单是更新检查的镜像源之一，写坏 JSON 会让客户端静默少一路候选
+      - name: Validate update manifest
+        run: python3 -c 'import json; d=json.load(open("update/manifest.json")); assert d["tag_name"] and isinstance(d["assets"], list)'
+
       - name: Build & check (assembleDebug + unit test + lint)
         run: gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
 

@@ -2,6 +2,38 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 日期滚轮年份扩到 1900–2100；M7 应用内更新落地（第一批）
+
+- 真机反馈：M2a–M6 真机验收基本通过，进入下一阶段；同时报「新建事件日期只有 2025 年，需要更早、更大的范围」。
+- **① 年份范围**：`WheelPicker` 写死 `thisYear-1..thisYear+20`（2026 年时最早 2025），纪念类事件（出生年、历史日期）选不了。
+  改由 `CalendarMath.SELECTABLE_YEARS` 提供 1900–2100，与农历年表 `LunarCalendar.MIN_YEAR/MAX_YEAR`、
+  日历页翻页边界共用同一套——再放宽就会选出「日历里翻不到、农历查不出」的事件。
+  新增 `yearIndex/yearAt` 纯函数；顺带修掉首帧 `snapshotFlow` 会把越界旧数据悄悄改写成边界年的问题
+  （年份回调只在值真的变化时回写）。验收项 B6b 要求能选 1990 / 1949 / 1900 与 2100。
+- **② M7 第一批（应用内更新）**，零新增依赖：`HttpURLConnection` + 已有 Gson。
+  - 数据层 `service/update/`：`ReleaseJson`（GitHub Releases / 仓库清单共用解析器）、`UpdatePolicy`
+    （版本号解析、ABI 选包、多源取最新、断点续传起点、SHA-256 归一化、进度换算，全部纯函数）、
+    `UpdateEndpoints`（GitHub API + jsDelivr + raw 三路候选，镜像前缀由 `gradle.properties` 注入）、
+    `UpdateRepository`（并发探测）、`ApkDownloader`（Range 续传 + 换线路清分片 + 长度/摘要校验）、
+    `ApkInstaller`（PackageInstaller 会话优先，`ACTION_VIEW`+FileProvider 兜底）与
+    `UpdateInstallReceiver`（处理 `STATUS_PENDING_USER_ACTION`）。
+  - **版本判定取多源里版本号最大的一份，不是最快的一份**：CDN 清单可能有缓存，
+    只按速度选会把用户困在旧版本。测速决定的是下载线路与日志，不是有无更新。
+  - UI：设置 → 关于 → 「检查更新」，底部玻璃面板展示版本 / 更新说明 / 下载进度 / 安装按钮。
+    手动触发而非冷启动自动跑，避免静默失败变成随机报错。
+  - 工程：`INTERNET` + `REQUEST_INSTALL_PACKAGES` + FileProvider（`cache/updates/` 白名单）；
+    `BuildConfig.UPDATE_MIRROR_PREFIXES`；`lint.abortOnError = true`（基线 0 errors / 11 warnings，不阻断）；
+    release 签名由 `YING_KEYSTORE` 等环境变量注入、ABI 拆分由 `-Pying.abiSplit=true` 开启，
+    **默认都不启用**，日常 debug 仍是单 APK；仓库不落任何密钥。
+  - 新增 `update/manifest.json` 作为 CDN 镜像清单模板（形状与 Releases API 一致），发布 Release 时同步。
+  - 新增 `UpdatePolicyTest` / `ReleaseJsonTest`；`CalendarMathTest` 补年份范围 3 条。
+- **关于「静默安装」**：普通第三方应用不是设备所有者，PackageInstaller 提交会话后系统仍会弹一次
+  确认（`STATUS_PENDING_USER_ACTION`），本实现把它拉起而不是试图绕过；Google Play 对
+  `REQUEST_INSTALL_PACKAGES` 有用途审查，若商店审核不通过，删掉该权限即可自动回退系统安装页。
+- **仍待配合**：仓库目前还没有 GitHub Release，因此真机上「检查更新」会显示「已是最新版本」；
+  要验完整链路需先发布一个带 APK 资产的 Release（资产名建议 `ying-<versionCode>-<版本>-<abi>.apk`）。
+  正式签名密钥由用户持有，环境变量注入即可，不由仓库生成。
+
 ## [2026-11-12] 「减弱透明」只动玻璃面板、保留彩色渐变；设置页重复的「总览」行合并
 
 - 真机反馈（截图对照）：① 打开「减弱透明」后浅色整屏泛白、深色整屏发黑，图三（关闭时）的蓝紫粉渐变全没了，

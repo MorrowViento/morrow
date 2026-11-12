@@ -23,6 +23,15 @@
     <!-- 关机重启后重建闹钟 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- ============ M7 应用内更新 ============ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+      PackageInstaller 会话安装需要它。注意：Google Play 对该权限有用途审查，
+      若后续走商店分发且审核不通过，可删掉这一条 —— 代码会自动回退到
+      ACTION_VIEW + FileProvider 的系统安装页，不影响检查/下载。
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".YingApp"
         android:label="@string/app_name"
@@ -117,6 +126,24 @@
         <receiver
             android:name=".widget.WidgetMidnightReceiver"
             android:exported="false" />
+
+        <!-- ============ M7 应用内更新 ============ -->
+
+        <!-- PackageInstaller 会话结果（含「请用户确认安装」的 Intent） -->
+        <receiver
+            android:name=".service.update.UpdateInstallReceiver"
+            android:exported="false" />
+
+        <!-- 兜底安装路径用：把 cache 里的 APK 以 content:// 交给系统安装器 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

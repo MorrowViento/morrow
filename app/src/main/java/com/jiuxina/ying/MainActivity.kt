@@ -158,6 +158,10 @@ class MainActivity : ComponentActivity() {
                     consumeMessage = settingsViewModel::consumeMessage,
                     openNotificationSettings = settingsViewModel::openNotificationSettings,
                     openExactAlarmSettings = settingsViewModel::openExactAlarmSettings,
+                    checkUpdate = settingsViewModel::checkUpdate,
+                    downloadUpdate = settingsViewModel::downloadUpdate,
+                    installUpdate = settingsViewModel::installUpdate,
+                    dismissUpdate = settingsViewModel::dismissUpdate,
                 )
             }
 

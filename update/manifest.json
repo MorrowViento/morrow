@@ -1,0 +1,8 @@
+{
+  "tag_name": "v4.0.0-alpha1-40",
+  "name": "4.0.0-alpha1 (40)",
+  "body": "当前仓库尚未发布 GitHub Release。发布新版本时请把本文件同步成最新 Release 的内容，或直接由 CI 生成。字段形状与 GitHub Releases API 的 /releases/latest 一致，客户端复用同一个解析器。",
+  "published_at": "2026-11-12T00:00:00Z",
+  "prerelease": true,
+  "assets": []
+}
