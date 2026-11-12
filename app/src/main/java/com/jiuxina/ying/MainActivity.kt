@@ -51,13 +51,6 @@ class MainActivity : ComponentActivity() {
      */
     private val notificationEntries = MutableStateFlow(0L)
 
-    /**
-     * 「打开设置 → 桌面小部件」的请求次数。
-     *
-     * 小部件自动 pin 失败时由 [com.jiuxina.ying.widget.WidgetPinActivity] 带 extra 拉起本页。
-     * 用自增计数而非布尔量，理由同 [notificationEntries]：连续请求两次也要各响应一次。
-     */
-    private val openWidgetSettings = MutableStateFlow(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("main", "onCreate enter")
@@ -105,7 +98,6 @@ class MainActivity : ComponentActivity() {
             val reminders by reminderViewModel.state.collectAsStateWithLifecycle()
             val openDetail by pendingDetailId.collectAsStateWithLifecycle()
             val notificationEntry by notificationEntries.collectAsStateWithLifecycle()
-            val widgetSettingsEntry by openWidgetSettings.collectAsStateWithLifecycle()
             val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
 
             // 回调集合只取决于 ViewModel 实例：避免每帧重组都新建 lambda
@@ -187,7 +179,6 @@ class MainActivity : ComponentActivity() {
                 openDetailRequest = openDetail,
                 onDetailRequestConsumed = { pendingDetailId.value = null },
                 closeOverlaysRequest = notificationEntry,
-                openWidgetsRequest = widgetSettingsEntry,
             )
         }
         StartupTrace.mark("main", "setContent returned")
@@ -208,11 +199,6 @@ class MainActivity : ComponentActivity() {
         pendingDetailId.value = intent?.getStringExtra(EXTRA_EVENT_ID)
         if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
             notificationEntries.value += 1
-        }
-        if (intent?.getBooleanExtra(EXTRA_OPEN_WIDGET_SETTINGS, false) == true) {
-            openWidgetSettings.value += 1
-            // 消费掉：Activity 因配置变更重建时会重放同一个 intent，不清掉会又跳一次设置页
-            intent.removeExtra(EXTRA_OPEN_WIDGET_SETTINGS)
         }
     }
 
@@ -240,13 +226,5 @@ class MainActivity : ComponentActivity() {
 
         /** 由通知点进来的标记：用来收起上一次留在界面上的浮层。 */
         const val EXTRA_FROM_NOTIFICATION = "from_notification"
-
-        /**
-         * 打开应用后直接进「设置 → 桌面小部件」。
-         *
-         * 用途：小部件自动 pin 失败时的兜底。那句话以前只说「桌面不支持」，把用户堵死；
-         * 现在会带着这个标记进来，落到真正能点「添加」的页面。
-         */
-        const val EXTRA_OPEN_WIDGET_SETTINGS = "open_widget_settings"
     }
 }

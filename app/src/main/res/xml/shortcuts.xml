@@ -5,8 +5,13 @@
   由桌面决定给不给（ColorOS 一类只给「移除 / 应用信息」）。但「长按应用图标」的菜单
   是标准能力：静态 shortcut 一定会出现在那里。
 
-  点一条 = 走 `AppWidgetManager.requestPinAppWidget`，由系统弹出「添加到主屏幕」确认框，
-  确认后直接落在桌面上——比「长按空白 → 小部件 → 找到萤 → 拖到桌面」少三步。
+  点一条 = 直接打开小部件配置台（**先设置外观、再放上桌面**）。
+  用户在配置台里调好样式点「添加」，这时才 requestPinAppWidget，系统弹一次确认，
+  确认即落桌面。为什么不 pin 完再进配置：桌面确认框一出现页面就没法操作了，
+  而且已落在桌面的实例改配置要走另一条路径，取消配置还会留一个默认样式的小部件。
+
+  另一层收益：配置台是用户正在看的页面，窗口必然可见。冷启动时系统会因「调用方不可见」
+  丢弃 pin 请求（老版本就是直接 pin，所以必须先打开过一次 App）。
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -17,8 +22,8 @@
         android:shortcutLongLabel="@string/shortcut_widget_overview_long"
         android:shortcutShortLabel="@string/shortcut_widget_overview_short">
         <intent
-            android:action="com.jiuxina.ying.action.PIN_OVERVIEW_WIDGET"
-            android:targetClass="com.jiuxina.ying.widget.WidgetPinActivity"
+            android:action="com.jiuxina.ying.action.ADD_OVERVIEW_WIDGET"
+            android:targetClass="com.jiuxina.ying.widget.WidgetConfigActivity"
             android:targetPackage="com.jiuxina.ying" />
     </shortcut>
 
@@ -29,8 +34,8 @@
         android:shortcutLongLabel="@string/shortcut_widget_detail_long"
         android:shortcutShortLabel="@string/shortcut_widget_detail_short">
         <intent
-            android:action="com.jiuxina.ying.action.PIN_DETAIL_WIDGET"
-            android:targetClass="com.jiuxina.ying.widget.WidgetPinActivity"
+            android:action="com.jiuxina.ying.action.ADD_DETAIL_WIDGET"
+            android:targetClass="com.jiuxina.ying.widget.DetailWidgetConfigActivity"
             android:targetPackage="com.jiuxina.ying" />
     </shortcut>
 </shortcuts>

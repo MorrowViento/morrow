@@ -52,6 +52,51 @@ class WidgetConfigStore(private val settings: SettingsRepository) {
         )
     }
 
+    /** 这个实例有没有自己的配置（区别于「回落到默认样式」）。 */
+    suspend fun hasOwn(widgetId: Int): Boolean = settings.stringOnce(key(widgetId)) != null
+
+    /**
+     * 记下「下一次新加的小部件该用什么样式」。
+     *
+     * 用在「先设置、再落桌面」这条路：用户在配置台里调好外观点「添加到桌面」时，
+     * 桌面上还没有 widgetId（它由桌面在 pin 成功后才分配），只能先把样式挂在
+     * 「待认领」槽位上，等新实例第一次 onUpdate 时再认领。
+     */
+    suspend fun savePending(isDetail: Boolean, style: WidgetStyle) {
+        settings.putStrings(
+            mapOf(
+                pendingKey(isDetail) to WidgetStyleCodec.encode(style),
+                pendingAtKey(isDetail) to System.currentTimeMillis().toString(),
+            ),
+        )
+    }
+
+    /**
+     * 新实例认领待用样式：认领到就落成这个 id 的专属配置并清空槽位。
+     *
+     * 三条约束：
+     * 1. 已有专属配置的实例不认领——它是被编辑过的老实例，不该被新样式覆盖；
+     * 2. 过期不认领——用户可能点了「添加到桌面」又在系统确认框上取消，槽位会残留；
+     *    时间窗一过就当作没这回事，避免几天后手动加小部件时突然套上旧样式；
+     * 3. 认领即清空，保证一次设置只作用一个新实例。
+     */
+    suspend fun adoptPending(widgetId: Int, isDetail: Boolean): WidgetStyle? {
+        if (hasOwn(widgetId)) return null
+        val raw = settings.stringOnce(pendingKey(isDetail)) ?: return null
+        val savedAt = settings.stringOnce(pendingAtKey(isDetail))?.toLongOrNull() ?: 0L
+        val fresh = System.currentTimeMillis() - savedAt in 0..PENDING_MAX_AGE_MILLIS
+        val style = WidgetStyleCodec.decode(raw)
+        clearPending(isDetail)
+        if (!fresh || style == null) return null
+        save(widgetId, style)
+        return style
+    }
+
+    suspend fun clearPending(isDetail: Boolean) {
+        settings.remove(pendingKey(isDetail))
+        settings.remove(pendingAtKey(isDetail))
+    }
+
     suspend fun remove(widgetId: Int) = settings.remove(key(widgetId))
 
     /**
@@ -82,7 +127,22 @@ class WidgetConfigStore(private val settings: SettingsRepository) {
          */
         const val KEY_DEFAULT_STYLE = "widget.default_style"
 
+        /**
+         * 「先设置、再落桌面」的待认领槽位有效期。
+         *
+         * 用户点「添加到桌面」后系统还会弹一次确认；确认了才会产生新实例。留 10 分钟
+         * 足够覆盖「点了添加后去干别的、过会儿再回来确认」的情形，又不会让槽位长期残留
+         * 以致下次手动加小部件时莫名套上旧样式。
+         */
+        const val PENDING_MAX_AGE_MILLIS = 10 * 60 * 1000L
+
         fun key(widgetId: Int): String = "$PREFIX$widgetId.style"
+
+        /** 待认领槽位按小部件类型分开：总览与单事件互不干扰。 */
+        fun pendingKey(isDetail: Boolean): String =
+            "$PREFIX" + if (isDetail) "pending_detail" else "pending_overview"
+
+        fun pendingAtKey(isDetail: Boolean): String = pendingKey(isDetail) + ".at"
 
         /** 从 `widget.<id>.style` 解析 id；不是这种形态（含默认样式键）时返回 null。 */
         fun widgetIdOf(key: String): Int? =

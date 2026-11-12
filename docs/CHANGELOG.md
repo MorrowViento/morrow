@@ -2,6 +2,22 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 加小部件改为「先设置、再落桌面」；总览列表刷新加双保险
+
+- 真机反馈两件：① pin 确认后直接落桌面，希望能**先进配置台调好外观，确认后再落桌面**；② 应用内增删事件后总览小部件不更新。
+- **① 流程反转**：长按图标的快捷方式与设置页的「添加」都改为直接打开配置台（无 widgetId 即 pin 模式）。
+  调好样式点「添加」才 `requestPinAppWidget`——样式先存进「待认领槽位」，新实例首次 onUpdate 时认领。
+  顺带根治了冷启动 pin 失败：配置台是用户正在看的页面，窗口必然可见，`WidgetPinActivity` 与
+  等首帧/重试/设置页兜底那整套机制全部删除。槽位 10 分钟过期（用户可能点了添加又在系统确认框上取消），
+  已有专属配置的老实例不会被顶掉，认领即消耗保证一次设置只作用一个新实例（`WidgetPendingStyleTest` 六条锁定）。
+- **② 列表不更新**：总览改成集合视图后，列表内容不在 RemoteViews 里，刷新依赖
+  `notifyAppWidgetViewDataChanged` 让桌面回调 `onDataSetChanged`——部分 ROM 桌面对它的处理不可靠。
+  给 adapter Intent 的 data URI 加自增序号（extras 不参与 Intent 相等性比较，只有 data 有效），
+  每次刷新都迫使桌面重新绑定数据源，双保险。刷新链路补齐日志（`adb logcat -s YingWidget`：
+  refreshAll → 已刷新 → onDataSetChanged 三段可追溯）。
+- 测试注：`WidgetPendingStyleTest` 需跑在 Robolectric + runTest 下——纯 JVM 的 DataStore Okio 存储
+  在「读后再写」时 Windows 上 rename 会间歇失败，非被测逻辑问题。
+
 ## [2026-11-12] 冷启动长按图标加小部件：等首帧 + 多轮重试，失败不再把路堵死
 
 - 现象（真机反馈）：滑动翻页已正常；但**进程没运行时**长按图标加小部件仍提示「当前桌面不支持从这里添加小部件」，

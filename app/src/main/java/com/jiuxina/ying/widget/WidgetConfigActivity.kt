@@ -1,8 +1,11 @@
 package com.jiuxina.ying.widget
 
 import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -69,6 +72,14 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
 
+    /**
+     * 桌面还没分配 id，说明这是「先设置、再落桌面」的入口（长按图标 / 设置页添加）。
+     *
+     * 与「编辑已存在的小部件」区分开：那条路径带着 id 来，保存即生效；这条路径保存之后
+     * 还要真的把实例 pin 到桌面，所以按钮与文案都不同。
+     */
+    private var pinMode = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // 先设为取消：用户直接返回/杀进程时系统会移除这个还没配置好的小部件
@@ -77,10 +88,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
             AppWidgetManager.EXTRA_APPWIDGET_ID,
             AppWidgetManager.INVALID_APPWIDGET_ID,
         ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
-        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
-            finish()
-            return
-        }
+        pinMode = appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID
         enableEdgeToEdge()
 
         val app = application as YingApp
@@ -92,6 +100,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                     overlayContent = {
                         var style by remember { mutableStateOf(WidgetStyle()) }
                         var events by remember { mutableStateOf<List<CountdownEvent>>(emptyList()) }
+                        var adding by remember { mutableStateOf(false) }
                         val scope = rememberCoroutineScope()
                         val store = remember { WidgetConfigStore(app.settingsRepository) }
 
@@ -99,7 +108,8 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                             // 未完成的排前面：单事件小部件默认绑"最近要到的那个"
                             events = app.eventRepository.loadAll()
                                 .sortedWith(compareBy({ it.isCompleted }, { it.targetDate }))
-                            val loaded = store.load(appWidgetId)
+                            // pin 模式没有 id 可查，起点就是「上次保存的样式」（剥掉绑定）
+                            val loaded = if (pinMode) store.defaultStyle() else store.load(appWidgetId)
                             style = if (isDetail) {
                                 // 已绑的事件可能已经被删掉：那样"已选"标记会挂在一条不存在的行上，
                                 // 又没有哪一行能被再次选中，面板等于失效，所以统一回落到最近事件
@@ -113,19 +123,41 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                         ConfigContent(
                             style = style,
                             isDetail = isDetail,
+                            pinMode = pinMode,
                             events = events,
                             onStyleChange = { style = it },
                             onCancel = { finish() },
                             onSave = {
-                                scope.launch {
-                                    store.save(appWidgetId, style)
-                                    // 配置完成时系统还没走 onUpdate，先主动刷一次，点完成就能看到效果
-                                    app.widgetRefresher.refreshIds(intArrayOf(appWidgetId), isDetail)
-                                    setResult(
-                                        RESULT_OK,
-                                        Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
-                                    )
-                                    finish()
+                                // 连点两下会 pin 两个实例，用标志挡住
+                                if (!adding) {
+                                    adding = true
+                                    scope.launch {
+                                        if (!pinMode) {
+                                            store.save(appWidgetId, style)
+                                            // 配置完成时系统还没走 onUpdate，先主动刷一次，点完成就能看到效果
+                                            app.widgetRefresher.refreshIds(intArrayOf(appWidgetId), isDetail)
+                                            setResult(
+                                                RESULT_OK,
+                                                Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+                                            )
+                                            finish()
+                                            return@launch
+                                        }
+                                        // 待认领：pin 成功前桌面还没给 id，样式只能先挂在槽位上，
+                                        // 由新实例的首次 onUpdate 认领（见 WidgetRefresher.refresh）
+                                        store.savePending(isDetail, style)
+                                        if (pinToHomeScreen()) {
+                                            finish()
+                                        } else {
+                                            store.clearPending(isDetail)
+                                            Toast.makeText(
+                                                applicationContext,
+                                                R.string.widget_pin_failed,
+                                                Toast.LENGTH_LONG,
+                                            ).show()
+                                            adding = false
+                                        }
+                                    }
                                 }
                             },
                         )
@@ -133,6 +165,31 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * 把实例交给桌面 pin。
+     *
+     * 这里成功率比 `WidgetPinActivity` 那条路高得多：调用方就是用户正在看的这一页，
+     * 窗口早已可见（冷启动时系统会因「调用方不可见」丢弃请求，那条坑记在 WidgetPinActivity 里）。
+     */
+    private fun pinToHomeScreen(): Boolean {
+        val manager = AppWidgetManager.getInstance(applicationContext)
+        val provider = ComponentName(
+            applicationContext,
+            if (isDetail) YingDetailWidgetProvider::class.java else YingWidgetProvider::class.java,
+        )
+        if (!manager.isRequestPinAppWidgetSupported) {
+            Log.w(TAG, "桌面不支持 requestPinAppWidget：$provider")
+            return false
+        }
+        return runCatching { manager.requestPinAppWidget(provider, null, null) }
+            .onFailure { Log.w(TAG, "requestPinAppWidget 失败：$provider", it) }
+            .getOrDefault(false)
+    }
+
+    private companion object {
+        const val TAG = "YingWidgetConfig"
     }
 }
 
@@ -150,6 +207,7 @@ class DetailWidgetConfigActivity : BaseWidgetConfigActivity() {
 private fun ConfigContent(
     style: WidgetStyle,
     isDetail: Boolean,
+    pinMode: Boolean,
     events: List<CountdownEvent>,
     onStyleChange: (WidgetStyle) -> Unit,
     onCancel: () -> Unit,
@@ -177,13 +235,17 @@ private fun ConfigContent(
                     style = TextStyle(fontSize = 14.sp, color = secondary),
                 )
                 Text(
-                    text = stringResource(R.string.widget_config_title),
+                    text = stringResource(
+                        if (pinMode) R.string.widget_config_title_add else R.string.widget_config_title,
+                    ),
                     modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = primary),
                 )
                 Text(
-                    text = stringResource(R.string.widget_config_done),
+                    text = stringResource(
+                        if (pinMode) R.string.widget_config_add else R.string.widget_config_done,
+                    ),
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onSave)
@@ -197,6 +259,15 @@ private fun ConfigContent(
                 contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (pinMode) {
+                    item(key = "pin-hint") {
+                        Text(
+                            text = stringResource(R.string.widget_config_add_hint),
+                            style = TextStyle(fontSize = 11.sp, color = secondary),
+                        )
+                    }
+                }
+
                 item(key = "preview") {
                     WidgetPreview(style, isDetail)
                 }

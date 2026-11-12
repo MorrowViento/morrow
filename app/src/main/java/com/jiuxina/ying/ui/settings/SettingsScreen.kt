@@ -53,7 +53,6 @@ import com.jiuxina.ying.ui.glass.LocalReduceMotion
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
 import com.jiuxina.ying.widget.WidgetEntries
-import com.jiuxina.ying.widget.WidgetPinActivity
 import kotlinx.coroutines.delay
 
 /**
@@ -70,14 +69,6 @@ fun SettingsScreen(
     state: SettingsUiState,
     actions: SettingsActions,
     onDismiss: () -> Unit,
-    /**
-     * 把「桌面小部件」分组置顶。
-     *
-     * 用途：小部件自动 pin 失败时，[com.jiuxina.ying.widget.WidgetPinActivity] 会带 extra
-     * 把用户带到这里。它是来「加一个小部件」的，不该让他再往下翻三屏去找入口。
-     * 只在这次进入时置顶，普通进入仍按 外观 → 数据 → 提醒 → 小部件 的顺序。
-     */
-    highlightWidgets: Boolean = false,
 ) {
     val context = LocalContext.current
     BackHandler { onDismiss() }
@@ -102,23 +93,22 @@ fun SettingsScreen(
         Column(Modifier.fillMaxSize()) {
             SettingsHeader(onDismiss)
 
-            // 小部件分组的内容只写一份，位置由 highlightWidgets 决定（置顶 / 原位）。
-            // 置顶用得上：pin 失败被带进来的人就是来加小部件的，不该再往下翻三屏找入口。
+            // 小部件分组内容单独拎出来：这一段最长，留在原位会把下面几个 item 的顺序读乱
             val widgetsSection: @Composable () -> Unit = {
                 SettingsGroup("桌面小部件") {
-                    // 两条添加入口与长按图标里的快捷方式走同一条 requestPinAppWidget 链路
+                    // 与长按图标里的快捷方式同一条路：先调外观，点「添加」才落桌面
                     ActionRow(
                         title = "添加总览小部件",
-                        summary = "系统会弹出「添加到主屏幕」确认，确认后直接落在桌面",
+                        summary = "先挑样式，点「添加」后系统再确认一次",
                         value = "添加",
-                        onClick = { WidgetPinActivity.start(context, isDetail = false) },
+                        onClick = { WidgetEntries.openAdd(context, isDetail = false) },
                     )
                     Divider()
                     ActionRow(
                         title = "添加单事件小部件",
-                        summary = "添加后在桌面点它一下，选择要盯住的那个日子",
+                        summary = "先选事件与样式，点「添加」后系统再确认一次",
                         value = "添加",
-                        onClick = { WidgetPinActivity.start(context, isDetail = true) },
+                        onClick = { WidgetEntries.openAdd(context, isDetail = true) },
                     )
                     if (state.widgets.isNotEmpty()) {
                         state.widgets.forEach { widget ->
@@ -154,9 +144,6 @@ fun SettingsScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (highlightWidgets) {
-                    item(key = "widgets") { widgetsSection() }
-                }
                 item(key = "appearance") {
                     SettingsGroup("外观") {
                         Column(Modifier.padding(vertical = 8.dp)) {
@@ -241,9 +228,7 @@ fun SettingsScreen(
                     }
                 }
 
-                if (!highlightWidgets) {
-                    item(key = "widgets") { widgetsSection() }
-                }
+                item(key = "widgets") { widgetsSection() }
 
                 item(key = "about") {
                     SettingsGroup("关于") {

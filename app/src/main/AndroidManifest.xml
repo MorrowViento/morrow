@@ -107,18 +107,6 @@
             android:exported="true"
             android:theme="@style/Theme.Ying" />
 
-        <!--
-          长按图标 / 设置页里的「添加小部件」。不渲染界面，交给系统弹确认框。
-          exported=true：静态快捷方式的 intent 由桌面进程投递，必须可从外部启动；
-          它只做 requestPinAppWidget，没有可被滥用的副作用。
-        -->
-        <activity
-            android:name=".widget.WidgetPinActivity"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:noHistory="true"
-            android:theme="@style/Theme.Ying.PinWidget" />
-
         <!-- 集合视图的数据源。BIND_REMOTEVIEWS 由系统在绑定集合视图时授予，必须声明 -->
         <service
             android:name=".widget.WidgetListService"

@@ -52,6 +52,7 @@ class WidgetRefresher(
             val overviewIds = manager.getAppWidgetIds(overviewComponent)
             val detailIds = manager.getAppWidgetIds(detailComponent)
             if (overviewIds.isEmpty() && detailIds.isEmpty()) return
+            Log.i(TAG, "refreshAll：总览 ${overviewIds.size} 个、单事件 ${detailIds.size} 个")
             refresh(overviewIds, isDetail = false)
             refresh(detailIds, isDetail = true)
         }.onFailure { Log.e(TAG, "刷新总览小部件失败，已忽略", it) }
@@ -66,6 +67,10 @@ class WidgetRefresher(
 
     private suspend fun refresh(ids: IntArray, isDetail: Boolean) {
         if (ids.isEmpty()) return
+        // 新加的小部件还没有专属配置：先看有没有「先设置、再落桌面」留下的待认领样式。
+        // 必须在读样式之前做——认领会落盘，后面的 load 才拿得到用户刚调好的那套外观
+        ids.forEach { widgetId -> store.adoptPending(widgetId, isDetail) }
+
         val all = events.loadAll()
         val today = LocalDate.now()
         val now = LocalDateTime.now()
@@ -87,6 +92,7 @@ class WidgetRefresher(
                 // 否则拖大 / 增删事件之后列表还是旧的（甚至是空的）
                 manager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
             }
+            Log.i(TAG, "已刷新 widgetId=$widgetId isDetail=$isDetail 事件数=${all.size}")
         }
     }
 
@@ -125,8 +131,13 @@ class WidgetRefresher(
         views.setTextColor(R.id.widget_empty, colors.textSecondary)
         views.setOnClickPendingIntent(R.id.widget_empty, openAppIntent())
 
+        // data URI 带上刷新序号：部分 ROM 桌面对 notifyAppWidgetViewDataChanged 的处理
+        // 不可靠（通知被吞、不回调 onDataSetChanged），列表就一直停在旧数据。
+        // 每次让 Intent 真正变化，桌面就必须重新绑定数据源，等价于强制走一遍 onDataSetChanged。
+        // extras 不参与 Intent 的相等性比较，只有 data 能起到这个作用。
         val adapter = Intent(appContext, WidgetListService::class.java)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            .setData("ying://widget/list/$widgetId?v=${adapterSeq.incrementAndGet()}".toUri())
         views.setRemoteAdapter(widgetId, R.id.widget_list, adapter)
         // 条目点击 = 模板（目标 Activity）+ fill-in（事件 id/data），模板必须是 MUTABLE 才能被填
         views.setPendingIntentTemplate(R.id.widget_list, listTemplateIntent())
@@ -283,6 +294,9 @@ class WidgetRefresher(
 
     companion object {
         private const val TAG = "YingWidget"
+
+        /** 集合视图 adapter 的刷新序号：让每次 setRemoteAdapter 的 data URI 都不同。 */
+        private val adapterSeq = java.util.concurrent.atomic.AtomicInteger(0)
 
         /**
          * 集合视图的条数上限。

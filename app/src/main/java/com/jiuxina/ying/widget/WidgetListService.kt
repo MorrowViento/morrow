@@ -62,6 +62,9 @@ private class WidgetListFactory(
                 rows = emptyList()
             }
         }
+        // 桌面是否真的回调了这里，是「列表不更新」问题的第一现场，
+        // 用 logcat -s YingWidget 一眼可辨
+        android.util.Log.i("YingWidget", "onDataSetChanged widgetId=$widgetId rows=${rows.size}")
     }
 
     override fun onCreate() = Unit

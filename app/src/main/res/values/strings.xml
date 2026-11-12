@@ -23,6 +23,11 @@
     <string name="widget_config_title">小部件设置</string>
     <string name="widget_config_done">完成</string>
     <string name="widget_config_cancel">取消</string>
+    <!-- 「先设置、再落桌面」这条路：桌面还没分配 id，按钮要表达「这一步才真正放上去」 -->
+    <string name="widget_config_title_add">添加小部件</string>
+    <string name="widget_config_add">添加</string>
+    <string name="widget_config_add_hint">设置满意后点「添加」，系统会再确认一次，确认即落到桌面</string>
+    <string name="widget_pin_failed">没能添加到桌面，请长按桌面空白处 → 小部件</string>
 
     <!-- 长按桌面图标弹出的快捷方式（静态 shortcut） -->
     <string name="shortcut_widget_overview_short">总览小部件</string>
@@ -30,5 +35,4 @@
     <string name="shortcut_widget_detail_short">单事件小部件</string>
     <string name="shortcut_widget_detail_long">添加「萤 · 单事件」到桌面</string>
     <string name="shortcut_widget_disabled">当前版本已移除该快捷方式</string>
-    <string name="widget_pin_fallback">没能直接放到桌面，已打开「桌面小部件」，在那里点「添加」即可</string>
 </resources>
