@@ -192,9 +192,15 @@ private fun SwipePager(
     val latestCanPrev by rememberUpdatedState(canPrev)
     val latestCanNext by rememberUpdatedState(canNext)
     val latestKey by rememberUpdatedState(pageKey)
+    val latestPrevPage by rememberUpdatedState(prevPage)
+    val latestNextPage by rememberUpdatedState(nextPage)
     var width by remember { mutableFloatStateOf(0f) }
     var offset by remember { mutableFloatStateOf(0f) }
     var busy by remember { mutableStateOf(false) }
+    // 拖动开始时把两页内容「冻住」。不冻的话，切完数据那一刻相邻页 lambda 已经指向
+    // 「新的下一页」，会在屏中央闪一帧不该出现的月份，再被归零换回来——真机看到的就是
+    // 「翻完之后所有日期抖一下」
+    var frozen by remember { mutableStateOf<FrozenPages?>(null) }
     // 屏上要额外画哪一侧：0 不画，1 下一页，-1 上一页。
     // 把「每帧位移」收敛成「只在跨过中线时变化」，拖动过程中才不会重组整页内容。
     val side by remember {
@@ -231,8 +237,15 @@ private fun SwipePager(
                     onDragStart = {
                         tracker.resetTracking()
                         dragged = 0f
+                        // 冻结两份相邻页：整段手势 + 动画期间屏上显示的都是这一份快照
+                        frozen = FrozenPages(latestPrevPage, latestNextPage)
                     },
-                    onDragCancel = { scope.launch { glide(0f) } },
+                    onDragCancel = {
+                        scope.launch {
+                            glide(0f)
+                            frozen = null
+                        }
+                    },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
                         if (!busy) {
@@ -258,7 +271,10 @@ private fun SwipePager(
                             else -> false
                         }
                         if (!allowed) {
-                            scope.launch { glide(0f) }
+                            scope.launch {
+                                glide(0f)
+                                frozen = null
+                            }
                         } else {
                             busy = true
                             scope.launch {
@@ -271,6 +287,7 @@ private fun SwipePager(
                                     snapshotFlow { latestKey }.first { it != from }
                                 }
                                 offset = 0f
+                                frozen = null
                                 busy = false
                             }
                         }
@@ -278,23 +295,27 @@ private fun SwipePager(
                 )
             },
     ) {
-        // 相邻页先画、当前页后画：万一两页有重叠，当前页在上
+        // 相邻页先画、当前页后画：万一两页有重叠，当前页在上。
+        // 渲染的是拖动开始时冻住的那份内容，而不是跟着最新数据重组——后者会在
+        // 换页那一帧把「再下一页」闪进屏中央，看起来就是整页日期抖了一下。
         if (side == 1) {
+            val page = frozen?.next ?: nextPage
             Box(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer { translationX = width + offset },
             ) {
-                nextPage()
+                page()
             }
         }
         if (side == -1) {
+            val page = frozen?.prev ?: prevPage
             Box(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer { translationX = offset - width },
             ) {
-                prevPage()
+                page()
             }
         }
         Box(
@@ -309,6 +330,12 @@ private fun SwipePager(
 
 /** 拖到边界后的位移衰减系数。 */
 private const val EDGE_RESISTANCE = 0.25f
+
+/** 拖动开始时冻住的相邻两页内容。 */
+private class FrozenPages(
+    val prev: @Composable () -> Unit,
+    val next: @Composable () -> Unit,
+)
 
 /**
  * 等新页数据的上限。

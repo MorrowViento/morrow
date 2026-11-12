@@ -107,6 +107,17 @@ class ReminderNotifier(context: Context) {
             .setContentText(appContext.getString(R.string.reminder_test_body))
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            // 测试通知同样要能点开：它存在的意义就是「确认这条链路是通的」，
+            // 点了没反应会让人以为整个通知系统坏了（真机就这么报过）
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    appContext,
+                    TEST_ID,
+                    Intent(appContext, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
             .build()
         notify(TEST_ID, notification)
     }

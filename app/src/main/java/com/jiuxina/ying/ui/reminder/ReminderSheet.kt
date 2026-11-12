@@ -97,7 +97,9 @@ fun ReminderSheet(
                     PermissionRow(
                         title = "精确闹钟",
                         detail = if (state.exactAlarmsAllowed) {
-                            "已允许，提醒准时"
+                            // 现在走 setAlarmClock：系统把它当「用户自己设的闹钟」，Doze 与后台冻结都推迟不了，
+                            // 代价是状态栏会挂一个小闹钟图标，得提前说明，否则用户会以为是 bug
+                            "已允许，按系统闹钟级别触发（状态栏会出现闹钟图标）"
                         } else {
                             "未允许，系统可能把提醒推迟几分钟"
                         },

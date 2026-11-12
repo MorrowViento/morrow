@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.net.toUri
+import com.jiuxina.ying.MainActivity
 import com.jiuxina.ying.domain.model.CountdownEvent
 import com.jiuxina.ying.domain.time.ReminderPlan
 import com.jiuxina.ying.domain.time.ScheduledReminder
@@ -86,14 +87,24 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
     }
 
     /**
-     * 有精确闹钟权限就走 `setExactAndAllowWhileIdle`（Doze 下仍准时）；
-     * 没有则退化到 `setAndAllowWhileIdle`——仍会响，但系统可能推迟几分钟。
-     * 这个降级在提醒诊断页里会明确告知用户，不做静默处理。
+     * 排期。
      *
-     * 降级分支必须留日志：真机上「提前 10 分钟实际晚 4 分钟」就是这条路径的表现，
-     * 没有日志时只能靠猜。每次排期最多 10 个闹钟，不会把 logcat 刷爆。
+     * 优先 `setAlarmClock`：在系统眼里它和「用户自己设的闹钟」同级——Doze 不推迟、
+     * 应用待机也照常唤醒，是目前唯一能扛住国产 ROM 后台冻结的公开 API。真机实测：
+     * 精确闹钟权限齐备时 `setExactAndAllowWhileIdle` 仍会晚到一分钟，而这一分钟正是
+     * 应用被冻结、广播排队到下一次唤醒窗口的量级。代价是状态栏/锁屏会出现一个小闹钟图标，
+     * 直到这次提醒触发为止。
+     *
+     * 被拒（个别 ROM / 用户关闭闹钟权限）再退回精确闹钟，最后退到不精确闹钟。
+     * 降级必须留日志：真机上「提前 10 分钟实际晚 4 分钟」就是这条路径的表现。
      */
     private fun setAt(atMillis: Long, pi: PendingIntent, origin: String) {
+        val armed = runCatching {
+            alarms.setAlarmClock(AlarmManager.AlarmClockInfo(atMillis, showAppIntent()), pi)
+        }
+        if (armed.isSuccess) return
+        Log.w(TAG, "setAlarmClock 被拒，退回精确闹钟：$origin", armed.exceptionOrNull())
+
         try {
             if (alarms.canScheduleExactAlarms()) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi)
@@ -110,6 +121,16 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             runCatching { alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi) }
         }
     }
+
+    /** 点状态栏那颗闹钟图标时打开萤；`setAlarmClock` 必需，不能传 null。 */
+    private fun showAppIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            appContext,
+            SHOW_APP_REQUEST,
+            Intent(appContext, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     private fun baseIntent(eventId: String): Intent =
         Intent(appContext, ReminderReceiver::class.java)
@@ -138,6 +159,7 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
         private const val TAG = "ReminderScheduler"
         private const val MINUTE_MILLIS = 60_000L
         private const val SNOOZE_REQUEST = 9_000
+        private const val SHOW_APP_REQUEST = 9_100
 
         /** 与 [ReminderPlan.MAX_ALARMS] 保持一致：5 条提醒 × 2 次落点。 */
         const val SLOT_COUNT = ReminderPlan.MAX_ALARMS
