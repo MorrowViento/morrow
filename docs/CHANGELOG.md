@@ -2,6 +2,18 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 发版流程固化为一条命令（`scripts/release.sh`）
+
+- 新增 `scripts/release.sh`：读 gradle 版本号 → 校验工作区与标签 → 构建 → 命名资产
+  → 建 Release → 上传（失败重试 3 轮）→ **回读 `/releases/latest` 核对标签/资产/摘要**
+  → 回填并提交 `update/manifest.json`。首次发版这些步骤全是手工 curl，代理 502 与摘要
+  抄错各踩过一次，因此每一步都做成硬校验而不是注释。
+- 两个容易翻车的点在脚本里挡掉：资产名必须匹配 `morrow-<code>-…`（客户端靠它解析
+  versionCode，不合规会被判成「没有更新」）；默认不标 prerelease（`/releases/latest`
+  不返回预发布，标了手机永远显示已是最新）。
+- 新增 `docs/RELEASE.md`：一条命令的用法、三条硬规则、签名差异（debug 76 MB / release
+  R8 后十几 MB）、手工兜底片段、撤回策略（转 draft 而不是删资产）。
+
 ## [2026-11-12] 发布 4.0.0-alpha2 (41)：仓库统一更名 morrow，首个 GitHub Release 上线
 
 - **命名收敛**：GitHub 仓库与本地目录 `morrow-native` → **`morrow`**，GitHub 旧地址自动重定向；

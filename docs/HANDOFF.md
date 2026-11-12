@@ -46,7 +46,13 @@
 
 ## 未完成清单（按顺序，可直接执行）
 
-1. **M7 发版配合（用户侧）**：仓库目前没有 GitHub Release，真机点「检查更新」会显示「已是最新版本」——这是预期而非故障。需发布一个带 APK 资产的 Release（命名建议 `morrow-<versionCode>-<版本>-<abi>.apk`）并同步 `update/manifest.json`；正式签名密钥由用户持有，构建时用 `MORROW_KEYSTORE` / `MORROW_KEYSTORE_PASSWORD` / `MORROW_KEY_ALIAS` / `MORROW_KEY_PASSWORD` 注入（或写 `~/.gradle/gradle.properties` 的 `morrow.*`），仓库不生成密钥；生成与验证步骤见 **`docs/SIGNING.md`**。
+1. ~~**M7 发版配合**~~ **已完成（2026-11-12 15:20）**：仓库改名 `MorrowViento/morrow`，已发布
+   **`v4.0.0-alpha2-41`**（正式 Release，资产 `morrow-41-4.0.0-alpha2-debug.apk`，
+   79,389,680 B，`sha256:04d81bdc…1fd83ed6`），`update/manifest.json` 已回填；
+   流程固化为 `scripts/release.sh`，用法与三条硬规则见 **`docs/RELEASE.md`**。
+   **仍待用户侧**：正式签名密钥（`~/.morrow` 目前为空），构建时用 `MORROW_KEYSTORE` /
+   `MORROW_KEYSTORE_PASSWORD` / `MORROW_KEY_ALIAS` / `MORROW_KEY_PASSWORD` 注入
+   （或写 `~/.gradle/gradle.properties` 的 `morrow.*`），生成与验证见 **`docs/SIGNING.md`**。
 2. **M7 真机链路**：按 `docs/MANUAL-TEST.md` 的 N1–N9 走完「检查 → 下载 → 安装 → 升级」，含断网、无更新、镜像缓存落后、下载中断续传、安装确认弹窗、升级后数据与小部件无感迁移。
 3. **全量回归**：Android 13/14/15/16 覆盖，以及 `MANUAL-TEST.md` 里仍未勾选的细项（跨零点刷新、备份云盘读写、闹钟图标归属与远期提醒、撤销跨进程重启、低端机玻璃帧率）。
 4. **M0 遗留（可选）**：ktlint/detekt 静态检查接入 CI，不阻断当前代码。

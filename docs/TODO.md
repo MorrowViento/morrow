@@ -52,8 +52,8 @@ M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，并已
   剩余验收项（只能在真机做）：锁屏与 Doze 下准时触发、通知「完成」「稍后 10 分钟」动作生效、重启后闹钟自动重建、跨年重复事件落点正确、时间/时区变更后不漂移、诊断页条目与实际闹钟一致。
 - [x] **M5 桌面小部件** —— 已完成（未迁移旧 Kotlin 实现，按裁剪范围重写）：总览 + 单事件两个 provider、`MidnightRefreshScheduler` 跨天刷新、进程内只读快照替代 method channel；配置台保留样式预设 + 字号 + 配色 + 元素显隐 + 单事件绑定。验收项（显示/跨天刷新/点击跳转/旧样式映射）待真机确认。
 - [x] **M6 设置中心** —— 已完成：外观（主题三态 / 减弱透明 / 减弱动效，键名沿用 Flutter 原始键）+ 数据（导出/导入备份、清空全部，SAF 免权限）+ 提醒（通知与精确闹钟状态跳转）+ 关于（版本 / 开源许可 / 项目主页）。设置行自绘而非 `glasmio-preference`（理由见 HANDOFF 决策表）。备份为单文件 JSON，含事件/分类/外观/小部件样式，导入分「合并 / 覆盖」两档。验收项待真机确认。
-- [ ] **M7 更新与发布（进行中）** —— 已完成：GitHub Releases 检查（三路并发 + 可选镜像测速）、断点续传下载、`PackageInstaller` 会话安装 + 系统安装页兜底、更新面板与进度 UI、`INTERNET`/安装权限/FileProvider、`lint.abortOnError = true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 清单模板、`UpdatePolicyTest`/`ReleaseJsonTest`。**不引 WorkManager**（更新由用户主动发起且全程可见，协程取消即停、靠 `.part` 续传即可）。  
-  仍待：发布首个带 APK 资产的 GitHub Release、注入正式签名密钥、真机走完 N1–N9、Android 13/14/15/16 全量回归、旧用户升级后数据与小部件无感迁移确认。
+- [ ] **M7 更新与发布（收尾中）** —— 已完成：GitHub Releases 检查（三路并发 + 可选镜像测速）、断点续传下载、`PackageInstaller` 会话安装 + 系统安装页兜底、更新面板与进度 UI、`INTERNET`/安装权限/FileProvider、`lint.abortOnError = true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 清单、`UpdatePolicyTest`/`ReleaseJsonTest`、**首个 GitHub Release `v4.0.0-alpha2-41`**、**发版脚本 `scripts/release.sh`（见 `docs/RELEASE.md`）**。**不引 WorkManager**（更新由用户主动发起且全程可见，协程取消即停、靠 `.part` 续传即可）。  
+  仍待（用户侧）：注入正式签名密钥、真机走完 N1–N9、Android 13/14/15/16 全量回归、旧用户升级后数据与小部件无感迁移确认。
 - [ ] **M0 遗留（可选）** —— 计划里承诺的 ktlint/detekt 尚未接入；做法：加 `spotless` 或 `ktlint` Gradle 插件并接入 CI；验收：CI 增一步静态检查且不阻断当前代码。建议在 M2 结束、代码量上来之前做。
 
 ## 涉及文件
