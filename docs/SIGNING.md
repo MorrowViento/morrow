@@ -13,7 +13,7 @@
 ### 推荐：用仓库里的脚本
 
 ```bash
-cd morrow-native
+cd morrow
 export JAVA_HOME="/c/Users/yunbo.wang/WorkBuddy/2026-11-09-15-57-01/.toolchain/jdk/jdk-21.0.13+9"
 ./scripts/create-keystore.sh
 ```

@@ -13,7 +13,7 @@ import java.net.URL
  */
 object UpdateNetwork {
 
-    private const val USER_AGENT = "Morrow-Updater/1.0 (Android; +https://github.com/MorrowViento/morrow-native)"
+    private const val USER_AGENT = "Morrow-Updater/1.0 (Android; +https://github.com/MorrowViento/morrow)"
 
     fun open(
         url: String,

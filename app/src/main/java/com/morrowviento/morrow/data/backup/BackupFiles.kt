@@ -49,5 +49,5 @@ object BackupFiles {
     }
 
     /** 项目主页（关于页跳转）。 */
-    fun projectUri(): Uri = "https://github.com/MorrowViento/morrow-native".toUri()
+    fun projectUri(): Uri = "https://github.com/MorrowViento/morrow".toUri()
 }

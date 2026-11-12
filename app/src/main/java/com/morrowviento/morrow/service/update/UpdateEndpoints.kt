@@ -17,7 +17,7 @@ import com.morrowviento.morrow.BuildConfig
  */
 object UpdateEndpoints {
 
-    private const val REPO = "MorrowViento/morrow-native"
+    private const val REPO = "MorrowViento/morrow"
 
     const val RELEASES_API = "https://api.github.com/repos/$REPO/releases/latest"
     private const val CDN_MANIFEST = "https://cdn.jsdelivr.net/gh/$REPO@main/update/manifest.json"

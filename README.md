@@ -1,4 +1,4 @@
-# morrow-native
+# morrow
 
 「朝夕」（Morrow）的 Kotlin 重构工程（Jetpack Compose + Glasmio 0.1.2）。
 

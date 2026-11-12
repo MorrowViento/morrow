@@ -45,13 +45,14 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // 与 Flutter 版保持一致，确保升级安装覆盖旧包
+        // 2026-11-12 品牌重塑时改为独立包名，不再与 Flutter 版共用沙盒（旧包不能覆盖升级）
         applicationId = "com.morrowviento.morrow"
         // 决策 D1：Glasmio 强制 Android 13（API 33）+
         minSdk = 33
         targetSdk = 37
-        versionCode = 40
-        versionName = "4.0.0-alpha1"
+        // 版本号只增不减：应用内更新靠 versionCode 判定，发版前必须上调
+        versionCode = 41
+        versionName = "4.0.0-alpha2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // 镜像前缀写进 BuildConfig，避免把第三方代理域名硬编码进代码（这类域名寿命短）。

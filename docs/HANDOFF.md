@@ -41,7 +41,7 @@
 16. **小部件二次打磨**：修正 `android:configure` 错指导致单事件无法选事件、默认样式串号（`KEY_DEFAULT_STYLE` 存/取都剥掉 `eventId`）；总览由静态 5 行改为 `ListView` + `RemoteViewsFactory` 集合视图（可滑动、行数随高度、点行直达详情）；刷新补 `notifyAppWidgetViewDataChanged` + adapter `data` URI 自增序号强制重绑；长按应用图标 → 先进配置台选样式/事件 → 再 `requestPinAppWidget`（`savePending`/`adoptPending` 认领）；设置页把多个同类实例合并成一行（`EXTRA_WIDGET_IDS` 整组保存刷新）。**ColorOS「服务卡片」是 OPPO 私有框架，标准 Android API 无法接入，已明确不做；pin 也不能指定桌面坐标。**
 17. **减弱透明与年份范围**：`Glasmio` 内建 `reduceTransparency` 会让 `usesBackdrop=false`，把玻璃降级成纯黑/纯白色块；改为始终传默认 `GlassAppearance()`，只在 `GlassPanel` 内侧叠 0.55 alpha 柔和色纱，彩色渐变背景在开关两种状态下完全一致。日期滚轮年份从 `thisYear-1..+20` 改为 `CalendarMath.SELECTABLE_YEARS` 的 1900–2100，与农历年表 / 日历翻页边界共用，并修掉首帧 `snapshotFlow` 把越界旧数据改写成边界年的问题。
 18. **M7 第一批（应用内更新）**：零新增依赖（`HttpURLConnection` + 现有 Gson）；`service/update/` 纯逻辑层 + 三路并发探测（**版本判定取版本号最大的一份**，测速只决定下载线路）+ Range 断点续传与 SHA-256 校验 + `PackageInstaller` 会话安装（系统仍会弹确认）/ FileProvider 兜底；设置 → 关于 → 检查更新，底部玻璃面板手动触发；`INTERNET` / `REQUEST_INSTALL_PACKAGES` / FileProvider、`lint.abortOnError=true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 模板与 CI JSON 校验。228 项单测全绿。**细节见 `docs/CHANGELOG.md` 同名条目。**
-19. **品牌重塑（2026-11-12）**：应用名「萤」→「**朝夕**」；Gradle 根名 `ying`→`morrow`，本地仓库目录 `ying-native`→`morrow-native`；`applicationId` / `namespace` / Kotlin 包 `com.jiuxina.ying`→`com.morrowviento.morrow`；`YingApp`/`YingDatabase`/`YingWidgetProvider`/`Theme.Ying` 等改为 `Morrow*`；内部标识同步为 `morrow.db`、`morrow_settings`、`morrow://` scheme、`com.morrowviento.morrow.action.*`、`MORROW_*` 签名环境变量，Room schema 目录随包名迁移。新增自适应图标（晨昏渐变底 + 日轮 / 地平线 / 倒影 + Android 13 单色版）——此前 `AndroidManifest` 里**根本没有** `android:icon`。签名改为自有密钥方案：`scripts/create-keystore.sh` + `docs/SIGNING.md`，支持环境变量与 `~/.gradle/gradle.properties` 双通道。**破坏性变更**：旧「萤」不能覆盖升级，需先导出备份、卸载、装新包后导入。
+19. **品牌重塑（2026-11-12）**：应用名「萤」→「**朝夕**」；Gradle 根名 `ying`→`morrow`，本地仓库目录 `ying-native`→`morrow`；`applicationId` / `namespace` / Kotlin 包 `com.jiuxina.ying`→`com.morrowviento.morrow`；`YingApp`/`YingDatabase`/`YingWidgetProvider`/`Theme.Ying` 等改为 `Morrow*`；内部标识同步为 `morrow.db`、`morrow_settings`、`morrow://` scheme、`com.morrowviento.morrow.action.*`、`MORROW_*` 签名环境变量，Room schema 目录随包名迁移。新增自适应图标（晨昏渐变底 + 日轮 / 地平线 / 倒影 + Android 13 单色版）——此前 `AndroidManifest` 里**根本没有** `android:icon`。签名改为自有密钥方案：`scripts/create-keystore.sh` + `docs/SIGNING.md`，支持环境变量与 `~/.gradle/gradle.properties` 双通道。**破坏性变更**：旧「萤」不能覆盖升级，需先导出备份、卸载、装新包后导入。
 
 ## 未完成清单（按顺序，可直接执行）
 
@@ -101,7 +101,7 @@
 
 ## 关键文件路径与约定
 
-**仓库根**：`C:\Users\yunbo.wang\WorkBuddy\2026-11-09-15-57-01\morrow-native`（上级目录放方案文档与 Glasmio 源码快照，不在仓库内）
+**仓库根**：`C:\Users\yunbo.wang\WorkBuddy\2026-11-09-15-57-01\morrow`（上级目录放方案文档与 Glasmio 源码快照，不在仓库内）
 
 ```
 app/src/main/java/com/morrowviento/morrow/

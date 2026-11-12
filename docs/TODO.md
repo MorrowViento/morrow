@@ -14,9 +14,9 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 
 **m6 的「打开即闪退」已结案**：根因是 `MorrowApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.morrowviento.morrow/startup.log` 可确认是哪个自愈步骤失败。
 
-仓库 `https://github.com/MorrowViento/ying-native`（**GitHub 仓库名待改为 `morrow-native`**；改名后旧地址会自动重定向，本地 remote 无需改）· 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
+仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 `4.0.0-alpha2 (41)` · 首个 Release `v4.0.0-alpha2-41`（资产 `morrow-41-4.0.0-alpha2-debug.apk`，debug 签名，可直接覆盖现有的 debug 安装）
 
-M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，见 `docs/CHANGELOG.md`。**尚未完成**：发布首个 GitHub Release、正式签名密钥注入、真机走完「检查→下载→安装→升级」全流程、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
+M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，并已发布首个 GitHub Release，见 `docs/CHANGELOG.md`。**尚未完成**：正式签名密钥注入（用户自有密钥，见 `docs/SIGNING.md`）、真机走完「检查→下载→安装→升级」全流程（N1–N9）、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
 
 ## 移植范围（2026-11-11 二次定稿）
 

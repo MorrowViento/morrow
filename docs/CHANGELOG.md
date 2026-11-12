@@ -2,10 +2,23 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 发布 4.0.0-alpha2 (41)：仓库统一更名 morrow，首个 GitHub Release 上线
+
+- **命名收敛**：GitHub 仓库与本地目录 `morrow-native` → **`morrow`**，GitHub 旧地址自动重定向；
+  `UpdateEndpoints.REPO`、`UpdateNetwork` 的 UA、`BackupFiles.projectUri()`、设置页「项目主页」
+  链接同步为 `MorrowViento/morrow`——否则改包名后「检查更新」会打到旧仓库。
+- **版本**：`versionCode 40→41`、`versionName 4.0.0-alpha1→4.0.0-alpha2`。
+  应用内更新按 `versionCode` 判定，同版本号重新发版用户收不到提示，故必须上调。
+- **首个 Release**：`v4.0.0-alpha2-41`，资产 `morrow-41-4.0.0-alpha2-debug.apk`。
+  发的是 **debug 签名**包：现网安装的也是 debug 包，能直接覆盖升级，正好用来验 N1–N9；
+  等自有密钥出正式包后可再发一版，那时需先卸载 debug 包（签名不同不能互装）。
+- **清单**：`update/manifest.json` 同步为该 Release 的 tag / 资产名 / 大小 / SHA-256，
+  作为 API 不可达时 jsDelivr / raw 两路的回退数据。
+
 ## [2026-11-12] 品牌重塑：应用更名「朝夕」、工程改为 morrow、新增图标与自有签名
 
 - **应用名**：`strings.xml` 的 `app_name` 由「萤」改为「**朝夕**」；小部件中文标签与设置页文案同步。
-- **工程命名**：Gradle `rootProject.name` `ying`→`morrow`，本地目录 `ying-native`→`morrow-native`；
+- **工程命名**：Gradle `rootProject.name` `ying`→`morrow`，本地目录 `ying-native`→`morrow`；
   `namespace` / `applicationId` / Kotlin 包 `com.jiuxina.ying`→`com.morrowviento.morrow`；
   `YingApp` / `YingDatabase` / `YingWidgetProvider` / `YingDetailWidgetProvider` / `Theme.Ying` → `Morrow*`；
   源码与测试包目录、Room schema 目录随包名迁移。
@@ -499,7 +512,7 @@
 
 ## [2026-11-11] 仓库与 CI 通道打通
 
-- 改动：创建 `MorrowViento/morrow-native`；补齐 Token 的 Contents / Workflows / Actions 权限；CI 平台包名修正为 `platforms;android-37.0` 并固定 cmdline-tools；移除 AGP 9 已不允许的 `kotlin-android` 插件；按 Glasmio `v0.1.2` 标签源码对齐封装层签名。
+- 改动：创建 `MorrowViento/morrow`；补齐 Token 的 Contents / Workflows / Actions 权限；CI 平台包名修正为 `platforms;android-37.0` 并固定 cmdline-tools；移除 AGP 9 已不允许的 `kotlin-android` 插件；按 Glasmio `v0.1.2` 标签源码对齐封装层签名。
 - 涉及文件：`.github/workflows/android-ci.yml`、`build.gradle.kts`、`app/build.gradle.kts`、`gradle/libs.versions.toml`、`app/src/main/java/com/morrowviento/morrow/ui/glass/GlassTheme.kt`
 - 验证：CI 五轮迭代后编译通过并产出 APK
 - 状态：完成

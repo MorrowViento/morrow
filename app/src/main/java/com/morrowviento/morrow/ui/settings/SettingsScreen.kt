@@ -251,7 +251,7 @@ fun SettingsScreen(
                         Divider()
                         ActionRow(
                             title = "项目主页",
-                            summary = "github.com/MorrowViento/morrow-native",
+                            summary = "github.com/MorrowViento/morrow",
                             onClick = {
                                 runCatching {
                                     context.startActivity(
