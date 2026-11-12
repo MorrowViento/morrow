@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -47,7 +49,13 @@ import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
+import com.morrowviento.morrow.ui.glass.GlassAlert
+import com.morrowviento.morrow.ui.glass.GlassAlertButton
+import com.morrowviento.morrow.ui.glass.GlassAlertRole
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
+import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
+import com.morrowviento.morrow.ui.glass.GlassSheet
+import com.morrowviento.morrow.ui.glass.GlassSwitch
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.LocalReduceMotion
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
@@ -55,6 +63,9 @@ import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import com.morrowviento.morrow.ui.update.UpdateActions
 import com.morrowviento.morrow.ui.update.UpdateSheet
 import com.morrowviento.morrow.widget.WidgetEntries
+import io.github.neoruaa.glasmio.ui.GlasmioGroupedList
+import io.github.neoruaa.glasmio.ui.GlasmioListRow
+import io.github.neoruaa.glasmio.ui.GlasmioSectionTitle
 import kotlinx.coroutines.delay
 
 /**
@@ -135,12 +146,17 @@ fun SettingsScreen(
                 }
             }
 
+            // 页面级回弹：短内容也能被拉出再弹回（设置项不多时也要有反馈）
+            GlassOverscrollHost(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
             LazyColumn(
                 // weight 而不是 fillMaxSize：后者会把视口撑成整个 Column 的高度，
                 // 头部占掉的那一截就被裁到屏幕外，最后一张卡片滚不到底
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -272,6 +288,7 @@ fun SettingsScreen(
                     )
                 }
             }
+            }
         }
 
         state.pendingImport?.let { pending ->
@@ -348,18 +365,11 @@ private fun SettingsHeader(onDismiss: () -> Unit) {
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            modifier = Modifier.padding(start = 6.dp, bottom = 6.dp),
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
-        )
-        GlassPanel(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                content = content,
-            )
+        // Glasmio 的 iOS 分组列表：分组标题 + 一条连续圆角材质（行与行共享同一块玻璃，
+        // 分隔线由 `glasmioGroupedListSeparator` 画在行内，不再是我们自己画的细线）
+        GlasmioSectionTitle(title)
+        GlasmioGroupedList {
+            content()
         }
     }
 }
@@ -399,23 +409,15 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            SettingLabel(title)
-            summary?.let {
-                Spacer(Modifier.height(2.dp))
-                SettingHint(it)
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        GlassSwitch(checked = checked, onCheckedChange = onCheckedChange)
-    }
+    GlasmioListRow(
+        title = title,
+        subtitle = summary,
+        showTopSeparator = false,
+        onClick = { onCheckedChange(!checked) },
+        trailing = {
+            GlassSwitch(checked = checked, onCheckedChange = onCheckedChange)
+        },
+    )
 }
 
 /** 动作行。[onClick] 为 null 时只做展示（版本号）。 */
@@ -428,80 +430,17 @@ private fun ActionRow(
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
 ) {
-    val titleColor = when {
-        danger -> Color(0xFFFF7A7A)
-        !enabled -> glassTextPrimary().copy(alpha = 0.4f)
-        else -> glassTextPrimary()
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .then(
-                if (onClick != null && enabled) Modifier.clickable(onClick = onClick) else Modifier,
-            )
-            .padding(vertical = 12.dp)
-            .alpha(if (enabled) 1f else 0.55f),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(text = title, style = TextStyle(fontSize = 14.sp, color = titleColor))
-            summary?.let {
-                Spacer(Modifier.height(2.dp))
-                SettingHint(it)
-            }
-        }
-        value?.let {
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = it,
-                style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
-            )
-        }
-        if (onClick != null) {
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = "›",
-                style = TextStyle(fontSize = 15.sp, color = glassTextSecondary()),
-            )
-        }
-    }
-}
-
-/**
- * 自绘开关。
- *
- * 不用 Material3 的 `Switch`：它带 Material 主题色与固定尺寸，
- * 在玻璃面板上会显得比周围控件"亮一档"，且颜色不受「减弱透明」影响。
- */
-@Composable
-private fun GlassSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    val reduceMotion = LocalReduceMotion.current
-    val primary = glassTextPrimary()
-    val target = if (checked) 18.dp else 2.dp
-    val knobOffset by animateDpAsState(
-        targetValue = target,
-        animationSpec = if (reduceMotion) snap() else tween(150),
-        label = "switchKnob",
+    GlasmioListRow(
+        title = title,
+        subtitle = summary,
+        detail = value,
+        // 分隔线由我们的 Divider() 画（行的 showTopSeparator 会把线画在行内顶部，
+        // 与分组首行叠在一起会多一条）
+        showTopSeparator = false,
+        enabled = enabled,
+        titleColor = if (danger) Color(0xFFFF7A7A) else Color.Unspecified,
+        onClick = if (enabled) onClick else null,
     )
-    Box(
-        modifier = Modifier
-            .width(42.dp)
-            .height(24.dp)
-            .clip(CircleShape)
-            .background(primary.copy(alpha = if (checked) 0.85f else 0.16f))
-            .clickable { onCheckedChange(!checked) },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(
-            Modifier
-                // lambda 重载读的是布局阶段的值，不必每次滑动都触发重组
-                .offset { IntOffset(knobOffset.roundToPx(), 0) }
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(if (checked) Color.White else primary.copy(alpha = 0.9f)),
-        )
-    }
 }
 
 // ---------------------------------------------------------------- 弹层
@@ -512,90 +451,41 @@ private fun ImportConfirmSheet(
     onChoose: (ImportMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.32f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp),
-        ) {
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 20.dp)) {
-                Text(
-                    text = "导入备份",
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
-                )
-                Spacer(Modifier.height(6.dp))
-                SettingHint(pending.summary)
-                Spacer(Modifier.height(16.dp))
-                MenuAction(
-                    label = "合并（保留本机事件）",
-                    hint = "同 id 的事件用备份覆盖；外观与小部件样式保持本机",
-                    onClick = { onChoose(ImportMode.MERGE) },
-                )
-                Spacer(Modifier.height(4.dp))
-                MenuAction(
-                    label = "覆盖（先清空本机数据）",
-                    hint = "事件、分类、外观、小部件样式全部替换成备份里的",
-                    danger = true,
-                    onClick = { onChoose(ImportMode.REPLACE) },
-                )
-                Spacer(Modifier.height(8.dp))
-                MenuAction(label = "取消", onClick = onDismiss)
-            }
+    // 短内容用 fitContent：弹层高度跟着内容走，不会留一大片空白
+    GlassSheet(title = "导入备份", onDismiss = onDismiss, fitContent = true) { dismiss ->
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
+            SettingHint(pending.summary)
+            Spacer(Modifier.height(16.dp))
+            MenuAction(
+                label = "合并（保留本机事件）",
+                hint = "同 id 的事件用备份覆盖；外观与小部件样式保持本机",
+                onClick = { onChoose(ImportMode.MERGE) },
+            )
+            Spacer(Modifier.height(4.dp))
+            MenuAction(
+                label = "覆盖（先清空本机数据）",
+                hint = "事件、分类、外观、小部件样式全部替换成备份里的",
+                danger = true,
+                onClick = { onChoose(ImportMode.REPLACE) },
+            )
+            Spacer(Modifier.height(8.dp))
+            MenuAction(label = "取消", onClick = dismiss)
         }
     }
 }
 
 @Composable
 private fun ConfirmClearDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.42f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp),
-        ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(
-                    text = "清除全部数据",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
-                )
-                Spacer(Modifier.height(8.dp))
-                SettingHint("所有事件、分类、小部件样式与外观设置都会被删除，且无法撤销。建议先导出备份。")
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        text = "取消",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onDismiss)
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
-                        style = TextStyle(fontSize = 13.sp, color = glassTextSecondary()),
-                    )
-                    Text(
-                        text = "清除",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onConfirm)
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFFF7A7A)),
-                    )
-                }
-            }
-        }
-    }
+    GlassAlert(
+        visible = true,
+        title = "清除全部数据",
+        message = "所有事件、分类、小部件样式与外观设置都会被删除，且无法撤销。建议先导出备份。",
+        onDismiss = onDismiss,
+        buttons = listOf(
+            GlassAlertButton(label = "取消", role = GlassAlertRole.Cancel, onClick = onDismiss),
+            GlassAlertButton(label = "清除", role = GlassAlertRole.Destructive, onClick = onConfirm),
+        ),
+    )
 }
 
 @Composable
@@ -606,39 +496,25 @@ private fun LicensesSheet(onDismiss: () -> Unit) {
         "Room / DataStore" to "Apache License 2.0",
         "Gson" to "Apache License 2.0",
     )
-    Box(Modifier.fillMaxSize()) {
-        Box(
+    GlassSheet(title = "开源许可", onDismiss = onDismiss, fitContent = true) { dismiss ->
+        Column(
             Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.32f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 20.dp)) {
+            entries.forEach { (name, license) ->
                 Text(
-                    text = "开源许可",
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
+                    text = name,
+                    style = TextStyle(fontSize = 13.sp, color = glassTextPrimary()),
                 )
-                Spacer(Modifier.height(12.dp))
-                entries.forEach { (name, license) ->
-                    Text(
-                        text = name,
-                        style = TextStyle(fontSize = 13.sp, color = glassTextPrimary()),
-                    )
-                    Text(
-                        text = license,
-                        style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                MenuAction(label = "好", onClick = onDismiss)
+                Text(
+                    text = license,
+                    style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
             }
+            Spacer(Modifier.height(4.dp))
+            MenuAction(label = "好", onClick = dismiss)
         }
     }
 }

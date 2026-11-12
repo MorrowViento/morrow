@@ -39,6 +39,7 @@ import com.morrowviento.morrow.data.reminder.SystemAlarmOwner
 import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.component.SectionTitle
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import java.time.Instant
@@ -71,22 +72,10 @@ fun ReminderSheet(
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { actions.refresh() }
 
+    GlassSheet(title = "提醒", onDismiss = onDismiss) { dismiss ->
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.86f),
-            contentAlignment = Alignment.TopStart,
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                SheetHeader(onDismiss)
+        Column(Modifier.fillMaxSize()) {
+                SheetHeader(dismiss)
 
                 Column(
                     modifier = Modifier

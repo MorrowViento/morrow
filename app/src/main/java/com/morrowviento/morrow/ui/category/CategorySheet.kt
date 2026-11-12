@@ -37,6 +37,7 @@ import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.component.GlassTextField
 import com.morrowviento.morrow.ui.component.SectionTitle
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import kotlinx.coroutines.launch
@@ -69,24 +70,11 @@ fun CategorySheet(
     var pendingName by remember { mutableStateOf<String?>(null) }
     var pendingPrompt by remember { mutableStateOf<CategoryDelete.NeedsTarget?>(null) }
 
-    BackHandler(onBack = onDismiss)
-
+    // UIKit 式底部弹层（与新建/编辑/详情同一套）：上滑入场、下拉关闭
+    GlassSheet(title = "分类管理", onDismiss = onDismiss) { dismiss ->
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.86f),
-            contentAlignment = Alignment.TopStart,
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                SheetHeader(onDismiss)
+        Column(Modifier.fillMaxSize()) {
+                SheetHeader(dismiss)
 
                 Column(
                     modifier = Modifier
@@ -223,7 +211,7 @@ fun CategorySheet(
             )
         }
     }
-}
+    }
 
 /** 删除确认层：分类被占用时必须先选迁移目标，不允许静默丢事件。 */
 @Composable

@@ -26,7 +26,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import java.time.format.DateTimeFormatter
@@ -46,24 +46,10 @@ fun EventDetailScreen(
     onTogglePinned: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    BackHandler(onBack = onDismiss)
-
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.88f),
-            contentAlignment = Alignment.TopStart,
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                DetailHeader(onDismiss, onEdit)
+    // 与新建/编辑面板同一套 UIKit 弹层：下拉关闭、滚动到顶继续上拉展开
+    GlassSheet(title = "事件详情", onDismiss = onDismiss) { dismiss ->
+        Column(Modifier.fillMaxSize()) {
+            DetailHeader(dismiss, onEdit)
 
                 Column(
                     modifier = Modifier
@@ -128,7 +114,6 @@ fun EventDetailScreen(
                         )
                     }
                 }
-            }
         }
     }
 }

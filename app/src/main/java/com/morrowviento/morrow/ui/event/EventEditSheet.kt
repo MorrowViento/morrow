@@ -38,7 +38,8 @@ import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.component.GlassTextField
 import com.morrowviento.morrow.ui.component.SectionTitle
 import com.morrowviento.morrow.ui.component.WheelDateTimePicker
-import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSheet
+import com.morrowviento.morrow.ui.glass.SheetHeader
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 
@@ -82,39 +83,32 @@ fun EventEditSheet(
         (categories + form.category).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
     }
 
-    BackHandler(onBack = onDismiss)
-
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.94f),
-            contentAlignment = Alignment.TopStart,
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                SheetHeader(
-                    title = if (isEditing) "编辑事件" else "新建事件",
-                    onCancel = onDismiss,
-                    onSave = {
-                        val errors = form.validate()
-                        showTitleError = errors.title != null
-                        if (errors.isValid) onSave(form)
-                    },
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(start = 18.dp, end = 18.dp, bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
+    // UIKit 式底部弹层：上滑入场、下拉关闭，滚动到顶继续上拉会展开到全屏
+    GlassSheet(
+        title = if (isEditing) "编辑事件" else "新建事件",
+        onDismiss = onDismiss,
+    ) { dismiss ->
+        Column(Modifier.fillMaxSize()) {
+            SheetHeader(
+                title = if (isEditing) "编辑事件" else "新建事件",
+                onCancel = dismiss,
+                confirmLabel = "保存",
+                onConfirm = {
+                    val errors = form.validate()
+                    showTitleError = errors.title != null
+                    if (errors.isValid) {
+                        onSave(form)
+                        dismiss()
+                    }
+                },
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 18.dp, end = 18.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                     GlassTextField(
                         value = form.title,
                         onValueChange = { form = form.copy(title = it) },
@@ -181,43 +175,7 @@ fun EventEditSheet(
                     )
                     Spacer(Modifier.height(8.dp))
                 }
-            }
         }
-    }
-}
-
-@Composable
-private fun SheetHeader(title: String, onCancel: () -> Unit, onSave: () -> Unit) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "取消",
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onCancel)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            style = TextStyle(fontSize = 14.sp, color = secondary),
-        )
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = primary),
-        )
-        Text(
-            text = "保存",
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onSave)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = primary),
-        )
     }
 }
 

@@ -55,6 +55,7 @@ import com.morrowviento.morrow.domain.time.LunarCalendar
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTextButton
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -268,8 +269,8 @@ private fun CalendarHeader(
         NavButton("✕", "关闭日历", onClick = onDismiss)
     }
 
-    // 视图切换回到头部（底栏是常驻的，三个格子固定为 排序 / ＋ / 日历，不随页面变）。
-    // 三个视图用小号玻璃按钮，选中的那个用 Prominent 材质，按下去仍有折射光斑。
+    // 视图切换：Glasmio 的分段控件（一条玻璃轨道 + 会滑动/拉伸的指示器）。
+    // 底栏是常驻的，三格固定为 排序 / ＋ / 日历，视图切换只影响这一页。
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -277,14 +278,12 @@ private fun CalendarHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CalendarView.entries.forEach { view ->
-            GlassTextButton(
-                text = view.label,
-                active = view == state.view,
-                onClick = { actions.setView(view) },
-            )
-        }
-        Spacer(Modifier.weight(1f))
+        GlassSegmentedControl(
+            items = CalendarView.entries.map { it to it.label },
+            selected = state.view,
+            onSelected = { actions.setView(it) },
+            modifier = Modifier.weight(1f),
+        )
         GlassTextButton(
             text = "今天",
             enabled = !onTodayPeriod(state),

@@ -27,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.service.update.UpdatePolicy
-import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 
@@ -46,19 +46,13 @@ fun UpdateSheet(
     val secondary = glassTextSecondary()
     val release = state.release
 
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.42f))
-                .clickable(enabled = !state.busy, onClick = actions.dismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp),
-        ) {
+    // 下载 / 安装进行中禁止点外部或返回键关掉，避免用户以为进度停了
+    GlassSheet(
+        title = "应用更新",
+        onDismiss = actions.dismiss,
+        fitContent = true,
+        dismissible = !state.busy,
+    ) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 20.dp)) {
                 Text(
                     text = when (state.stage) {
@@ -128,7 +122,6 @@ fun UpdateSheet(
             }
         }
     }
-}
 
 @Composable
 private fun SheetHint(text: String) {

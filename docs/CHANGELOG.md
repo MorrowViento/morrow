@@ -2,6 +2,33 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 4.0.0-alpha6 (45)：界面效果与动效整体移植 Glasmio
+
+> 分支策略：`archive/4.0.0-alpha2` 保留 alpha2 (41) 的完整快照（含 Release 对应提交），
+> 之后所有「效果移植」都在 `feat/glasmio-motion` 上做，随时可以切回归档分支恢复旧观感。
+
+- **页面切换**：`ui/glass/GlassMotion.kt` 新增 `GlassPage`。日历 / 设置不再是
+  `fadeIn/fadeOut` 互相淡化，改为 iOS 的导航推入：新页整宽从右滑入、旧页滑回右侧，
+  曲线是库那条临界阻尼弹簧（ω = 2π / 0.3s，刚度 ≈ 438.6；库内标了 `internal`，
+  按 `IosNavigationMotion` 的公式复算并在注释里写明来源）。`reduceMotion` 时退化为瞬时切换。
+- **弹层全部换成 `GlasmioBottomSheet`**（新建/编辑、详情、分类、提醒、更新、导入、许可）：
+  UIKit 的 modal 呈现（上滑 + 圆角收拢）、跟随手指的下拉关闭、滚到顶继续上拉展开、
+  detent、返回键与无障碍 dismiss 动作。库用 `rememberCrossWindowBackdrop` 做跨窗口采样，
+  Dialog 里的玻璃仍能折射应用背景。关闭动画靠「先 `visible = false`、等库收起后再回调」实现。
+- **菜单换成 `GlasmioMenu`**（首页「⋯」）：从按钮位置液态形变展开、关闭缩回，
+  自动上下翻转与贴边收缩，取代原来的「遮罩 + 底部动作表」。
+- **弹窗换成 `GlasmioAlertDialog`**（清空全部、清除数据）：UIKit 的缩放淡入、
+  按 iOS 规则排布按钮（Cancel 加粗、Destructive 系统红）。
+- **设置页换成 iOS 分组列表**：`GlasmioGroupedList` + `GlasmioListRow` + `GlasmioSectionTitle`，
+  开关换成 `GlasmioSwitch`（系统绿胶囊轨道 + 按压缩放 + 透镜折射），删掉自绘的
+  `animateDpAsState` 版本。
+- **日历视图切换**换成 `GlasmioSegmentedControl`（一条玻璃轨道 + 会滑动拉伸的指示器），
+  取代三颗独立按钮。
+- **滚动回弹**：首页与设置页包进 `GlasmioOverscrollHost`，短内容/空列表也能拉出再弹回。
+- 撤销条改为滑入滑出（与弹层同族曲线），不再是硬切。
+- 封装层新增 `ui/glass/GlassSheet.kt`、`GlassMenu.kt`、`GlassAlert.kt`、`GlassMotion.kt`、
+  `GlassNativeControls.kt`（分段控件 / 开关 / 回弹宿主），业务代码依旧不直接 import Glasmio。
+
 ## [2026-11-12] 4.0.0-alpha5 (44)：按压交回 Glasmio，底栏跨页面常驻
 
 - **删掉自绘的按压层**（`ui/glass/GlassPress.kt` 整文件）。按压不再自己画白光环/描边，

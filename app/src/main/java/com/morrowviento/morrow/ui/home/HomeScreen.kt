@@ -1,11 +1,11 @@
 package com.morrowviento.morrow.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -69,6 +69,14 @@ import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassAlert
+import com.morrowviento.morrow.ui.glass.GlassAlertButton
+import com.morrowviento.morrow.ui.glass.GlassAlertRole
+import com.morrowviento.morrow.ui.glass.GlassMenu
+import com.morrowviento.morrow.ui.glass.GlassMenuItem
+import com.morrowviento.morrow.ui.glass.GlassMotion
+import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
+import com.morrowviento.morrow.ui.glass.GlassPage
 import com.morrowviento.morrow.ui.glass.GlassTheme
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -127,6 +135,9 @@ fun HomeScreen(
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
+    // 退场动画期间 state.undo 已经清空，靠这份快照把撤销条画完
+    var lastUndo by remember { mutableStateOf(state.undo) }
+    if (state.undo != null) lastUndo = state.undo
 
     // 分类改名 / 删除迁移的映射（旧名 → 新名，可链式）。表单状态在面板内部，
     // 只能把「这个名字已经变了」传进去，否则表单会拿着旧名保存，让旧分类以孤儿身份长期存在。
@@ -178,9 +189,54 @@ fun HomeScreen(
                         HomeHeader(
                             state = state,
                             listState = listState,
-                            onMore = { showMoreMenu = true },
+                            moreAction = {
+                                // 「⋯」既是按钮也是菜单的锚点：GlassMenu 从它身上液态展开，
+                                // 关闭时缩回按钮，不再是「遮罩 + 底部面板」那套动作表。
+                                GlassMenu(
+                                    expanded = showMoreMenu,
+                                    onExpandedChange = { showMoreMenu = it },
+                                    itemCount = 5,
+                                    anchor = { onClick -> MoreButton(onClick) },
+                                ) { backdrop, close ->
+                                    GlassMenuItem(
+                                        backdrop = backdrop,
+                                        title = "设置",
+                                        onClick = { close(); showSettings = true },
+                                    )
+                                    GlassMenuItem(
+                                        backdrop = backdrop,
+                                        title = "提醒",
+                                        onClick = { close(); showReminders = true },
+                                    )
+                                    GlassMenuItem(
+                                        backdrop = backdrop,
+                                        title = "清空已完成（${state.completed.size}）",
+                                        enabled = state.completed.isNotEmpty(),
+                                        onClick = {
+                                            close()
+                                            eventActions.clearCompleted()
+                                        },
+                                    )
+                                    GlassMenuItem(
+                                        backdrop = backdrop,
+                                        title = "清空全部（${state.totalCount}）",
+                                        enabled = state.totalCount > 0,
+                                        destructive = true,
+                                        onClick = {
+                                            close()
+                                            confirmClearAll = true
+                                        },
+                                    )
+                                    GlassMenuItem(
+                                        backdrop = backdrop,
+                                        title = "取消",
+                                        onClick = close,
+                                    )
+                                }
+                            },
                         )
-                        Box(
+                        // 页面级回弹：内容被拉出一段再弹回（不是 Android 默认的整块拉伸）
+                        GlassOverscrollHost(
                             Modifier
                                 .weight(1f)
                                 .fillMaxWidth(),
@@ -208,11 +264,10 @@ fun HomeScreen(
                     // 日历是整页替换（不是浮层）：盖住列表与 FAB，但与列表共用同一个 backdrop，
                     // 换成独立窗口会切断采样源让玻璃材质失效。它自己会重铺一层不透明底色，
                     // 不能依赖下层首页透出来。
-                    AnimatedVisibility(
+                    GlassPage(
                         visible = showCalendar,
                         modifier = Modifier.fillMaxSize(),
-                        enter = if (appSettings.reduceMotion) EnterTransition.None else fadeIn(),
-                        exit = if (appSettings.reduceMotion) ExitTransition.None else fadeOut(),
+                        reduceMotion = appSettings.reduceMotion,
                     ) {
                         CalendarScreen(
                             state = calendar.current,
@@ -227,11 +282,10 @@ fun HomeScreen(
                     // 设置中心同样是整页覆盖：自带不透明底色与返回处理（见 SettingsScreen）。
                     // 它排在日历之后绘制，因此两者同时为真时设置页在上层——实际上互斥，
                     // 日历里没有设置入口。
-                    AnimatedVisibility(
+                    GlassPage(
                         visible = showSettings,
                         modifier = Modifier.fillMaxSize(),
-                        enter = if (appSettings.reduceMotion) EnterTransition.None else fadeIn(),
-                        exit = if (appSettings.reduceMotion) ExitTransition.None else fadeOut(),
+                        reduceMotion = appSettings.reduceMotion,
                     ) {
                         SettingsScreen(
                             state = settings,
@@ -324,40 +378,28 @@ fun HomeScreen(
                         )
                     }
 
-                    if (showMoreMenu) {
-                        MoreMenu(
-                            completedCount = state.completed.size,
-                            totalCount = state.totalCount,
-                            onOpenSettings = {
-                                showMoreMenu = false
-                                showSettings = true
-                            },
-                            onOpenReminders = {
-                                showMoreMenu = false
-                                showReminders = true
-                            },
-                            onClearCompleted = {
-                                showMoreMenu = false
-                                eventActions.clearCompleted()
-                            },
-                            onClearAll = {
-                                showMoreMenu = false
-                                confirmClearAll = true
-                            },
-                            onDismiss = { showMoreMenu = false },
-                        )
-                    }
-
-                    if (confirmClearAll) {
-                        ConfirmClearAll(
-                            totalCount = state.totalCount,
-                            onConfirm = {
-                                confirmClearAll = false
-                                eventActions.clearAll()
-                            },
-                            onDismiss = { confirmClearAll = false },
-                        )
-                    }
+                    // 保持挂载、只翻转 visible：弹窗的缩放/淡出动画才播得完
+                    GlassAlert(
+                        visible = confirmClearAll,
+                        title = "清空全部事件",
+                        message = "将删除全部 ${state.totalCount} 个事件，6 秒内可撤销。",
+                        onDismiss = { confirmClearAll = false },
+                        buttons = listOf(
+                            GlassAlertButton(
+                                label = "取消",
+                                role = GlassAlertRole.Cancel,
+                                onClick = { confirmClearAll = false },
+                            ),
+                            GlassAlertButton(
+                                label = "清空",
+                                role = GlassAlertRole.Destructive,
+                                onClick = {
+                                    confirmClearAll = false
+                                    eventActions.clearAll()
+                                },
+                            ),
+                        ),
+                    )
 
                     if (showReminders) {
                         ReminderSheet(
@@ -368,14 +410,23 @@ fun HomeScreen(
                     }
 
                     // 撤销条最后绘制：详情/表单浮层打开时它仍需可见，否则 6 秒窗口会被遮住白白错过
-                    state.undo?.let { undo ->
-                        UndoBar(
-                            undo = undo,
-                            onUndo = eventActions.undo,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
-                        )
+                    // 撤销条：出现 / 消失都从底栏上方滑入滑出（此前是硬切，眼睛追不上）
+                    val undo = state.undo
+                    AnimatedVisibility(
+                        visible = undo != null,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        enter = slideInVertically(GlassMotion.navigation()) { it } + fadeIn(GlassMotion.enterFade),
+                        exit = slideOutVertically(GlassMotion.navigation()) { it } + fadeOut(GlassMotion.enterFade),
+                    ) {
+                        // 退场那一帧 undo 已经是 null，用最后一份非空值把内容画完
+                        val shown = undo ?: lastUndo
+                        if (shown != null) {
+                            UndoBar(
+                                undo = shown,
+                                onUndo = eventActions.undo,
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                            )
+                        }
                     }
                 }
             },
@@ -392,7 +443,7 @@ fun HomeScreen(
 private fun HomeHeader(
     state: HomeUiState,
     listState: LazyListState,
-    onMore: () -> Unit,
+    moreAction: @Composable () -> Unit,
 ) {
     val collapsed by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 40 }
@@ -421,11 +472,11 @@ private fun HomeHeader(
                 )
             }
         }
-        MoreButton(onMore)
+        moreAction()
     }
 }
 
-/** 批量清理入口（清空已完成 / 清空全部），放在标题右侧。 */
+/** 「⋯」：菜单锚点。点击由 [GlassMenu] 的 anchor 回调注入。 */
 @Composable
 private fun MoreButton(onClick: () -> Unit) {
     GlassCirclePanel(
@@ -577,122 +628,6 @@ private fun CenterState(title: String, detail: String?) {
         detail?.let {
             Spacer(Modifier.height(4.dp))
             Text(text = it, style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()))
-        }
-    }
-}
-
-@Composable
-private fun MoreMenu(
-    completedCount: Int,
-    totalCount: Int,
-    onOpenSettings: () -> Unit,
-    onOpenReminders: () -> Unit,
-    onClearCompleted: () -> Unit,
-    onClearAll: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.28f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp),
-        ) {
-            Column(Modifier.padding(vertical = 6.dp)) {
-                MenuRow(label = "设置", enabled = true, onClick = onOpenSettings)
-                MenuRow(label = "提醒", enabled = true, onClick = onOpenReminders)
-                MenuRow(
-                    label = "清空已完成（$completedCount）",
-                    enabled = completedCount > 0,
-                    onClick = onClearCompleted,
-                )
-                MenuRow(
-                    label = "清空全部（$totalCount）",
-                    enabled = totalCount > 0,
-                    danger = true,
-                    onClick = onClearAll,
-                )
-                MenuRow(label = "取消", enabled = true, onClick = onDismiss)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MenuRow(
-    label: String,
-    enabled: Boolean,
-    danger: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val color = when {
-        !enabled -> glassTextSecondary().copy(alpha = 0.4f)
-        danger -> Color(0xFFFF7A7A)
-        else -> glassTextPrimary()
-    }
-    Text(
-        text = label,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 13.dp),
-        style = TextStyle(fontSize = 14.sp, color = color),
-    )
-}
-
-/** 清空全部是破坏性最强的操作，即使有撤销也给一次确认。 */
-@Composable
-private fun ConfirmClearAll(totalCount: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.4f))
-                .clickable(onClick = onDismiss),
-        )
-        GlassPanel(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp),
-        ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(
-                    text = "清空全部事件",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "将删除全部 $totalCount 个事件，6 秒内可撤销。",
-                    style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        text = "取消",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onDismiss)
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
-                        style = TextStyle(fontSize = 13.sp, color = glassTextSecondary()),
-                    )
-                    Text(
-                        text = "清空",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onConfirm)
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFFF7A7A)),
-                    )
-                }
-            }
         }
     }
 }
