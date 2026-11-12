@@ -4,7 +4,22 @@
 
 把「萤」倒数日应用从 Flutter 重写为 Kotlin/Compose + Glasmio Liquid Glass（Android 13+），包名与 Flutter 版保持一致以便覆盖升级。
 
+## 当前进度快照（2026-11-12 14:30，交接以此为准）
+
+| 项 | 状态 |
+|---|---|
+| 阶段 | **M7 应用内更新与发布**；M0–M6 代码完成，**M2a–M6 真机验收基本通过**（用户 2026-11-12 确认） |
+| 版本 / 分支 | `4.0.0-alpha1 (40)` / `main`；本地与 `origin/main` 同为 `a525f2a` |
+| 验证 | 228 项单测全绿；lint **0 errors / 11 warnings**（`abortOnError = true`）；debug APK 约 77 MB |
+| 交付 | 上级目录 `ying-4.0.0-alpha1-debug-year-range-m7.apk`；本机无 adb/模拟器，真机由用户在 OnePlus PJZ110 / Android 17 验收 |
+| 工作区 | 仅 `docs/MANUAL-TEST.md` 有用户本地勾选的 40 项验收记录，**按用户要求暂不提交、不推送** |
+| 下一步 | 发布首个带 APK 资产的 GitHub Release → 真机走 N1–N9 → 全量回归与签名发版 |
+
+> `a525f2a` 的推送在代理 502 下后台重试第 24 次才成功；推送不稳定是环境常态，失败时挂后台重试即可，代码本身无需改动。
+
 ## 已完成清单
+
+> 第 1–14 条是各里程碑完成时的原始记录，其中的「未真机验收」指**当时**状态；M2a–M6 已于 2026-11-12 真机验收基本通过，后续修复与当前状态见第 15–18 条及开头快照。
 
 1. **M0 工程基建**：AGP 9.4.1 / Kotlin 2.4.21 / Gradle 9.6.0 / compileSdk 37 / minSdk 33 / JDK 21；Glasmio 0.1.2 双模块依赖；`ui/glass/` 封装层；无 NDK/CMake。
 2. **CI**：`.github/workflows/android-ci.yml`，`assembleDebug + testDebugUnitTest + lintDebug` 出 debug APK 工件。
@@ -21,13 +36,17 @@
 13. **M5 桌面小部件**：`WidgetSnapshotBuilder`（纯函数：未完成事件 → 小部件行，置顶优先 / 未来按临近升序 / 已过排队尾，徽章文案「今天 / N 天 / 已过 N」与首页一致）+ `WidgetStyle`/`WidgetStyleCodec`（预设 1/3/5 行 × 字号三档 × 配色四套 × 分类/日期/进度三开关，逐字段容错解码 + 旧键尽力映射）+ `WidgetConfigStore`（`widget.<id>.style` 单键 JSON，复用同一 DataStore）+ `WidgetRefresher`（唯一刷新入口：一次性查 Room → 拼 RemoteViews → setTextColor/setTextViewTextSize/setBackgroundResource 全套用）+ `YingWidgetProvider`/`YingDetailWidgetProvider` + `MidnightRefreshScheduler`/`WidgetMidnightReceiver`（本地零点刷一次再排下一次，有精确权限走 `setExactAndAllowWhileIdle` 否则降级）+ `WidgetConfigActivity`（玻璃风配置台，LazyColumn 承载，含实时预览与事件绑定）。142 项单测全绿（新增 29：快照 17 + 样式 12）。**未真机验收。**
 14. **M6 设置中心与备份**：`AppSettings`/`ThemeMode`（`isDark(systemDark)` 纯函数）+ `SettingsRepository.appSettings`（四条 Flow combine 成一个快照，另有 `snapshotSettings`/`applySettings` 供备份一次性读写）+ `GlassTheme(darkTheme, reduceTransparency, reduceMotion)`（`GlasmioTheme(isDark=)` + `GlassAppearance(reduceTransparency=)`，并暴露 `LocalGlassDark`/`LocalReduceMotion`）+ `data/backup/`：`BackupDocument`/`BackupCodec`（逐字段读、逐条事件解析、坏条目跳过计数、版本过高拒绝、时间兼收 ISO 与毫秒）+ `BackupMapper` + `BackupMerge` + `BackupRepository`（导出全量 / 导入 REPLACE|MERGE / 清空全部）+ `BackupFiles`（SAF 读写）+ `ui/settings/`：`SettingsScreen`（整页覆盖，外观/数据/提醒/关于四组，导入二次确认，一次性提示条）+ `SettingsViewModel`（导入后按 id 差集取消残留闹钟再整体重排、刷新小部件）；`WidgetConfigStore` 增 `widget.default_style` 兜底换机场景。167 项单测全绿（新增 25：编解码 17 + 合并与设置 8）。**未真机验收。**
 
+15. **真机验收修复链（2026-11-11 ~ 11-12）**：撤销条到期只清内存不删盘 + `pushedAtMillis` 10 分钟内 restore 给满 6 秒、restore 提前到 `MainActivity.onCreate`；新建默认时间改为「此刻」（秒截断到分钟）；分类改名后新旧并存的别名映射；日历翻页改瞬时切页（与箭头同路径）、整页 `pointerInput` 遮罩防穿透、`clickable` 放到 `padding` 前；测试通知补 `contentIntent`、两入口 `EXTRA_FROM_NOTIFICATION` 收浮层落首页、真实提醒按 `EXTRA_EVENT_ID` 开详情；提醒落点 12h 内走 `setAlarmClock`、远期走 exact，新增 `ScheduleTrace` 自证排期与诊断页「最近一次排期」。决策：**保持 12h 窗口不缩**，缩窗会削弱 ROM 省电策略下的准点免疫。
+16. **小部件二次打磨**：修正 `android:configure` 错指导致单事件无法选事件、默认样式串号（`KEY_DEFAULT_STYLE` 存/取都剥掉 `eventId`）；总览由静态 5 行改为 `ListView` + `RemoteViewsFactory` 集合视图（可滑动、行数随高度、点行直达详情）；刷新补 `notifyAppWidgetViewDataChanged` + adapter `data` URI 自增序号强制重绑；长按应用图标 → 先进配置台选样式/事件 → 再 `requestPinAppWidget`（`savePending`/`adoptPending` 认领）；设置页把多个同类实例合并成一行（`EXTRA_WIDGET_IDS` 整组保存刷新）。**ColorOS「服务卡片」是 OPPO 私有框架，标准 Android API 无法接入，已明确不做；pin 也不能指定桌面坐标。**
+17. **减弱透明与年份范围**：`Glasmio` 内建 `reduceTransparency` 会让 `usesBackdrop=false`，把玻璃降级成纯黑/纯白色块；改为始终传默认 `GlassAppearance()`，只在 `GlassPanel` 内侧叠 0.55 alpha 柔和色纱，彩色渐变背景在开关两种状态下完全一致。日期滚轮年份从 `thisYear-1..+20` 改为 `CalendarMath.SELECTABLE_YEARS` 的 1900–2100，与农历年表 / 日历翻页边界共用，并修掉首帧 `snapshotFlow` 把越界旧数据改写成边界年的问题。
+18. **M7 第一批（应用内更新）**：零新增依赖（`HttpURLConnection` + 现有 Gson）；`service/update/` 纯逻辑层 + 三路并发探测（**版本判定取版本号最大的一份**，测速只决定下载线路）+ Range 断点续传与 SHA-256 校验 + `PackageInstaller` 会话安装（系统仍会弹确认）/ FileProvider 兜底；设置 → 关于 → 检查更新，底部玻璃面板手动触发；`INTERNET` / `REQUEST_INSTALL_PACKAGES` / FileProvider、`lint.abortOnError=true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 模板与 CI JSON 校验。228 项单测全绿。**细节见 `docs/CHANGELOG.md` 同名条目。**
+
 ## 未完成清单（按顺序，可直接执行）
 
-1. `M2a/M2b/M2b2/M2c/M2d` 真机验收：安装 `app/build/outputs/apk/debug/app-debug.apk`，看玻璃/秒跳/排序/空态、表单滚轮吸附与落库、分类增删改与删除迁移弹层、详情页、6 秒撤销（含杀进程重启后窗口内仍可撤销）、日历三视图与农历（抽 3 个典型月份与系统日历比对）。
-2. `M4` 真机验收（与上一条同机同轮）：锁屏/Doze 准时触发、通知「完成」与「稍后 10 分钟」动作、重启后闹钟自动重建、跨年重复事件落点、时间/时区变更后不漂移、诊断页条目与实际排期一致、无精确闹钟权限时的降级行为。
-3. `M5` 真机验收：两种小部件添加到桌面、改数据后立即刷新、跨零点天数翻转、点行直达详情、长按「编辑」重开配置台。
-4. `M6` 真机验收：导出到本地与云盘、导入的「合并 / 覆盖」两档数据落点、清空后提醒与小部件是否清干净、主题三态切换（底色与文字要一起变）、减弱透明/减弱动效的真实观感。
-5. `M7` 应用内更新全链路（测速选路 + 断点续传 + 静默安装）+ 全量回归 + 签名发版 + 收紧 lint。
+1. **M7 发版配合（用户侧）**：仓库目前没有 GitHub Release，真机点「检查更新」会显示「已是最新版本」——这是预期而非故障。需发布一个带 APK 资产的 Release（命名建议 `ying-<versionCode>-<版本>-<abi>.apk`）并同步 `update/manifest.json`；正式签名密钥由用户持有，构建时用 `YING_KEYSTORE` / `YING_KEYSTORE_PASSWORD` / `YING_KEY_ALIAS` / `YING_KEY_PASSWORD` 注入，仓库不生成密钥。
+2. **M7 真机链路**：按 `docs/MANUAL-TEST.md` 的 N1–N9 走完「检查 → 下载 → 安装 → 升级」，含断网、无更新、镜像缓存落后、下载中断续传、安装确认弹窗、升级后数据与小部件无感迁移。
+3. **全量回归**：Android 13/14/15/16 覆盖，以及 `MANUAL-TEST.md` 里仍未勾选的细项（跨零点刷新、备份云盘读写、闹钟图标归属与远期提醒、撤销跨进程重启、低端机玻璃帧率）。
+4. **M0 遗留（可选）**：ktlint/detekt 静态检查接入 CI，不阻断当前代码。
 
 验收标准与涉及文件见 `docs/TODO.md`，此处不重复。
 
@@ -69,9 +88,9 @@
 | — | 月视图整月只套一个 `GlassPanel`，格子状态靠文字色/浅色块 | 42 个独立玻璃面在中低端机大概率掉帧，材质表现力并不因此提升 |
 | — | 小部件数据源走**进程内只读快照**，不订阅 `EventRepository.observeAll()` | RemoteViews 拼完即弃，挂着的 Flow 只会在进程回收前白占一个协程与一个 Room 观察者 |
 | — | 小部件刷新复用 M4 的对账链路 + 午夜闹钟，`updatePeriodMillis=0` | 系统周期更新最短 30 分钟且对齐上次刷新时刻，跨天那一刻必然错；主动推送才能让「明天→今天」当场翻转 |
-| — | 小部件布局用 **5 组写死的行**，不用 `RemoteViewsService` 集合 | 为 1~5 行引入整套 Service 生命周期不划算；多出来的行刷新时 GONE |
+| — | ~~小部件用 5 组写死的行~~ **已废弃（M5 真机反馈）**：总览改为 `ListView` + `RemoteViewsFactory` 集合视图 | 静态行放大后下方留白、不能滑动；集合视图让行数随高度、可上下滚。条目点击走 `setPendingIntentTemplate`（模板必须 `FLAG_MUTABLE`，否则丢 fill-in）；刷新必须 `notifyAppWidgetViewDataChanged`，且 adapter Intent 的 `data` URI 带自增序号才能强制重绑（extras 不参与 Intent 相等性） |
 | — | 配色在代码里按 `uiMode` 判明暗，不用 `values-night` | RemoteViews 读不到主题属性，`values-night` 对 `setBackgroundResource` 不生效 |
-| — | 主题与减透明走 **Glasmio 原生参数**（`isDark` + `GlassAppearance(reduceTransparency)`），不在外面叠遮罩 | 遮罩挡得住背景却挡不住折射与高光，开关就成了摆设；原生参数才是真的把材质降级 |
+| — | ~~减透明走 `GlassAppearance(reduceTransparency)`~~ **已废弃**：`GlasmioTheme` 一律传默认 `GlassAppearance()`，减透明由 `LocalReduceTransparency` 在 `GlassPanel` 内侧叠 0.55 alpha 色纱实现 | 反编译 0.1.2 AAR 确认该开关让 `usesBackdrop`/`usesRefraction` 一起变 false，玻璃直接退化成纯黑/纯白色块；底色渐变必须两种模式完全一致，只压面板透过率才符合「减弱透明」语义 |
 | — | 新增 `LocalGlassDark`，`GlassBackdrop` 与 `glassTextPrimary/Secondary` 一律读它 | 用户可强制浅色/深色，若仍按 `isSystemInDarkTheme()` 取色，会出现「底按系统画、字按设置画」的分裂 |
 | — | 设置行**自绘**，不引 `glasmio-preference` | `GlasmioListPreference` 要弹二级对话框，而主题只有三档，横排 chips 少一次点击；两套行的间距与字号不一致会看出接缝 |
 | — | 备份时间存 **ISO-8601 本地时刻字符串**，解码兼容毫秒 | 与 Flutter 版 `toIso8601String()` 同语义、用户能直接打开看；兼容毫秒是为了将来改存时间戳时旧文件仍可读 |
@@ -91,7 +110,7 @@ app/src/main/java/com/jiuxina/ying/
   ui/event/                    # HomeUiState + EventPresentation（纯函数层，可单测）+ EventViewModel
   ui/calendar/                 # CalendarScreen + CalendarUiState/CalendarPresentation（纯函数）+ CalendarActions
   ui/category/                 # CategorySheet + CategoryViewModel
-  ui/component/                # GlassControls（浮层共用控件）/ WheelPicker（五列滚轮）
+  ui/component/                # GlassControls（浮层共用控件）/ WheelPicker（五列滚轮，年份 1900–2100）
   ui/reminder/                 # ReminderSheet（诊断页）+ ReminderUiState + ReminderViewModel
   ui/settings/                 # SettingsScreen（整页覆盖）+ SettingsUiState/SettingsActions + SettingsViewModel（设置读写/备份/清空）
   data/backup/                 # BackupDocument/Codec/Mapper/Merge/Repository/Files（备份格式与 SAF 读写）
@@ -106,7 +125,9 @@ app/src/main/java/com/jiuxina/ying/
   reminder/                    # ReminderNotifier / ReminderReceiver（投递 + 通知动作）/ ReminderBootReceiver
   domain/model/                # CountdownEvent / EventReminder / CountDirection / RepeatType / SortMode / EventCategory / UndoOperation
   domain/time/                 # CalendarMath / RepeatRule / LunarCalendar（1900–2100 农历年表）/ ReminderPlan（排期纯函数）
-  widget/                      # M5 待建
+  widget/                      # Provider / Refresher / 配置台 / WidgetConfigStore / 设置页分组
+  service/update/              # M7：ReleaseJson / UpdatePolicy / UpdateEndpoints / UpdateRepository / ApkDownloader / ApkInstaller
+  ui/update/                   # M7：UpdateUiState / UpdateSheet（设置页底部更新面板）
 ```
 
 **外部参考（务必按此为准）**
@@ -125,18 +146,18 @@ app/src/main/java/com/jiuxina/ying/
       :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
   ```
   单测结果看 `app/build/test-results/testDebugUnitTest/*.xml`（`tests`/`failures`/`errors` 属性）。
-- 提交信息用 `feat/fix/chore(scope): 中文描述`；每个里程碑结束产出可安装 APK，并同步更新 `docs/` 三件套。
+- 提交信息用 `feat/fix/chore(scope): 中文描述`；每个里程碑结束产出可安装 APK，并同步更新 `docs/` 三件套（`HANDOFF.md` / `TODO.md` / `CHANGELOG.md`）。`docs/MANUAL-TEST.md` 是用户真机验收清单，勾选由用户维护，**是否提交由用户逐次决定**，不要顺手 `git add -A` 带走。
 
 ## 已知坑 / 待确认项
 
 1. ~~**[阻塞级] 远程与本地分叉**~~ **已解决（T0）**：根因不是内容差异，而是 Windows `core.autocrlf=true` 让本地提交把 README 存成了 CRLF。`.gitattributes` 落地后差异自动消失，本地与远程同点于 `548edad`。**后续新增文件若再出现"整文件被改"，先查行尾，不要逐行比对。**
 2. **Glasmio 的 main 分支 ≠ 0.1.2**：`GlasmioBackdropHost` 在 main 上多一个 `(sampledColor, modifier, overlayContent)` 重载，v0.1.2 没有。照 main 写会编译失败。
-3. **`lint.abortOnError = false`**：M0 阶段有意放宽，M7 前必须改回 `true`，否则发布包可能带 lint 错误。
+3. ~~**`lint.abortOnError = false`**~~ **已收紧（M7）**：现为 `true`，基线 0 errors / 11 warnings，构建不阻断。新增资源 / 时间 API 前先跑 lint。
 4. **依赖缺口**：`work-runtime-ktx` **经 M4 评估确认不需要**（见决策表）；`navigation-compose` **已不需要**——首页/日历用同页整页覆盖 + `BackHandler` 实现，多一个导航图反而要额外处理 backdrop 采样源。M2a 也刻意绕开了 `material-icons-extended`，图标用 Canvas/文字自绘。
-5. **`robolectric` 已在 version catalog 声明但从未启用**：当前单测是纯 JVM（迁移测试直接测解析器，不碰 Context）。需要跑 DAO/Context 测试时再加 `testImplementation(libs.robolectric)` 与 `@RunWith`。
+5. **Robolectric 已启用**（`WidgetPendingStyleTest` 等 DataStore / Context 测试）：纯 JVM + `runBlocking` 下 DataStore 1.3 的 Okio 在 Windows 会报 `Unable to rename settings.preferences_pb.tmp`，还可能误导成 "multiple DataStores"；必须 `@RunWith(RobolectricTestRunner)` + `runTest` + 每个用例独立文件名。
 6. **迁移只在首启跑一次**：靠 `migration.legacy_v1_done` 幂等；调试迁移逻辑必须清应用数据，否则看不到任何动作。
 7. ~~**撤销窗口跨进程重启的策略未定**~~ **已定（M2c）**：按 `expiresAt` 持久化恢复，重启后 6 秒窗口内仍可撤销；代价是必须「立即落库 + 快照回填」，不能延迟删除。
-8. **低端机玻璃性能未实测**：Glasmio 有 FPS Counter，M7 前需在低端机验证。「减弱透明」开关已落地（走 `GlassAppearance.reduceTransparency`），但它在真实低端机上的功耗/帧率收益尚未测量。
+8. **低端机玻璃性能未实测**：Glasmio 有 FPS Counter，发布前需在低端机验证。「减弱透明」现为自己实现的面板色纱（不再走 Glasmio 降级开关），它在真实低端机上的功耗/帧率收益尚未测量。
 9. **分类默认值「生活」、未知枚举回落默认值是刻意行为**：为与 Dart 侧一致，改动会导致旧数据语义漂移，勿"优化"。
 10. **Flutter 原始源码不在本机**：只有上一级 `.ref/` 的 6 个 Dart 文件（模型 + storage service）可对照，其余页面行为需以计划文档的文件清单为线索。逐模块裁剪决策见 `docs/TODO.md` 的「移植范围」章节。
 11. **`LocalDate.ofInstant` 在 Android 上要 API 34**（lint `NewApi` 抓出，minSdk 只有 33，真机会崩）。统一写 `Instant.ofEpochMilli(x).atZone(zone).toLocalDate()`；`LocalDateTime.ofInstant` 是 API 26，可放心用。新增时间 API 前先跑 lint 看 `NewApi`。
@@ -144,11 +165,6 @@ app/src/main/java/com/jiuxina/ying/
 13. **通知渠道重要性建完即固定**：`reminders` 渠道是 HIGH。日后要调重要性必须换新 channelId 并做迁移，改代码对已安装用户无效。
 14. **精确闹钟默认被拒**：Android 14+ 新装应用 `SCHEDULE_EXACT_ALARM` 默认拒绝，`canScheduleExactAlarms()` 为 false 时直接调 `setExact*` 会抛 `SecurityException`。已做 try/catch + 降级，并在诊断页引导开启。
 15. **`goAsync()` 只给广播约 10 秒**：接收器里读 Room 必须走 IO 协程，并在 `finally` 里 `pending.finish()`，否则系统判超时杀进程。
-11. **本机无设备也无模拟器**（`adb devices` 为空，`.toolchain/sdk` 未装 emulator）：所有视觉/交互验收只能等真机，构建链只保证编译、单测、lint 通过。
-12. ~~**M2a/M2b 尚未提交**~~ **已解决（T0）**：`548edad` 已推送，upstream 已建立。后续每个里程碑结束各自提交，避免再次堆积。
-13. **滚轮吸附未实机校准**：`WheelColumn` 依赖 `itemHeight`(34dp) 与实际行高一致才能居中吸附，`rememberSnapFlingBehavior` 在停止滚动后回写下标；真机上若出现偏移一行的现象，调 `itemHeight` 或改用 `firstVisibleItemIndex + 偏移判断`。
-14. **分类改名不是跨库事务**：Room 与 DataStore 无法同事务，写入顺序固定「先改事件、再改列表」。若第二步失败，结果是事件已改名而列表仍是旧名，旧名会以孤儿分类形式重新出现——数据不丢、可再操作。反之先写列表会出现「列表有、事件挂着已消失的旧名」的隐性不一致，故不采用。**不要**为此改回 id 引用：那要升 Room 版本 + 回填旧数据，收益不足。
-15. **表单打开期间改名/删除其所属分类**：表单持有的是旧名字符串，保存后事件会挂回旧名、重新变成孤儿分类（管理页显示「旧数据中的分类」）。不阻断、不丢数据，属刻意取舍；若后续觉得刺眼，需把表单的 category 改成跟随仓库解析。
 16. **孤儿分类会被任意一次分类编辑「收编」**：`add/rename/delete` 都以「存储列表 ∪ 孤儿」的合并结果为基准并整体落盘，所以旧分类会被写进 `category_list_v1`。这是预期行为——否则重名校验会失效。
 17. **分类浮层沿用 `WhileSubscribed(5s)` 状态流**：冷启动瞬间 `categories` 为空列表，此时立刻点 + 打开表单，分类 chips 只会显示当前值；数据流毫秒级就会补齐。属已知瞬态，不影响落库。
 18. **`UndoBar` 的 z-order 是硬约束**：它必须留在 `HomeScreen` 最外层最后绘制。详情页占 0.88 高、表单占 0.94 高，一旦把撤销条放回它们之前，撤销窗口会在浮层下白白流逝。调整浮层顺序时先看这条。
@@ -166,14 +182,14 @@ app/src/main/java/com/jiuxina/ying/
 30. **日历页的 FAB 不能复用首页那颗**：日历不透明后会把首页 FAB 整个盖住，所以 `CalendarScreen` 有自己的 `CreateFab`（新建日期 = 选中日，没选中就今天）。两处共用 `ui/component` 里的 `CreateFab`，别再各写一份。
 31. **切视图/新增整页后先想「有没有第二层」**：目前是首页 / 日历 / 设置三层。后两者都在根节点铺 `GlassBackdrop` 并自带 `BackHandler`，新增整页界面必须照做，否则会复现「两页重叠」。
 32. **`BroadcastReceiver` 没有 `context` 属性**：`WidgetRefreshRunner.run()` 必须把 `onReceive`/`onUpdate` 的 context 显式传进来，想从 receiver 上取 `receiver.context` 会编译不过（`Unresolved reference: context`）。
-33. **小部件行数与小部件高度强绑定**：RemoteViews 不滚动，塞不下就是裁掉。预设 1/3/5 行分别对应 2/3/5 格高，`widget_overview_info.xml` 的 `minHeight=150dp/targetCellHeight=3` 是按「标准 3 行」定的；改预设行数时必须同步想一遍默认高度，否则用户一添加就少一行。
+33. ~~**RemoteViews 不滚动、塞不下就裁掉**~~ **已被集合视图取代**：总览用 `ListView` 后行数随高度、可上下滑，但 `widget_overview_info.xml` 的 `minHeight=150dp/targetCellHeight=3` 仍按标准 3 行定；样式预设的 1/3/5 行现在控制字号与密度，改默认值前仍要在真机看一眼首屏。`ListView` 内不要再嵌可滚容器。
 34. **`updatePeriodMillis=0` 才是对的**：小部件的跨天刷新由 `MidnightRefreshScheduler` 主动驱动。别为了「省事」把它改回 1800000——系统周期最短 30 分钟并对齐上次刷新时刻，零点那一次必然滞后。
 35. **小部件配色不能用 `values-night`**：RemoteViews 拿不到主题属性，明暗必须在 `WidgetStyle.colors()` 里按 `Configuration.UI_MODE_NIGHT_*` 判断，再用 `setInt(root, "setBackgroundResource", …)` 换 drawable。
-36. **别给配置 Activity 加 `APPWIDGET_CONFIGURE` 的 intent-filter**：两个小部件共用两个配置页，加了 filter 会让启动器在配置时弹出二选一。入口只由 `appwidget-provider` 的 `android:configure` 指定，重配置靠 `android:widgetFeatures="reconfigurable"` + 长按菜单。
+36. **别给配置 Activity 加 `APPWIDGET_CONFIGURE` 的 intent-filter**：两个小部件共用两个配置页，加了 filter 会让启动器在配置时弹出二选一。入口只由 `appwidget-provider` 的 `android:configure` 指定。**ColorOS 真机长按只给「拖动大小」，声明 `widgetFeatures="reconfigurable"` 也不能保证出现「编辑」；应用内设置 → 桌面小部件是唯一可靠入口。**
 37. **`widgetId` 会被系统回收复用**：`onDeleted` 必须删掉对应配置，否则新添加的小部件会继承上一任的样式与绑定事件。
 38. **旧版小部件样式键名无法确认**：`.ref/` 只有 6 个 Dart 模型/存储文件，没有 widget 代码。`WidgetStyleCodec.fromLegacy` 是「尽力映射 + 回落默认」，键名候选集中在 `WidgetStyle.LEGACY_KEY_CANDIDATES`；将来拿到真实旧键名只改那张表，不要动样式模型。旧配置按 widgetId 对不上，因此只当默认值用，不写回新键。
 39. **`GlasmioTheme` 的明暗参数叫 `isDark`，不是 `darkTheme`**：写错会报 `No parameter with name 'darkTheme' found`。完整签名是 `GlasmioTheme(isDark, colorScheme, typography, colors, appearance, dimensions, shapes, spacing, dynamicTypeSize, accentColor, content)`，只传 `isDark` 与 `appearance` 即可，其余有默认值。
-40. **`reduceTransparency` 只能从 `GlassAppearance` 传**：`GlassAppearance(liquidGlassEnabled, reduceTransparency, adaptiveColorScheme)`，它的 `usesRefraction`/`usesBackdrop` 是派生属性，不要去构造。
+40. **`reduceTransparency` 只能从 `GlassAppearance` 传**：`GlassAppearance(liquidGlassEnabled, reduceTransparency, adaptiveColorScheme)`，它的 `usesRefraction`/`usesBackdrop` 是派生属性，不要去构造。**此条只记 API 形状**：业务侧已不再使用该开关，原因见决策表与坑 8。
 41. **整页覆盖视图的底色与文字色必须读 `LocalGlassDark`**：日历、设置页都踩过——直接 `isSystemInDarkTheme()` 在用户强制主题时会与 `GlassTheme` 的决定相反。
 42. **`RemoteViews` 的 widgetId 换机后必然不同**：备份里按 id 存的样式在新设备上一个都对不上，所以 `WidgetConfigStore.save` 同时写一份 `widget.default_style`，`load` 的回落链是「本 id → default_style → 旧键 → 默认」。`loadAll()` 靠 `widgetIdOf()` 把非数字前缀滤掉，别改成直接 `toInt()`。
 43. **`ReminderScheduler.syncAll` 不清残留闹钟**：它只对传入的事件逐个 `sync`，被删掉的 id 的闹钟会一直留着。导入 / 清空之后必须按「导入前的 id 集合 − 导入后的 id 集合」逐个 `cancel`，再 `syncAll`（见 `SettingsViewModel.reconcile`）。
@@ -181,4 +197,10 @@ app/src/main/java/com/jiuxina/ying/
 45. **`Modifier.padding(horizontal = x, top = y)` 是非法组合**：只有 `(start,top,end,bottom)` 与 `(horizontal,vertical)` 两种重载，混用编译报 `None of the following candidates is applicable`，报错行指向调用处但不说明原因。
 46. **`JsonObject.getAsJsonArray` 类型不符会直接抛**：备份文件可能被用户手工改坏，一律走 `get(key)?.takeIf { it.isJsonArray }?.asJsonArray` 这类空安全入口。
 47. **坏事件要在解码阶段就跳过并计数**：留到 `toDomain` 才发现时间解析不了，那条会被 `mapNotNull` 静默丢弃，用户只看到「导入了 N 个」却对不上账。
+48. **本机无设备也无模拟器**：`adb devices` 为空、`.toolchain/sdk` 未装 emulator；开发机只能保证编译 / 单测 / lint。真机验收由用户在 OnePlus PJZ110 / Android 17 上按 `docs/MANUAL-TEST.md` 执行，反馈按编号报。
+49. ~~**M2a/M2b 尚未提交**~~ **已解决（T0）**：`548edad` 已推送，upstream 已建立。后续每个里程碑结束各自提交，避免再次堆积。
+50. **滚轮吸附未实机校准**：`WheelColumn` 依赖 `itemHeight`(34dp) 与实际行高一致才能居中吸附，`rememberSnapFlingBehavior` 在停止滚动后回写下标；真机上若出现偏移一行的现象，调 `itemHeight` 或改用 `firstVisibleItemIndex + 偏移判断`。
+51. **分类改名不是跨库事务**：Room 与 DataStore 无法同事务，写入顺序固定「先改事件、再改列表」。若第二步失败，结果是事件已改名而列表仍是旧名，旧名会以孤儿分类形式重新出现——数据不丢、可再操作。反之先写列表会出现「列表有、事件挂着已消失的旧名」的隐性不一致，故不采用。**不要**为此改回 id 引用：那要升 Room 版本 + 回填旧数据，收益不足。
+52. **表单打开期间改名/删除其所属分类**：表单持有的是旧名字符串，保存后事件会挂回旧名、重新变成孤儿分类（管理页显示「旧数据中的分类」）。不阻断、不丢数据，属刻意取舍；若后续觉得刺眼，需把表单的 category 改成跟随仓库解析。
+53. **推送常因代理 502 失败**：`git push` 报 `CONNECT tunnel failed, 502` 时不要改代码或换远端，挂后台按间隔重试即可（`a525f2a` 第 24 次成功，`b00696e` 一次成功）。提交本身是本地完成的，不阻塞交付。
 
