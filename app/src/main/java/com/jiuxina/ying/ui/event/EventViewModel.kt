@@ -16,6 +16,7 @@ import com.jiuxina.ying.domain.model.UndoKind
 import com.jiuxina.ying.domain.model.UndoOperation
 import com.jiuxina.ying.ui.calendar.CalendarNav
 import com.jiuxina.ying.ui.calendar.CalendarPresentation
+import com.jiuxina.ying.ui.calendar.CalendarStrip
 import com.jiuxina.ying.ui.calendar.CalendarUiState
 import com.jiuxina.ying.ui.calendar.CalendarView
 import kotlinx.coroutines.Dispatchers
@@ -135,15 +136,24 @@ class EventViewModel(
         }
     }.distinctUntilChanged()
 
-    val calendar: StateFlow<CalendarUiState> = combine(
+    /**
+     * 当前页 + 相邻页一起产出：翻页动画期间两页同时渲染，屏上不会出现空白帧。
+     *
+     * 只有一个 Flow，相邻页不额外订阅 Room——否则 events.observeAll() 会被 collect 三次。
+     */
+    val calendarStrip: StateFlow<CalendarStrip> = combine(
         events.observeAll(),
         calendarNav,
         dayTick,
     ) { list, nav, today ->
-        CalendarPresentation.build(list, nav, today)
+        CalendarPresentation.strip(list, nav, today)
     }
-        .catch { emit(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败")) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState(isLoading = true))
+        .catch { emit(CalendarStrip(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败"))) }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            CalendarStrip(CalendarUiState(isLoading = true)),
+        )
 
     fun setCalendarView(view: CalendarView) {
         calendarNav.update { it.copy(view = view) }

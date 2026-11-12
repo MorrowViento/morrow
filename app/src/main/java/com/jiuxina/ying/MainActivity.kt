@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
                 ),
             )
             val state by viewModel.state.collectAsStateWithLifecycle()
-            val calendar by viewModel.calendar.collectAsStateWithLifecycle()
+            val calendar by viewModel.calendarStrip.collectAsStateWithLifecycle()
             val categories by categoryViewModel.items.collectAsStateWithLifecycle()
             val reminders by reminderViewModel.state.collectAsStateWithLifecycle()
             val openDetail by pendingDetailId.collectAsStateWithLifecycle()

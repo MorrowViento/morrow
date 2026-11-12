@@ -108,6 +108,21 @@ data class CalendarUiState(
 }
 
 /**
+ * 当前页 + 左右相邻页。
+ *
+ * 相邻页是为了让翻页动画**两页同时在屏上**：旧版是「当前页滑出去 → 换数据 → 新页从另一侧滑进来」，
+ * 中间有一整屏空白（真机反馈「两个界面之间有一段空白动画间隔」）。现在滑到哪一页、哪一页就已经
+ * 渲染在那里，空白期从结构上不存在。
+ *
+ * [prev] / [next] 在边界（已到农历年表尽头）为 null，调用方据此不做翻页动画，直接回弹。
+ */
+data class CalendarStrip(
+    val current: CalendarUiState,
+    val prev: CalendarUiState? = null,
+    val next: CalendarUiState? = null,
+)
+
+/**
  * 日历展示逻辑（纯函数，无 Android 依赖）。
  *
  * 重复事件按「当年周年」落位：月/日取自 `repeatMonth/repeatDay`（缺省取原目标日期），
@@ -153,6 +168,37 @@ object CalendarPresentation {
             CalendarView.YEAR -> buildYear(events, nav, today)
             CalendarView.LIST -> buildList(events, nav, today)
         }
+
+    /**
+     * 当前页 + 相邻页。
+     *
+     * 相邻页只在翻页动画期间被渲染；代价是每次数据变化多算两页（月视图 42 格 × 2），
+     * 换来的是滑动时屏上始终有内容——比省这点计算量重要。
+     */
+    fun strip(events: List<CountdownEvent>, nav: CalendarNav, today: LocalDate): CalendarStrip =
+        CalendarStrip(
+            current = build(events, nav, today),
+            prev = neighbor(events, nav, today, -1),
+            next = neighbor(events, nav, today, 1),
+        )
+
+    /** 相邻页；已到边界（clamp 后还是本月/今年）返回 null，调用方据此回弹而不是空翻一页。 */
+    private fun neighbor(
+        events: List<CountdownEvent>,
+        nav: CalendarNav,
+        today: LocalDate,
+        delta: Long,
+    ): CalendarUiState? {
+        val target = if (nav.view == CalendarView.MONTH) {
+            nav.month.plusMonths(delta)
+        } else {
+            nav.month.plusYears(delta)
+        }
+        val clamped = CalendarNav.clamp(target)
+        if (clamped == nav.month) return null
+        // 翻页会清空选区（见 EventViewModel.shiftCalendarMonth），相邻页保持一致
+        return build(events, nav.copy(month = clamped, selected = null), today)
+    }
 
     private fun buildMonth(
         events: List<CountdownEvent>,

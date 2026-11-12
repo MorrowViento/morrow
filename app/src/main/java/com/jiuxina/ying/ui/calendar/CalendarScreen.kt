@@ -1,6 +1,8 @@
 package com.jiuxina.ying.ui.calendar
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,7 +61,9 @@ import com.jiuxina.ying.ui.glass.GlassCirclePanel
 import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.abs
@@ -79,6 +85,10 @@ fun CalendarScreen(
     onCreate: (LocalDate) -> Unit,
     onOpenEvent: (String) -> Unit,
     onDismiss: () -> Unit,
+    /** 左侧相邻页；翻页动画期间一起渲染，已到边界为 null。 */
+    prevPage: CalendarUiState? = null,
+    /** 右侧相邻页；同上。 */
+    nextPage: CalendarUiState? = null,
 ) {
     Box(Modifier.fillMaxSize()) {
         GlassBackdrop()
@@ -99,18 +109,19 @@ fun CalendarScreen(
                 state.isLoading -> CenterHint("载入中…", null)
                 else -> SwipePager(
                     modifier = Modifier.weight(1f),
+                    canPrev = prevPage != null,
+                    canNext = nextPage != null,
+                    pageKey = state.view to state.month,
                     onPrev = {
                         if (state.view == CalendarView.MONTH) actions.shiftMonth(-1) else actions.shiftYear(-1)
                     },
                     onNext = {
                         if (state.view == CalendarView.MONTH) actions.shiftMonth(1) else actions.shiftYear(1)
                     },
+                    prevPage = { prevPage?.let { CalendarPage(it, actions, onOpenEvent) } },
+                    nextPage = { nextPage?.let { CalendarPage(it, actions, onOpenEvent) } },
                 ) {
-                    when (state.view) {
-                        CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
-                        CalendarView.YEAR -> YearView(state, actions)
-                        CalendarView.LIST -> MonthListView(state, onOpenEvent)
-                    }
+                    CalendarPage(state, actions, onOpenEvent)
                 }
             }
         }
@@ -146,30 +157,68 @@ internal fun swipeDirection(
 private const val SWIPE_DISTANCE_RATIO = 0.18f
 
 /**
- * 左右滑动翻页：跟手位移，松手后要么回弹、要么把当前页推出去再从另一侧拉回新页。
+ * 左右滑动翻页：跟手位移，相邻页**同时**渲染在屏上。
  *
- * 刻意不引入真正的 Pager：相邻页的数据（42 格 + 农历 + 事件点）只对当前页构建，
- * 要一屏两页就得再算一整月；而只要「旧页滑出 → 换页 → 新页滑入」衔接得上，
- * 观感与 Pager 没有区别，代价却小得多。
+ * 前一版是「当前页滑出去 → 换数据 → 新页从另一侧滑进来」，中间有整整一屏空白
+ * （真机反馈「两个界面之间有一段空白动画间隔」）。现在滑到哪、哪一页就已经在那里了。
+ *
+ * 换页不换位置：滑到位时当前页在 offset = ±width，新页的 translationX 恰好是 0，
+ * 这时才切 nav；等新数据到位、正中那一页本身就是新页了，再把 offset 悄悄归零。
+ * 归零前后画面完全静止，所以既没有空白帧，也不会看到两页错位。
+ *
+ * 只有当前页可点：翻页动画那两百毫秒里，正中那页是「相邻页」的副本，
+ * 它的 nav 还没生效，点下去只会得到一个即将被丢弃的选中态。
  *
  * 回调必须经 [rememberUpdatedState] 取：手势协程只启动一次且一直存活，
  * 直接捕获 `onPrev` / `onNext` 会永远用第一帧那份闭包（滚轮就是这么错的）。
  */
 @Composable
 private fun SwipePager(
+    canPrev: Boolean,
+    canNext: Boolean,
+    /** 换页后变化的值（视图 + 月份）；等它变了才把位移归零。 */
+    pageKey: Any,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    prevPage: @Composable () -> Unit,
+    nextPage: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val latestOnPrev by rememberUpdatedState(onPrev)
     val latestOnNext by rememberUpdatedState(onNext)
+    val latestCanPrev by rememberUpdatedState(canPrev)
+    val latestCanNext by rememberUpdatedState(canNext)
+    val latestKey by rememberUpdatedState(pageKey)
     var width by remember { mutableFloatStateOf(0f) }
     var offset by remember { mutableFloatStateOf(0f) }
     var busy by remember { mutableStateOf(false) }
+    // 屏上要额外画哪一侧：0 不画，1 下一页，-1 上一页。
+    // 把「每帧位移」收敛成「只在跨过中线时变化」，拖动过程中才不会重组整页内容。
+    val side by remember {
+        derivedStateOf {
+            when {
+                offset < -1f -> 1
+                offset > 1f -> -1
+                else -> 0
+            }
+        }
+    }
     val flingVelocity = with(density) { 600.dp.toPx() }
+
+    /** 把位移滑到 [target]：时长随剩余距离走，抖一下就松手时不会慢吞吞挪一整屏。 */
+    suspend fun glide(target: Float) {
+        val remaining = abs(target - offset)
+        val ratio = remaining / width.coerceAtLeast(1f)
+        val duration = (60f + 180f * ratio).toInt().coerceIn(60, 240)
+        animate(
+            initialValue = offset,
+            targetValue = target,
+            animationSpec = tween(durationMillis = duration, easing = FastOutSlowInEasing),
+        ) { value, _ -> offset = value }
+    }
 
     Box(
         modifier = modifier
@@ -183,13 +232,19 @@ private fun SwipePager(
                         tracker.resetTracking()
                         dragged = 0f
                     },
-                    onDragCancel = {
-                        scope.launch { animate(offset, 0f) { value, _ -> offset = value } }
-                    },
+                    onDragCancel = { scope.launch { glide(0f) } },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
                         if (!busy) {
-                            offset += dragAmount
+                            val raw = offset + dragAmount
+                            val min = if (latestCanNext) -width else 0f
+                            val max = if (latestCanPrev) width else 0f
+                            // 到边界还继续拖时只给 1/4 位移：手感上「拽到头了」比硬停更好懂
+                            offset = when {
+                                raw < min -> min + (raw - min) * EDGE_RESISTANCE
+                                raw > max -> max + (raw - max) * EDGE_RESISTANCE
+                                else -> raw
+                            }
                             dragged += dragAmount
                             tracker.addPosition(change.uptimeMillis, change.position)
                         }
@@ -197,17 +252,25 @@ private fun SwipePager(
                     onDragEnd = {
                         val velocity = tracker.calculateVelocity().x
                         val direction = swipeDirection(dragged, velocity, width, flingVelocity)
-                        if (direction == 0) {
-                            scope.launch { animate(offset, 0f) { value, _ -> offset = value } }
+                        val allowed = when (direction) {
+                            1 -> latestCanNext
+                            -1 -> latestCanPrev
+                            else -> false
+                        }
+                        if (!allowed) {
+                            scope.launch { glide(0f) }
                         } else {
                             busy = true
                             scope.launch {
-                                val exit = if (direction > 0) -width else width
-                                animate(offset, exit) { value, _ -> offset = value }
+                                glide(if (direction > 0) -width else width)
+                                val from = latestKey
                                 if (direction > 0) latestOnNext() else latestOnPrev()
-                                // 从相反一侧出发再拉回正中，形成「新页推入」
-                                offset = -exit
-                                animate(offset, 0f) { value, _ -> offset = value }
+                                // 等新一页的数据落位再归零：这期间画面静止在新页正中，
+                                // 用户看不到任何等待，也不会闪一帧旧内容
+                                withTimeoutOrNull(SETTLE_TIMEOUT_MILLIS) {
+                                    snapshotFlow { latestKey }.first { it != from }
+                                }
+                                offset = 0f
                                 busy = false
                             }
                         }
@@ -215,6 +278,25 @@ private fun SwipePager(
                 )
             },
     ) {
+        // 相邻页先画、当前页后画：万一两页有重叠，当前页在上
+        if (side == 1) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = width + offset },
+            ) {
+                nextPage()
+            }
+        }
+        if (side == -1) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = offset - width },
+            ) {
+                prevPage()
+            }
+        }
         Box(
             Modifier
                 .fillMaxSize()
@@ -222,6 +304,31 @@ private fun SwipePager(
         ) {
             content()
         }
+    }
+}
+
+/** 拖到边界后的位移衰减系数。 */
+private const val EDGE_RESISTANCE = 0.25f
+
+/**
+ * 等新页数据的上限。
+ *
+ * 正常 1~3 帧就到位；给上限是为了「翻页没改变 nav」这种意外（比如数据源被 clamp 回来）
+ * 也能收尾，不会把 busy 永久挂住导致页面拖不动。
+ */
+private const val SETTLE_TIMEOUT_MILLIS = 300L
+
+/** 三种视图共用的内容分派。 */
+@Composable
+private fun CalendarPage(
+    state: CalendarUiState,
+    actions: CalendarActions,
+    onOpenEvent: (String) -> Unit,
+) {
+    when (state.view) {
+        CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
+        CalendarView.YEAR -> YearView(state, actions)
+        CalendarView.LIST -> MonthListView(state, onOpenEvent)
     }
 }
 

@@ -263,4 +263,41 @@ class CalendarPresentationTest {
         assertEquals(YearMonth.of(2100, 12), CalendarNav.clamp(YearMonth.of(2200, 3)))
         assertEquals(YearMonth.of(2026, 3), CalendarNav.clamp(YearMonth.of(2026, 3)))
     }
+
+    @Test
+    fun `相邻页给出前后月份且清空选区`() {
+        val nav = CalendarNav(view = CalendarView.MONTH, month = YearMonth.of(2026, 3), selected = today)
+        val strip = CalendarPresentation.strip(listOf(event()), nav, today)
+
+        assertEquals(YearMonth.of(2026, 3), strip.current.month)
+        assertEquals(today, strip.current.selected)
+        assertEquals(YearMonth.of(2026, 2), strip.prev?.month)
+        assertEquals(YearMonth.of(2026, 4), strip.next?.month)
+        // 翻页会清空选区，相邻页必须和翻过去之后的状态一致，否则动画收尾时选区会闪一下
+        assertNull(strip.prev?.selected)
+        assertNull(strip.next?.selected)
+    }
+
+    @Test
+    fun `相邻页在年视图按年翻`() {
+        val nav = CalendarNav(view = CalendarView.YEAR, month = YearMonth.of(2026, 3))
+        val strip = CalendarPresentation.strip(emptyList(), nav, today)
+
+        assertEquals(2025, strip.prev?.month?.year)
+        assertEquals(2027, strip.next?.month?.year)
+        assertEquals(CalendarView.YEAR, strip.next?.view)
+    }
+
+    @Test
+    fun `翻到年表边界时没有相邻页`() {
+        val first = CalendarNav(view = CalendarView.MONTH, month = CalendarNav.clamp(YearMonth.of(1800, 1)))
+        val firstStrip = CalendarPresentation.strip(emptyList(), first, today)
+        assertNull("已到最早月份，不该再有上一页（否则会空翻一页）", firstStrip.prev)
+        assertTrue(firstStrip.next != null)
+
+        val last = CalendarNav(view = CalendarView.MONTH, month = CalendarNav.clamp(YearMonth.of(2200, 12)))
+        val lastStrip = CalendarPresentation.strip(emptyList(), last, today)
+        assertNull("已到最晚月份，不该再有下一页", lastStrip.next)
+        assertTrue(lastStrip.prev != null)
+    }
 }

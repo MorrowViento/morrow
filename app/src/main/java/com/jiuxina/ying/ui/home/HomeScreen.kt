@@ -58,7 +58,7 @@ import com.jiuxina.ying.data.settings.AppSettings
 import com.jiuxina.ying.domain.model.SortMode
 import com.jiuxina.ying.ui.calendar.CalendarActions
 import com.jiuxina.ying.ui.calendar.CalendarScreen
-import com.jiuxina.ying.ui.calendar.CalendarUiState
+import com.jiuxina.ying.ui.calendar.CalendarStrip
 import com.jiuxina.ying.ui.category.CategoryActions
 import com.jiuxina.ying.ui.category.CategorySheet
 import com.jiuxina.ying.ui.component.CreateFab
@@ -93,7 +93,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     state: HomeUiState,
-    calendar: CalendarUiState,
+    calendar: CalendarStrip,
     calendarActions: CalendarActions,
     categories: List<CategoryItem>,
     categoryActions: CategoryActions,
@@ -209,7 +209,9 @@ fun HomeScreen(
                         exit = if (appSettings.reduceMotion) ExitTransition.None else fadeOut(),
                     ) {
                         CalendarScreen(
-                            state = calendar,
+                            state = calendar.current,
+                            prevPage = calendar.prev,
+                            nextPage = calendar.next,
                             actions = calendarActions,
                             onCreate = { date ->
                                 categoryAliases = emptyMap()
