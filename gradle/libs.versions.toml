@@ -13,8 +13,8 @@ room = "2.8.5"
 datastore = "1.3.0"
 coroutines = "1.10.2"
 
-# Glasmio（决策 D3：锁定 0.1.2，升级仅改此处并回归 ui/glass/ 封装层）
-glasmio = "0.1.2"
+# Glasmio（决策 D3：锁定 0.1.3，升级仅改此处并回归 ui/glass/ 封装层）
+glasmio = "0.1.3"
 
 gson = "2.11.0"
 junit = "4.13.2"

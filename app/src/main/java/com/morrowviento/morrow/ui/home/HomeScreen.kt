@@ -43,12 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,7 +58,7 @@ import com.morrowviento.morrow.ui.calendar.CalendarScreen
 import com.morrowviento.morrow.ui.calendar.CalendarStrip
 import com.morrowviento.morrow.ui.category.CategoryActions
 import com.morrowviento.morrow.ui.category.CategorySheet
-import com.morrowviento.morrow.ui.component.CreateFab
+import com.morrowviento.morrow.ui.component.HomeBottomBar
 import com.morrowviento.morrow.ui.event.EventActions
 import com.morrowviento.morrow.ui.event.EventDetailScreen
 import com.morrowviento.morrow.ui.event.EventEditSheet
@@ -73,8 +70,11 @@ import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassTheme
+import com.morrowviento.morrow.ui.glass.glassPressFeedback
+import com.morrowviento.morrow.ui.glass.glassPressable
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
+import com.morrowviento.morrow.ui.glass.rememberGlassPress
 import com.morrowviento.morrow.ui.reminder.ReminderActions
 import com.morrowviento.morrow.ui.reminder.ReminderSheet
 import com.morrowviento.morrow.ui.reminder.ReminderUiState
@@ -181,8 +181,6 @@ fun HomeScreen(
                         HomeHeader(
                             state = state,
                             listState = listState,
-                            onSortChange = onSortChange,
-                            onCalendar = { showCalendar = true },
                             onMore = { showMoreMenu = true },
                         )
                         Box(
@@ -209,11 +207,18 @@ fun HomeScreen(
                             }
                         }
                     }
-                    CreateFab(
+
+                    // 底栏：排序 / 新建 / 日历。整条是一块胶囊玻璃，浮在列表之上（列表会从它下面穿过）。
+                    // 「＋」从右下角悬浮按钮挪到这里，与 iOS 底栏一致；首页因此不再有自己的 FAB。
+                    HomeBottomBar(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 20.dp, bottom = 26.dp),
-                        onClick = {
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 14.dp),
+                        sortLabel = state.sortMode.label(),
+                        onCycleSort = { onSortChange(nextSort(state.sortMode)) },
+                        onCalendar = { showCalendar = true },
+                        onCreate = {
                             categoryAliases = emptyMap()
                             editingForm = EventFormState.newEvent()
                         },
@@ -374,13 +379,15 @@ fun HomeScreen(
     }
 }
 
-/** 大标题随滚动收缩（iOS 式），副标题在收缩后隐藏。 */
+/**
+ * 大标题随滚动收缩（iOS 式），副标题在收缩后隐藏。
+ *
+ * 排序、日历已经搬到 [HomeBottomBar]；标题区只留「更多」一颗，大标题右边不再挤三颗按钮。
+ */
 @Composable
 private fun HomeHeader(
     state: HomeUiState,
     listState: LazyListState,
-    onSortChange: (SortMode) -> Unit,
-    onCalendar: () -> Unit,
     onMore: () -> Unit,
 ) {
     val collapsed by remember {
@@ -410,85 +417,24 @@ private fun HomeHeader(
                 )
             }
         }
-        SortChip(state.sortMode, onSortChange)
-        Spacer(Modifier.size(6.dp))
-        CalendarButton(onCalendar)
-        Spacer(Modifier.size(6.dp))
         MoreButton(onMore)
     }
 }
 
-/** 日历入口。图标用 Canvas 画，避免依赖字体里是否有日历字形。 */
-@Composable
-private fun CalendarButton(onClick: () -> Unit) {
-    val primary = glassTextPrimary()
-    GlassCirclePanel(modifier = Modifier.size(32.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Canvas(Modifier.size(13.dp)) {
-                val stroke = 1.2.dp.toPx()
-                val corner = 2.dp.toPx()
-                val top = size.height * 0.16f
-                drawRoundRect(
-                    color = primary,
-                    topLeft = Offset(0f, top),
-                    size = Size(size.width, size.height - top),
-                    cornerRadius = CornerRadius(corner, corner),
-                    style = Stroke(width = stroke),
-                )
-                drawLine(
-                    color = primary,
-                    start = Offset(0f, size.height * 0.4f),
-                    end = Offset(size.width, size.height * 0.4f),
-                    strokeWidth = stroke,
-                )
-                // 顶部两个挂环
-                drawLine(
-                    color = primary,
-                    start = Offset(size.width * 0.3f, 0f),
-                    end = Offset(size.width * 0.3f, size.height * 0.26f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-                drawLine(
-                    color = primary,
-                    start = Offset(size.width * 0.7f, 0f),
-                    end = Offset(size.width * 0.7f, size.height * 0.26f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-            }
-        }
-    }
-}
-
-/** 排序切换：点一次切下一个（完整筛选/搜索栏留待 M2d 与日历页一起做）。 */
-@Composable
-private fun SortChip(mode: SortMode, onSortChange: (SortMode) -> Unit) {
-    val next = SortMode.entries[(mode.ordinal + 1) % SortMode.entries.size]
-    GlassPanel(modifier = Modifier.clickable { onSortChange(next) }) {
-        Text(
-            text = "排序 · ${mode.label()}",
-            style = TextStyle(fontSize = 12.sp, color = glassTextPrimary()),
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-        )
-    }
-}
-
-/** 批量清理入口（清空已完成 / 清空全部），放在排序旁边避免标题区过挤。 */
+/** 批量清理入口（清空已完成 / 清空全部），放在标题右侧。 */
 @Composable
 private fun MoreButton(onClick: () -> Unit) {
-    GlassCirclePanel(modifier = Modifier.size(32.dp)) {
+    val press = rememberGlassPress()
+    GlassCirclePanel(
+        modifier = Modifier
+            .size(32.dp)
+            .glassPressFeedback(press, scale = 0.08f, shape = CircleShape),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .clickable(onClick = onClick),
+                .glassPressable(press, contentDescription = "更多操作", onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -517,7 +463,7 @@ private fun EventList(
         }
         if (state.active.isEmpty()) {
             item(key = "active-empty") {
-                SectionHint("暂无进行中的事件，点右下角 + 新建")
+                SectionHint("暂无进行中的事件，点下方 ＋ 新建")
             }
         }
         items(state.active, key = { it.id }) { card ->
@@ -618,7 +564,7 @@ private fun EmptyState() {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "点右下角 + 记录第一个期待",
+                    text = "点下方 ＋ 记录第一个期待",
                     style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
                 )
             }
@@ -759,6 +705,9 @@ private fun ConfirmClearAll(totalCount: Int, onConfirm: () -> Unit, onDismiss: (
 
 /** 被采样的背景由 [GlassBackdrop] 统一提供：首页与整页覆盖的日历页必须用同一份，
  * 否则两者交叠处会出现色差（玻璃采样到的颜色与页面底色不一致）。 */
+
+private fun nextSort(mode: SortMode): SortMode =
+    SortMode.entries[(mode.ordinal + 1) % SortMode.entries.size]
 
 private fun SortMode.label(): String = when (this) {
     SortMode.DISTANCE -> "距离"

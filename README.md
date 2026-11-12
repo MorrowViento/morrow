@@ -1,6 +1,6 @@
 # morrow
 
-「朝夕」（Morrow）的 Kotlin 重构工程（Jetpack Compose + Glasmio 0.1.2）。
+「朝夕」（Morrow）的 Kotlin 重构工程（Jetpack Compose + Glasmio 0.1.3）。
 
 重构总计划见上一级目录《ying-kotlin-refactor-plan.md》（文件名沿用旧称呼，未随本次更名调整）。本仓库遵循以下既定决策：
 
@@ -8,7 +8,7 @@
 |---|---|
 | D1 最低系统 | Android 13（API 33），Glasmio 强制要求 |
 | D2 重构策略 | 不并行维护 Flutter 主线，全力专注重构 |
-| D3 Glasmio | 锁定 `io.github.neoruaa.glasmio:*:0.1.2`（Maven Central）；业务代码不得直接 import，仅经 `ui/glass/` 封装层调用 |
+| D3 Glasmio | 锁定 `io.github.neoruaa.glasmio:*:0.1.3`（Maven Central，2026-11-11 发布）；业务代码不得直接 import，仅经 `ui/glass/` 封装层调用 |
 | D4 图标 | 自绘自适应图标「晨昏日轮」（矢量前景 + 渐变底 + Android 13 单色版）；不使用 SF Symbols（Apple 字体许可） |
 | D5 技术栈 | Compose + ViewModel + Room + DataStore + WorkManager |
 | D6 构建链 | JDK 21 · Android SDK 37（platform android-37.0 / build-tools 37.0.0）· Gradle 9.6.0 |
@@ -31,14 +31,18 @@
 
 ## Glasmio API 版本约定
 
-**所有 Glasmio 调用以 `v0.1.2` 标签源码为准，不是 main 分支。** 两者存在已确认的差异：
+**所有 Glasmio 调用以 `v0.1.3` 标签源码为准，不是 main 分支。**
 
-| 项 | v0.1.2（发布版，我们使用） | main 分支（未发布） |
-|---|---|---|
-| `GlasmioBackdropHost` | 仅 `(modifier, sampledContent, overlayContent)` | 另有 `(sampledColor, modifier, overlayContent)` 便捷重载 |
-| `GlassSurface` | 已提供，默认取 `LocalGlassBackdrop` | 同名 |
+| 项 | 我们依赖的形态 |
+|---|---|
+| `GlasmioBackdropHost` | `(modifier, sampledContent, overlayContent)`；纯色底由调用方自己画一个 `Box` |
+| `GlassSurface` | 默认取 `LocalGlassBackdrop`；0.1.3 起自带 `onClick` / `onLongClick` / `detailAction` 按压光学 |
+| `InteractiveHighlight` | 0.1.3 新增，玻璃按压的「液体光斑」；由 `ui/glass/GlassPress.kt` 统一封装 |
+| 渲染门槛 | 按压高光走 `RuntimeShader`，**API 36 以下库内直接跳过**，封装层另加淡白色兜底 |
 
-升级 Glasmio 时，先比对 `vX.Y.Z` 标签源码再改 `ui/glass/`。
+0.1.2 → 0.1.3 的升级只需改 `gradle/libs.versions.toml` 一处；`ui/glass/` 之外没有代码变动
+（`com.kyant.capsule.ContinuousRoundedRectangle` 与 `com.kyant.shapes.Capsule` 两个形状
+API 也稳定）。升级 Glasmio 时仍建议先比对 `vX.Y.Z` 标签源码。
 
 
 ## 包结构约定

@@ -1,7 +1,6 @@
 package com.morrowviento.morrow.ui.home
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +29,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.event.EventCardModel
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.glassPanelShape
+import com.morrowviento.morrow.ui.glass.glassPressFeedback
+import com.morrowviento.morrow.ui.glass.glassPressable
+import com.morrowviento.morrow.ui.glass.rememberGlassPress
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import androidx.compose.foundation.background
@@ -47,11 +50,14 @@ fun EventCardView(
 ) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
+    val press = rememberGlassPress()
 
     GlassPanel(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            // 按压反馈代替 ripple：卡片是 26dp 圆角玻璃，Material 的矩形 ripple 会在四角露出方框
+            .glassPressFeedback(press, scale = 0.012f, shape = glassPanelShape())
+            .glassPressable(press, onClick = onClick),
     ) {
         Row(
             modifier = Modifier

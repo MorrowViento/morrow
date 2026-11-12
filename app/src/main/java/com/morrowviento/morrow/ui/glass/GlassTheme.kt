@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -15,9 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import com.kyant.capsule.ContinuousRoundedRectangle
+import com.kyant.shapes.Capsule
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
+import io.github.neoruaa.glasmio.core.LocalGlassDimensions
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
 import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
@@ -127,9 +130,6 @@ private fun glassVeil(): Color? {
     }
 }
 
-/** 与 Glasmio 默认 `ContinuousRoundedRectangle(26.dp)` 对齐，色纱自己也要裁剪圆角。 */
-private val PanelShape = RoundedCornerShape(26.dp)
-
 /** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */
 @Composable
 fun glassColors() = GlasmioTheme.colors
@@ -195,22 +195,31 @@ fun GlassBackdropHost(
  *
  * backdrop 默认取 `LocalGlassBackdrop`，因此必须置于 [GlassBackdropHost]
  * 的 overlayContent 槽内使用。
+ *
+ * @param capsule 整条胶囊形状（底栏这类横向长控件用）。默认的
+ *   `ContinuousRoundedRectangle(26dp)` 在 64dp 高的底栏上会露出四个直边，不像 iOS 底栏。
+ * @param tint 面板内侧色纱的显式颜色（强调色按钮用）。为 null 时走 [glassVeil]：
+ *   只有「减弱透明」开启才加纱，否则保持纯玻璃。
  */
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
+    capsule: Boolean = false,
+    tint: Color? = null,
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val veil = glassVeil()
+    val veil = tint ?: glassVeil()
+    val shape = glassPanelShape(capsule)
     GlassSurface(
         modifier = modifier,
+        shape = shape,
         contentAlignment = contentAlignment,
     ) {
         // 色纱是 content 的第一个子项，因此盖住玻璃绘制、又垫在真正的内容下面。
         // matchParentSize 是 BoxScope 的成员函数，不需要（也不能）import。
         if (veil != null) {
-            Box(Modifier.matchParentSize().clip(PanelShape).background(veil))
+            Box(Modifier.matchParentSize().clip(shape).background(veil))
         }
         content()
     }
@@ -220,9 +229,10 @@ fun GlassPanel(
 @Composable
 fun GlassCirclePanel(
     modifier: Modifier = Modifier,
+    tint: Color? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val veil = glassVeil()
+    val veil = tint ?: glassVeil()
     GlassSurface(
         modifier = modifier,
         shape = CircleShape,
@@ -234,3 +244,17 @@ fun GlassCirclePanel(
         content()
     }
 }
+
+/**
+ * 与 Glasmio 当前主题一致的形状。
+ *
+ * 「常规」必须读 `LocalGlassDimensions`：`GlassSurface` 的默认形状用的就是它，
+ * 写死 26.dp 会在库改默认值时悄悄跑偏（色纱和材质就对不上了）。
+ */
+@Composable
+fun glassPanelShape(capsule: Boolean = false): Shape =
+    if (capsule) {
+        Capsule()
+    } else {
+        ContinuousRoundedRectangle(LocalGlassDimensions.current.regularCornerRadius)
+    }

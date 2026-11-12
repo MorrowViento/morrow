@@ -31,8 +31,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
+import com.morrowviento.morrow.ui.glass.glassPressFeedback
+import com.morrowviento.morrow.ui.glass.glassPressable
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
+import com.morrowviento.morrow.ui.glass.rememberGlassPress
 
 /**
  * 玻璃风基础控件集合（表单浮层与分类管理浮层共用）。
@@ -136,19 +139,24 @@ fun ChipRow(content: @Composable () -> Unit) {
 }
 
 /**
- * 新建事件的主按钮（右下角玻璃圆钮）。
+ * 新建事件的主按钮（日历页右下角玻璃圆钮）。
  *
- * 首页与日历页共用：日历是整页覆盖且有不透明底色，会把首页那颗按钮整个盖住，
- * 因此日历页必须自己再放一颗，否则进日历后就无法新建。
+ * 首页不再用它——首页的新建入口在底栏中央（见 `HomeBottomBar`）。
+ * 日历是整页覆盖且有不透明底色，会把首页底栏整个盖住，因此日历页必须自己再放一颗。
  */
 @Composable
 fun CreateFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    GlassCirclePanel(modifier = modifier.size(60.dp)) {
+    val press = rememberGlassPress()
+    GlassCirclePanel(
+        modifier = modifier
+            .size(60.dp)
+            .glassPressFeedback(press, scale = 0.07f, shape = CircleShape),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .clickable(onClick = onClick),
+                .glassPressable(press, contentDescription = "新建事件", onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Text(

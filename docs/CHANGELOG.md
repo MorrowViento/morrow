@@ -2,6 +2,30 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 4.0.0-alpha3 (42)：排序/日历搬到底栏，Glasmio 升 0.1.3 拿到按压光效
+
+- **底栏取代标题栏按钮**：新增 `ui/component/HomeBottomBar.kt`——一条 62dp 胶囊玻璃，左「排序 ·
+  当前模式」、中「＋」、右「日历」；首页标题区只剩「朝夕」大标题和「⋯」。首页右下角的 `CreateFab`
+  随之移除（日历页仍保留它，因为日历整页覆盖会把底栏盖住）。
+- **修掉「点排序冒出方形背景框」**：根因不是样式没调好——`Modifier.clickable` 的 Material ripple
+  只按**布局边界**裁剪，不认玻璃的圆角/胶囊，所以胶囊里会冒出一个矩形高亮。新增
+  `ui/glass/GlassPress.kt`：手势自己处理（`detectTapGestures`）+ Glasmio 的
+  `InteractiveHighlight` 液体光斑，全程不出现 Material 指示器。事件卡片、`⋯`、日历页 `＋` 同步切换，
+  卡片按压缩放取 0.012（大面积放大过头会晕）。
+- **Glasmio 0.1.2 → 0.1.3**：0.1.3 带导航 / 浮动搜索 / 自适应工具栏与玻璃渲染性能更新，
+  `GlassSurface` 新增 `onClick` / `onLongClick` / `detailAction` 按压光学，新增公开的
+  `InteractiveHighlight`。封装层同步扩展：`GlassPanel(capsule=, tint=)`、
+  `GlassCirclePanel(tint=)`、公开 `glassPanelShape()`。**只有 `libs.versions.toml` 一处版本号**，
+  业务代码没有为升级改动（`ui/glass/` 之外零改动）。
+- **注意**：按压光效走 `RuntimeShader`，Glasmio 在 **API 36 以下直接跳过**（源码里 `SDK_INT < 36`
+  就 return）。所以封装层另加一层 0.10 alpha 的白色提亮当兜底，低版本仍能感知「按下去了」。
+- **图标目录合并**：`mipmap-anydpi-v26` / `-v33` 合并为 `mipmap-anydpi`（minSdk 33 用不到
+  旧限定符），并补 `<monochrome>`——之前只有一个版本带单色层，Android 13+ 主题图标取不到。
+  顺带清掉 4 条 lint 警告（`ObsoleteSdkInt` ×2、`MonochromeLauncherIcon` ×2）。
+- **验证**：228 项单测全绿；lint **0 errors / 10 warnings**（其中 7 条是「依赖有新版本」类提示，
+  随依赖元数据刷新出现）；debug APK `morrow-42-4.0.0-alpha3-debug-bottom-bar.apk`，
+  79,902,883 B，`sha256:e804a7ca…973147`。
+
 ## [2026-11-12] 发版流程固化为一条命令（`scripts/release.sh`）
 
 - 新增 `scripts/release.sh`：读 gradle 版本号 → 校验工作区与标签 → 构建 → 命名资产
