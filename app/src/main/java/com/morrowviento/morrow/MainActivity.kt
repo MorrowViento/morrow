@@ -144,7 +144,8 @@ class MainActivity : ComponentActivity() {
                 SettingsActions(
                     refresh = settingsViewModel::refreshPermissions,
                     setTheme = settingsViewModel::setTheme,
-                    setGlassMaterial = settingsViewModel::setGlassMaterial,
+                    previewGlassFrost = settingsViewModel::previewGlassFrost,
+                    setGlassFrost = settingsViewModel::setGlassFrost,
                     setReduceMotion = settingsViewModel::setReduceMotion,
                     exportTo = settingsViewModel::exportTo,
                     loadImport = settingsViewModel::loadImport,
@@ -174,7 +175,9 @@ class MainActivity : ComponentActivity() {
                 eventActions = eventActions,
                 reminders = reminders,
                 reminderActions = reminderActions,
-                appSettings = settingsState.settings,
+                // effectiveSettings：拖动厚度滑块时用内存里的预览值，
+                // 整页玻璃跟着变厚变薄（松手才落盘）
+                appSettings = settingsState.effectiveSettings,
                 settings = settingsState,
                 settingsActions = settingsActions,
                 onToggleCompleted = viewModel::toggleCompletedSection,

@@ -4,7 +4,8 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.morrowviento.morrow.data.settings.AppSettings
-import com.morrowviento.morrow.data.settings.GlassMaterialLevel
+import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
+import com.morrowviento.morrow.data.settings.legacyGlassFrost
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
@@ -65,9 +66,11 @@ data class BackupSettings(
     val reduceTransparency: Boolean,
     val reduceMotion: Boolean,
     /**
-     * 玻璃材质档位。**留空表示是旧备份**（那时只有布尔 reduceTransparency），
-     * 导入时按布尔反推，见 [BackupMapper.toSettings]。
+     * 玻璃厚度 0~1。**负数表示这份备份没有这个字段**（alpha7 及更早的备份），
+     * 导入时依次按旧四档字符串、再按布尔反推，见 [BackupMapper.toSettings]。
      */
+    val glassFrost: Float = -1f,
+    /** 旧版四档字符串，只为兼容老备份的读取；导出时仍写一份，方便降级。 */
     val glassMaterial: String = "",
 )
 
@@ -162,6 +165,8 @@ object BackupCodec {
     private fun encodeSettings(settings: BackupSettings): JsonObject = JsonObject().apply {
         addProperty("themeMode", settings.themeMode)
         addProperty("sortMode", settings.sortMode)
+        // 新旧字段都写：新版本读 glassFrost，旧版本读 glassMaterial
+        addProperty("glassFrost", settings.glassFrost)
         addProperty("glassMaterial", settings.glassMaterial)
         addProperty("reduceTransparency", settings.reduceTransparency)
         addProperty("reduceMotion", settings.reduceMotion)
@@ -214,7 +219,7 @@ object BackupCodec {
                 sortMode = SortMode.DISTANCE.prefValue,
                 reduceTransparency = false,
                 reduceMotion = false,
-                glassMaterial = GlassMaterialLevel.STANDARD.prefValue,
+                glassFrost = GLASS_FROST_DEFAULT,
             )
 
         return BackupParse.Ok(
@@ -280,7 +285,8 @@ object BackupCodec {
     private fun decodeSettings(obj: JsonObject): BackupSettings = BackupSettings(
         themeMode = obj.stringOrNull("themeMode") ?: ThemeMode.SYSTEM.prefValue,
         sortMode = obj.stringOrNull("sortMode") ?: SortMode.DISTANCE.prefValue,
-        // 旧备份没有这个键：留空，交给 toSettings 按布尔反推
+        // 旧备份没有 glassFrost：留 -1，交给 toSettings 按旧四档 / 布尔反推
+        glassFrost = obj.floatOrNull("glassFrost") ?: -1f,
         glassMaterial = obj.stringOrNull("glassMaterial").orEmpty(),
         reduceTransparency = obj.boolOrNull("reduceTransparency") ?: false,
         reduceMotion = obj.boolOrNull("reduceMotion") ?: false,
@@ -324,6 +330,18 @@ object BackupCodec {
         return when {
             primitive.isNumber -> primitive.asInt
             primitive.isString -> primitive.asString.toIntOrNull()
+            else -> null
+        }
+    }
+
+    /** 浮点读取：`glassFrost` 是 0~1 的小数，用 [intOrNull] 会被截断成 0。 */
+    private fun JsonObject.floatOrNull(key: String): Float? {
+        val element = get(key) ?: return null
+        if (!element.isJsonPrimitive) return null
+        val primitive = element.asJsonPrimitive
+        return when {
+            primitive.isNumber -> primitive.asFloat
+            primitive.isString -> primitive.asString.trim().toFloatOrNull()
             else -> null
         }
     }
@@ -400,17 +418,17 @@ object BackupMapper {
     }
 
     fun toSettings(backup: BackupSettings): AppSettings {
-        val material = if (backup.glassMaterial.isBlank()) {
-            // 旧备份：只有布尔，true 就是原来的「减弱透明」= 厚重档
-            if (backup.reduceTransparency) GlassMaterialLevel.HEAVY else GlassMaterialLevel.STANDARD
+        val frost = if (backup.glassFrost >= 0f) {
+            backup.glassFrost.coerceIn(0f, 1f)
         } else {
-            GlassMaterialLevel.fromPref(backup.glassMaterial)
+            legacyGlassFrost(backup.glassMaterial)
+                ?: if (backup.reduceTransparency) 0.92f else GLASS_FROST_DEFAULT
         }
         return AppSettings(
             themeMode = ThemeMode.fromPref(backup.themeMode),
             sortMode = SortMode.fromPref(backup.sortMode),
-            glassMaterial = material,
-            reduceTransparency = material == GlassMaterialLevel.HEAVY,
+            glassFrost = frost,
+            reduceTransparency = frost >= 0.85f,
             reduceMotion = backup.reduceMotion,
         )
     }
@@ -418,8 +436,15 @@ object BackupMapper {
     fun ofSettings(settings: AppSettings): BackupSettings = BackupSettings(
         themeMode = settings.themeMode.prefValue,
         sortMode = settings.sortMode.prefValue,
-        glassMaterial = settings.glassMaterial.prefValue,
-        reduceTransparency = settings.glassMaterial == GlassMaterialLevel.HEAVY,
+        glassFrost = settings.glassFrost,
+        // 旧版本读的是这个字符串，写一个最接近的档位
+        glassMaterial = when {
+            settings.glassFrost < 0.14f -> "clear"
+            settings.glassFrost < 0.45f -> "light"
+            settings.glassFrost < 0.85f -> "standard"
+            else -> "heavy"
+        },
+        reduceTransparency = settings.glassFrost >= 0.85f,
         reduceMotion = settings.reduceMotion,
     )
 

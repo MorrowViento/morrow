@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -59,6 +60,7 @@ import com.morrowviento.morrow.ui.calendar.CalendarStrip
 import com.morrowviento.morrow.ui.category.CategoryActions
 import com.morrowviento.morrow.ui.category.CategorySheet
 import com.morrowviento.morrow.ui.component.HomeBottomBar
+import com.morrowviento.morrow.ui.component.SortGlyph
 import com.morrowviento.morrow.ui.event.EventActions
 import com.morrowviento.morrow.ui.event.EventDetailScreen
 import com.morrowviento.morrow.ui.event.EventEditSheet
@@ -175,7 +177,7 @@ fun HomeScreen(
         darkTheme = appSettings.isDark(isSystemInDarkTheme()),
         reduceTransparency = appSettings.usesOpaqueGlass,
         reduceMotion = appSettings.reduceMotion,
-        material = appSettings.glassMaterial,
+        frost = appSettings.glassFrost,
     ) {
         GlassBackdropHost(
             modifier = Modifier.fillMaxSize(),
@@ -190,6 +192,8 @@ fun HomeScreen(
                         HomeHeader(
                             state = state,
                             listState = listState,
+                            sortLabel = state.sortMode.label(),
+                            onCycleSort = { onSortChange(nextSort(state.sortMode)) },
                             moreAction = {
                                 // 「⋯」既是按钮也是菜单的锚点：GlassMenu 从它身上液态展开，
                                 // 关闭时缩回按钮，不再是「遮罩 + 底部面板」那套动作表。
@@ -304,10 +308,9 @@ fun HomeScreen(
                                 .align(Alignment.BottomCenter)
                                 .padding(horizontal = 16.dp)
                                 .padding(bottom = 14.dp),
-                            sortLabel = state.sortMode.label(),
                             calendarActive = showCalendar,
-                            onCycleSort = { onSortChange(nextSort(state.sortMode)) },
-                            onCalendar = { showCalendar = !showCalendar },
+                            onHome = { showCalendar = false },
+                            onCalendar = { showCalendar = true },
                             onCreate = {
                                 categoryAliases = emptyMap()
                                 editingForm = if (showCalendar) {
@@ -438,12 +441,16 @@ fun HomeScreen(
 /**
  * 大标题随滚动收缩（iOS 式），副标题在收缩后隐藏。
  *
- * 排序、日历已经搬到 [HomeBottomBar]；标题区只留「更多」一颗，大标题右边不再挤三颗按钮。
+ * 标题右侧是「排序胶囊 + ⋯」：排序原本在底栏左侧，但底栏改成
+ * 「首页 / ＋ / 日历」之后就没有它的位置了，放在标题区既能一直看到，
+ * 也不会像之前那样把三颗按钮挤在大标题右边。
  */
 @Composable
 private fun HomeHeader(
     state: HomeUiState,
     listState: LazyListState,
+    sortLabel: String,
+    onCycleSort: () -> Unit,
     moreAction: @Composable () -> Unit,
 ) {
     val collapsed by remember {
@@ -473,7 +480,37 @@ private fun HomeHeader(
                 )
             }
         }
+        SortChip(label = sortLabel, onClick = onCycleSort)
+        Spacer(Modifier.width(8.dp))
         moreAction()
+    }
+}
+
+/**
+ * 排序胶囊：图标 + 当前排序名，点一下轮换（距离 → 目标日期 → 创建时间）。
+ *
+ * 用玻璃胶囊而不是纯文字按钮：它和「⋯」同处一行，材质一致才不会像两套控件。
+ */
+@Composable
+private fun SortChip(label: String, onClick: () -> Unit) {
+    val primary = glassTextPrimary()
+    GlassPanel(
+        modifier = Modifier.height(32.dp),
+        capsule = true,
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SortGlyph(primary, glyphSize = 13.dp)
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = label,
+                maxLines = 1,
+                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = primary),
+            )
+        }
     }
 }
 

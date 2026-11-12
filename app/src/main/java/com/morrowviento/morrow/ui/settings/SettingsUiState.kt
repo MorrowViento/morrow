@@ -4,7 +4,6 @@ import com.morrowviento.morrow.data.backup.BackupDocument
 import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.backup.ImportReport
 import com.morrowviento.morrow.data.settings.AppSettings
-import com.morrowviento.morrow.data.settings.GlassMaterialLevel
 import com.morrowviento.morrow.ui.update.UpdateUiState
 import com.morrowviento.morrow.widget.PlacedWidget
 
@@ -29,6 +28,14 @@ data class PendingImport(
 
 data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
+    /**
+     * 拖动滑块过程中的临时厚度。
+     *
+     * 滑块每帧都会回调，如果每次都写 DataStore，就是每帧一次落盘 + 一次全树重组，
+     * 真机上会明显卡顿。所以拖动只更新这个内存值（[settings] 在 [effectiveSettings]
+     * 里被覆盖），松手才写盘。
+     */
+    val glassFrostPreview: Float? = null,
     val notificationAllowed: Boolean = true,
     val exactAlarmAllowed: Boolean = true,
     val appVersion: String = "",
@@ -48,14 +55,20 @@ data class SettingsUiState(
     val message: String? = null,
     /** M7：应用内更新检查 / 下载 / 安装的进度。 */
     val update: UpdateUiState = UpdateUiState(),
-)
+) {
+    /** 预览优先于已存值：滑块拖动时整页玻璃跟着变厚变薄。 */
+    val effectiveSettings: AppSettings
+        get() = glassFrostPreview?.let { settings.copy(glassFrost = it) } ?: settings
+}
 
 data class SettingsActions(
     /** 页面重新可见时刷新系统权限状态（通知 / 精确闹钟只能在系统界面改）。 */
     val refresh: () -> Unit,
     val setTheme: (com.morrowviento.morrow.data.settings.ThemeMode) -> Unit,
-    /** 玻璃材质四档（通透 / 轻盈 / 标准 / 厚重）。 */
-    val setGlassMaterial: (GlassMaterialLevel) -> Unit,
+    /** 拖动玻璃厚度滑块时的实时预览（不落盘，松手才写）。 */
+    val previewGlassFrost: (Float) -> Unit,
+    /** 松手后落盘。 */
+    val setGlassFrost: (Float) -> Unit,
     val setReduceMotion: (Boolean) -> Unit,
     val exportTo: (android.net.Uri) -> Unit,
     val loadImport: (android.net.Uri) -> Unit,

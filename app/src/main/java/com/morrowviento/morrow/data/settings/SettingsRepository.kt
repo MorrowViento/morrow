@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,22 +39,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val reduceTransparency: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) ?: false }
 
     /**
-     * 玻璃材质档位。
+     * 玻璃厚度（0~1 连续值）。
      *
-     * 旧版本只有布尔「减弱透明」，没有这个键：键缺失时按布尔值反推
-     * （true → 厚重，false → 标准），用户升级后看到的是自己原来的观感，
-     * 而不是被重置成标准档。
+     * 键缺失时依次回落：旧版四档字符串 → 更旧的无障碍布尔 → 默认值。
+     * 所以从 alpha6（四档）、alpha7 之前（布尔）升上来的用户，看到的仍是自己原来的观感。
      */
-    val glassMaterial: Flow<GlassMaterialLevel> = store.data.map { prefs ->
-        val raw = prefs.stringOrNull(LegacySettingsKeys.GLASS_MATERIAL)
-        if (raw != null) {
-            GlassMaterialLevel.fromPref(raw)
-        } else if (prefs.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) == true) {
-            GlassMaterialLevel.HEAVY
-        } else {
-            GlassMaterialLevel.STANDARD
-        }
-    }
+    val glassFrost: Flow<Float> = store.data.map { it.glassFrostOrDefault() }
 
     val reduceMotion: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false }
 
@@ -68,15 +59,15 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val appSettings: Flow<AppSettings> = combine(
         themeMode,
         sortMode,
-        glassMaterial,
+        glassFrost,
         reduceMotion,
-    ) { theme, sort, material, motion ->
+    ) { theme, sort, frost, motion ->
         AppSettings(
             themeMode = ThemeMode.fromPref(theme),
             sortMode = SortMode.fromPref(sort),
-            glassMaterial = material,
-            // 与档位保持同步：厚重档同时打开无障碍的「降低透明度」语义
-            reduceTransparency = material == GlassMaterialLevel.HEAVY,
+            glassFrost = frost,
+            // 与厚度保持同步：达到最厚档时同时带上无障碍「降低透明度」语义
+            reduceTransparency = frost >= 0.85f,
             reduceMotion = motion,
         )
     }
@@ -84,17 +75,28 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setThemeMode(mode: ThemeMode) =
         putString(LegacySettingsKeys.THEME_MODE, mode.prefValue)
 
-    /** 写材质档位：同时更新旧布尔键，保证降级安装旧版本时观感一致。 */
-    suspend fun setGlassMaterial(level: GlassMaterialLevel) {
+    /**
+     * 写玻璃厚度。
+     *
+     * 同时更新旧版两个键（四档字符串 + 布尔），保证「降级安装 alpha7」时观感不跳。
+     * 不到最厚档就写 `standard` / `light` / `clear`，够旧版本读出一个接近的值。
+     */
+    suspend fun setGlassFrost(value: Float) {
+        val frosted = value.coerceIn(0f, 1f)
         store.edit { prefs ->
-            prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = level.prefValue
-            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] =
-                level == GlassMaterialLevel.HEAVY
+            prefs[floatPreferencesKey(LegacySettingsKeys.GLASS_FROST)] = frosted
+            prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = when {
+                frosted < 0.14f -> "clear"
+                frosted < 0.45f -> "light"
+                frosted < 0.85f -> "standard"
+                else -> "heavy"
+            }
+            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = frosted >= 0.85f
         }
     }
 
     suspend fun setReduceTransparency(enabled: Boolean) =
-        setGlassMaterial(if (enabled) GlassMaterialLevel.HEAVY else GlassMaterialLevel.STANDARD)
+        setGlassFrost(if (enabled) 0.95f else GLASS_FROST_DEFAULT)
 
     suspend fun setReduceMotion(enabled: Boolean) =
         putBoolean(LegacySettingsKeys.REDUCE_MOTION, enabled)
@@ -107,29 +109,30 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
      */
     suspend fun snapshotSettings(): AppSettings {
         val prefs = store.data.first()
-        val material = prefs.stringOrNull(LegacySettingsKeys.GLASS_MATERIAL)?.let(GlassMaterialLevel::fromPref)
-            ?: if (prefs.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) == true) {
-                GlassMaterialLevel.HEAVY
-            } else {
-                GlassMaterialLevel.STANDARD
-            }
+        val frost = prefs.glassFrostOrDefault()
         return AppSettings(
             themeMode = ThemeMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.THEME_MODE)),
             sortMode = SortMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE)),
-            glassMaterial = material,
-            reduceTransparency = material == GlassMaterialLevel.HEAVY,
+            glassFrost = frost,
+            reduceTransparency = frost >= 0.85f,
             reduceMotion = prefs.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
         )
     }
 
     /** 备份导入用：一次 edit 写完四个键，避免四条 Flow 各触发一次重组。 */
     suspend fun applySettings(value: AppSettings) {
+        val frost = value.glassFrost.coerceIn(0f, 1f)
         store.edit { prefs ->
             prefs[stringPreferencesKey(LegacySettingsKeys.THEME_MODE)] = value.themeMode.prefValue
             prefs[stringPreferencesKey(LegacySettingsKeys.EVENT_SORT_MODE)] = value.sortMode.prefValue
-            prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = value.glassMaterial.prefValue
-            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] =
-                value.glassMaterial == GlassMaterialLevel.HEAVY
+            prefs[floatPreferencesKey(LegacySettingsKeys.GLASS_FROST)] = frost
+            prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = when {
+                frost < 0.14f -> "clear"
+                frost < 0.45f -> "light"
+                frost < 0.85f -> "standard"
+                else -> "heavy"
+            }
+            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = frost >= 0.85f
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] = value.reduceMotion
         }
     }
@@ -252,3 +255,22 @@ private fun Preferences.booleanOrNull(name: String): Boolean? = when (val value 
     is Number -> value.toInt() != 0
     else -> null
 }
+
+/** 类型宽容的浮点读取：旧版本可能把它写成字符串或整数。 */
+private fun Preferences.floatOrNull(name: String): Float? = when (val value = valueByName(name)) {
+    null -> null
+    is Float -> value
+    is Number -> value.toFloat()
+    is String -> value.trim().toFloatOrNull()
+    else -> null
+}
+
+/**
+ * 玻璃厚度的三级回落：新键（0~1）→ 旧四档字符串 → 更旧的无障碍布尔 → 默认值。
+ *
+ * 放在一处，`appSettings` 与 `snapshotSettings` 才不会各写一套判断而慢慢走偏。
+ */
+private fun Preferences.glassFrostOrDefault(): Float =
+    floatOrNull(LegacySettingsKeys.GLASS_FROST)?.coerceIn(0f, 1f)
+        ?: legacyGlassFrost(stringOrNull(LegacySettingsKeys.GLASS_MATERIAL))
+        ?: if (booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) == true) 0.92f else GLASS_FROST_DEFAULT

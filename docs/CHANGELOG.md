@@ -2,6 +2,34 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 4.0.0-alpha8 (47)：玻璃厚度改无极调节、底栏改三段
+
+**「四档没区别」不是错觉，是库的问题。** 翻 0.1.3 的源码：
+`NavigationGlassMaterial.RegularMedium(5.dp, 24.dp, .6f, .6f, .25f)` 与
+`RegularLarge(5.dp, 24.dp, .6f, .6f, .25f)` 五个构造参数完全相同，`fills()` 也共用
+同一个分支；在原生材质通道里两者只差一个 `luminanceRollOff`（0.65 / 0.4），
+落在「模糊之后的亮度调色」上，肉眼分辨不出。而 `RegularSmall` 与 `RegularMedium`
+在深色下只差面层填充与阴影半径——阴影画在面板**外侧**，纯黑背景上等于看不见。
+所以四档里真正能分辨的只有「Clear ↔ 其余」。枚举只有四个值，没有第五种。
+
+- **玻璃厚度改成 0~1 的连续滑块**（`GlasmioAdaptiveSlider`，iOS 那种按下后轨道
+  展开成三格刻度的滑块）。落点是库真正有视觉差异的两处：`GlassSurface(frostRadius=)`
+  的**模糊半径 2dp→24dp**，以及面板内侧色纱的**不透明度 0→0.78**（1.15 次幂曲线，
+  前半段细腻、后半段快速转实）。材质枚举退化为三档（`Clear` / `RegularSmall` /
+  `RegularMedium`），`RegularLarge` 不再使用。
+- **拖动实时预览**：`SettingsUiState.effectiveSettings` 用内存里的
+  `glassFrostPreview` 覆盖已存值，`MainActivity` 把它整份传给 `GlassTheme`，
+  所以拖滑块时整页玻璃当场变厚变薄；按 2% 台阶向上游推送，避免逐帧重建模糊核。
+  松手（`onValueChangeFinished`）才写 DataStore。
+- **旧值全部可迁移**：`glass_frost`（Float）缺失时依次回落旧四档字符串
+  （clear/light/standard/heavy → 0 / 0.28 / 0.55 / 0.92）、更旧的无障碍布尔
+  （true → 0.92）、默认 0.35。导出备份同时写 `glassFrost` 与旧 `glassMaterial`。
+- **底栏重排**：左「首页」/ 中「＋」/ 右「日历」。中央去掉蓝色圆底（整条底栏里
+  唯一的色块，和玻璃材质放在一起很突兀），改成和左右一致的图标 + 小字，
+  只是略宽一点；新增手画的房子图标（与日历图标同款 1.2dp 描边）。
+- **排序挪到首页标题区**：大标题右侧一颗玻璃胶囊（排序图标 + 当前排序名），
+  点一下轮换距离 / 目标日期 / 创建时间。
+
 ## [2026-11-12] 4.0.0-alpha7 (46)：配色回到 Glasmio 默认、材质四档、控件统一成分段控件
 
 - **底色换成库的默认色板**：删掉蓝紫粉三段渐变，页面底色改为

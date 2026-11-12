@@ -6,7 +6,9 @@
 
 ## 当前阶段
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**228 项单测全绿、lint 0 errors / 10 warnings**（`abortOnError=true`，其中 7 条是依赖有新版本的提示类），debug APK 约 76 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**232 项单测全绿、lint 0 errors / 10 warnings**（`abortOnError=true`，其中 7 条是依赖有新版本的提示类），debug APK 约 76 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
+
+2026-11-12 完成**玻璃厚度无极调节 + 底栏重排**：查明「四档没区别」的根因——`NavigationGlassMaterial` 只有四个值，且 `RegularMedium` 与 `RegularLarge` 的五个构造参数完全一致，四档里只有「Clear ↔ 其余」可分辨；改为 0~1 连续滑块（`GlasmioAdaptiveSlider`），落点是 `GlassSurface(frostRadius=)` 的模糊半径 2→24dp 与内侧色纱 0→0.78（1.15 次幂），材质枚举退化为 Clear/RegularSmall/RegularMedium 三档，`RegularLarge` 弃用；拖动实时预览（`SettingsUiState.effectiveSettings` + 2% 台阶），松手才落盘；`glass_frost` 新键三级回落旧四档字符串 / 旧布尔。底栏改为「首页 / ＋ / 日历」，中央去掉蓝色圆底，新增房子图标；排序挪到大标题右侧的玻璃胶囊。版本号 `4.0.0-alpha8 (47)`。
 
 2026-11-12 完成**配色回默认 + 材质四档 + 控件统一**：整页配色从自定义蓝紫粉渐变换成 Glasmio 默认色板（`groupedBackground` + `elevatedBackground` 径向光），文字与强调色改读 `GlassColors`；新增 `GlassMaterialLevel` 四档（通透/轻盈/标准/厚重 = 库的 Clear/RegularSmall/Medium/Large），经 `LocalGlassMaterial` 注入所有玻璃面板，取代布尔「减弱透明」；设置页分组卡片从 `GlasmioGroupedList`（55% 不透明纯色）换成真 `GlassSurface`，行改为自绘（说明文字两行、无 ripple）；主题改成图标分段控件（Canvas 手画字形），小部件配置页三组单选 chip 改成分段控件。版本号 `4.0.0-alpha7 (46)`。
 
@@ -24,7 +26,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 
 **m6 的「打开即闪退」已结案**：根因是 `MorrowApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.morrowviento.morrow/startup.log` 可确认是哪个自愈步骤失败。
 
-仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.0.0-alpha7 (46)`**（本地构建；线上仍是最新 Release `v4.0.0-alpha2-41`，资产 `morrow-41-4.0.0-alpha2-debug.apk`，debug 签名，可直接覆盖现有的 debug 安装）
+仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.0.0-alpha8 (47)`**（本地构建；线上仍是最新 Release `v4.0.0-alpha2-41`，资产 `morrow-41-4.0.0-alpha2-debug.apk`，debug 签名，可直接覆盖现有的 debug 安装）
 
 M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，并已发布首个 GitHub Release，见 `docs/CHANGELOG.md`。**尚未完成**：正式签名密钥注入（用户自有密钥，见 `docs/SIGNING.md`）、真机走完「检查→下载→安装→升级」全流程（N1–N9）、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
 

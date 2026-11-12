@@ -21,32 +21,33 @@ enum class ThemeMode(val prefValue: String, val label: String) {
 }
 
 /**
- * 玻璃材质档位。
+ * 玻璃「厚度」的默认值。
  *
- * 对应 Glasmio 的四个材质（`NavigationGlassMaterial`：Clear / RegularSmall /
- * RegularMedium / RegularLarge），也就是示例里 Materials 那四张卡：
- * 厚度依次递增，模糊、内阴影与镜面高光跟着变强，文字对比度也跟着变高。
- *
- * 放在数据层而不是 `ui/glass`：设置要落盘、要进备份，业务层不该为了一个枚举
- * 反向依赖 Glasmio。到渲染层再由 `ui/glass` 映射成库的枚举。
+ * 0 = 几乎全通透（能看清背后内容），1 = 厚实磨砂（iOS 那种实心卡片）。
+ * 默认 0.35 接近 iOS 导航栏的观感——既看得出是玻璃，文字也够清楚。
  */
-enum class GlassMaterialLevel(
-    val prefValue: String,
-    /** 分段控件上的短标签。 */
-    val label: String,
-    /** 设置页里的一句说明。 */
-    val hint: String,
-) {
-    CLEAR("clear", "通透", "几乎没有底色，最能看清背后内容"),
-    LIGHT("light", "轻盈", "薄玻璃，背景细节保留最多"),
-    STANDARD("standard", "标准", "iOS 默认厚度，日常推荐"),
-    HEAVY("heavy", "厚重", "最实心，文字最清晰");
+const val GLASS_FROST_DEFAULT = 0.35f
 
-    companion object {
-        /** 认不出的值（旧版本写的、被手工改过的）一律回落标准档。 */
-        fun fromPref(raw: String?): GlassMaterialLevel =
-            entries.firstOrNull { it.prefValue == raw } ?: STANDARD
-    }
+/**
+ * 旧版「材质档位」字符串 → 连续厚度。
+ *
+ * **为什么要废弃四档**：`NavigationGlassMaterial` 只有四个值，而且
+ * `RegularMedium` 与 `RegularLarge` 的五个构造参数（frostRadius / shadowRadius /
+ * 明暗阴影 alpha / nativeLightIntensity）**完全一样**；在原生材质通道里两者只差一个
+ * `luminanceRollOff`（0.65 与 0.4），落在模糊后的亮度调色上，肉眼几乎看不出来。
+ * 四档里真正能分辨的只有「Clear ↔ Regular」，所以调档位时会觉得「没生效」。
+ *
+ * 现在改成 0~1 的连续值，映射到库真正有视觉差异的两个参数：
+ * `frostRadius`（模糊半径，2dp→24dp）与面板内侧色纱的不透明度（0→0.8）。
+ *
+ * 旧值映射到等距的厚度，保证升级后观感不变。
+ */
+fun legacyGlassFrost(raw: String?): Float? = when (raw) {
+    "clear" -> 0f
+    "light" -> 0.28f
+    "standard" -> 0.55f
+    "heavy" -> 0.92f
+    else -> null
 }
 
 /**
@@ -62,18 +63,18 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val sortMode: SortMode = SortMode.DISTANCE,
     /**
-     * 玻璃材质档位（设置页四段「通透 / 轻盈 / 标准 / 厚重」）。
+     * 玻璃厚度，0~1 连续可调（设置页的滑块）。
      *
-     * 取代了原来的布尔「减弱透明」开关：[GlassMaterialLevel.HEAVY] 那一档就是
-     * 「更实、文字更清晰」，四档比一个开关更能表达「透多少」。
+     * 之前是一个四值枚举，实际渲染上只有第一档与其它三档能看出区别
+     * （见 [legacyGlassFrost] 的注释），所以换成滑块。
      */
-    val glassMaterial: GlassMaterialLevel = GlassMaterialLevel.STANDARD,
+    val glassFrost: Float = GLASS_FROST_DEFAULT,
     /**
      * 减弱透明（无障碍「降低透明度」）。
      *
-     * 不再由 UI 直接写：设置页改成材质档位后，它由 [glassMaterial] 派生
-     * （`HEAVY` → true）。保留下来的原因是备份文件与旧版本数据里都是这个键，
-     * 删掉会让老备份导入时丢掉这项偏好。
+     * 不再由 UI 直接写：它由 [glassFrost] 派生（厚度 ≥ 0.85 → true），
+     * 与系统「降低透明度」的语义对齐。保留下来的原因是备份文件与旧版本数据里
+     * 都是这个键，删掉会让老备份导入时丢掉这项偏好。
      */
     val reduceTransparency: Boolean = false,
     /** 减弱动效：关闭页面切换的淡入淡出与卡片位移，只保留即时切换。 */
@@ -86,7 +87,7 @@ data class AppSettings(
         ThemeMode.DARK -> true
     }
 
-    /** 玻璃要不要盖色纱（「厚重」档或旧的无障碍开关任一成立）。 */
+    /** 玻璃要不要盖到接近不透明（最厚档或旧的无障碍开关任一成立）。 */
     val usesOpaqueGlass: Boolean
-        get() = glassMaterial == GlassMaterialLevel.HEAVY || reduceTransparency
+        get() = glassFrost >= 0.85f || reduceTransparency
 }

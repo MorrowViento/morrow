@@ -112,7 +112,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                 darkTheme = prefs.isDark(isSystemInDarkTheme()),
                 reduceTransparency = prefs.usesOpaqueGlass,
                 reduceMotion = prefs.reduceMotion,
-                material = prefs.glassMaterial,
+                frost = prefs.glassFrost,
             ) {
                 GlassBackdropHost(
                     modifier = Modifier.fillMaxSize(),

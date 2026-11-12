@@ -12,7 +12,14 @@ object LegacySettingsKeys {
     const val THEME_MODE = "theme_mode"
     const val EVENT_SORT_MODE = "event_sort_mode"
     const val REDUCE_TRANSPARENCY = "reduce_transparency"
-    /** 玻璃材质档位（`clear` / `light` / `standard` / `heavy`）。 */
+    /** 玻璃厚度（0~1 的 Float，滑块直接写这里）。 */
+    const val GLASS_FROST = "glass_frost"
+    /**
+     * 旧版玻璃材质档位（`clear` / `light` / `standard` / `heavy`）。
+     *
+     * 已由 [GLASS_FROST] 取代，但**继续写**：降级安装旧版本时还能读回来，
+     * 老备份导入也靠它迁移。
+     */
     const val GLASS_MATERIAL = "glass_material"
     const val REDUCE_MOTION = "reduce_motion"
     const val AUTO_CHECK_UPDATE = "auto_check_update"

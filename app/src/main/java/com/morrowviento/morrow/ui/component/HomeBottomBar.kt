@@ -1,9 +1,7 @@
 package com.morrowviento.morrow.ui.component
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,17 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +40,11 @@ import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionStyle
  * `GlassSurface(onClick = ...)`，装在 `GlasmioToolbarActionHost(Merged)` 里，由库把相邻玻璃
  * 合并成一整条、并在按下的格子上画折射光斑。这条路径内部是 `clickable(indication = null)`
  * + 按压高光采样，所以天生没有 Material 的矩形 ripple——之前手写的「白光环 + 描边」已删除。
+ *
+ * 布局：左「首页」/ 中「＋」/ 右「日历」。
+ * 中央的「＋」不再垫一层蓝色圆底——那是 iOS 没有的东西，也是整条底栏里唯一的色块，
+ * 和玻璃材质放在一起很突兀；现在它就是一个稍大的十字，颜色跟左右两格完全一致。
+ * 排序已挪到首页标题区（见 `HomeHeader` 的排序胶囊）。
  */
 private val BarHeight = 62.dp
 
@@ -56,11 +59,10 @@ private fun createAccent(): Color = glassColors().accent
 
 @Composable
 fun HomeBottomBar(
-    sortLabel: String,
     calendarActive: Boolean,
+    onHome: () -> Unit,
     onCreate: () -> Unit,
     onCalendar: () -> Unit,
-    onCycleSort: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     GlasmioToolbarActionHost(
@@ -75,14 +77,17 @@ fun HomeBottomBar(
         ) {
             BarCell(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
-                label = sortLabel,
-                onClick = onCycleSort,
-            ) { color -> SortGlyph(color) }
+                label = "首页",
+                active = !calendarActive,
+                onClick = onHome,
+            ) { color -> HomeGlyph(color) }
 
-            BarCreateCell(
-                modifier = Modifier.width(84.dp).fillMaxHeight(),
+            // 只有一点宽度差：中央格子比左右略窄，视觉上不抢，也不会显得凹陷
+            BarCell(
+                modifier = Modifier.width(72.dp).fillMaxHeight(),
+                label = "新建",
                 onClick = onCreate,
-            )
+            ) { color -> PlusGlyph(color, glyphSize = 22.dp) }
 
             BarCell(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -130,26 +135,10 @@ private fun BarCell(
     }
 }
 
-/** 中央「＋」：橙底白十字。橙色是格子里的一层圆，玻璃与按压仍由整条底栏的材质提供。 */
-@Composable
-private fun BarCreateCell(modifier: Modifier, onClick: () -> Unit) {
-    GlassPanel(modifier = modifier, capsule = true, onClick = onClick) {
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(createAccent().copy(alpha = 0.58f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            PlusGlyph(Color.White)
-        }
-    }
-}
-
 /** 排序：左右两支反向箭头（上/下），不依赖字体里有没有 ↕ 字形。 */
 @Composable
-internal fun SortGlyph(color: Color) {
-    Canvas(Modifier.size(17.dp)) {
+internal fun SortGlyph(color: Color, glyphSize: Dp = 17.dp) {
+    Canvas(Modifier.size(glyphSize)) {
         val w = size.width
         val h = size.height
         val stroke = 1.5.dp.toPx()
@@ -166,12 +155,40 @@ internal fun SortGlyph(color: Color) {
 
 /** 「＋」：两条等长线，比字体里的 + 更居中、笔画更稳。 */
 @Composable
-private fun PlusGlyph(color: Color) {
-    Canvas(Modifier.size(20.dp)) {
+private fun PlusGlyph(color: Color, glyphSize: Dp = 20.dp) {
+    Canvas(Modifier.size(glyphSize)) {
         val stroke = 1.8.dp.toPx()
         val c = size.width / 2f
         drawLine(color, Offset(c, size.height * 0.12f), Offset(c, size.height * 0.88f), stroke, StrokeCap.Round)
         drawLine(color, Offset(size.width * 0.12f, c), Offset(size.width * 0.88f, c), stroke, StrokeCap.Round)
+    }
+}
+
+/**
+ * 首页图标：屋顶 + 墙身，线条语言与日历图标一致（同样 1.2dp 描边、圆角）。
+ */
+@Composable
+private fun HomeGlyph(color: Color, glyphSize: Dp = 16.dp) {
+    Canvas(Modifier.size(glyphSize)) {
+        val stroke = 1.2.dp.toPx()
+        val w = size.width
+        val h = size.height
+        // 屋顶：从左墙顶斜到屋脊，再斜到右墙顶
+        val eaveY = h * 0.46f
+        val path = Path().apply {
+            moveTo(w * 0.06f, eaveY)
+            lineTo(w * 0.5f, h * 0.08f)
+            lineTo(w * 0.94f, eaveY)
+        }
+        drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        // 墙身：两段竖线 + 地面，留一个门洞的缺口
+        drawLine(color, Offset(w * 0.16f, eaveY), Offset(w * 0.16f, h * 0.9f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.84f, eaveY), Offset(w * 0.84f, h * 0.9f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.16f, h * 0.9f), Offset(w * 0.36f, h * 0.9f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.64f, h * 0.9f), Offset(w * 0.84f, h * 0.9f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.36f, h * 0.9f), Offset(w * 0.36f, h * 0.62f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.64f, h * 0.9f), Offset(w * 0.64f, h * 0.62f), stroke, StrokeCap.Round)
+        drawLine(color, Offset(w * 0.36f, h * 0.62f), Offset(w * 0.64f, h * 0.62f), stroke, StrokeCap.Round)
     }
 }
 

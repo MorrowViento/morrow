@@ -30,7 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,9 +51,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import kotlin.math.roundToInt
 import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.backup.ImportMode
-import com.morrowviento.morrow.data.settings.GlassMaterialLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.glass.GlassAlert
 import com.morrowviento.morrow.ui.glass.GlassAlertButton
@@ -62,6 +64,7 @@ import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassSheet
+import com.morrowviento.morrow.ui.glass.GlassSlider
 import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -186,17 +189,17 @@ fun SettingsScreen(
                             }
                             Divider()
                             SettingBlock(
-                                label = "玻璃材质",
-                                hint = state.settings.glassMaterial.hint,
+                                label = "玻璃厚度",
+                                hint = frostHint(state.effectiveSettings.glassFrost),
                             ) {
-                                // 四档 = Glasmio 的 Clear / RegularSmall / Medium / Large，
-                                // 也就是示例 Materials 页那四张卡
-                                GlassSegmentedControl(
-                                    items = GlassMaterialLevel.entries.map { it to it.label },
-                                    selected = state.settings.glassMaterial,
-                                    onSelected = actions.setGlassMaterial,
+                                // 连续滑块，取代原来的四档分段控件：
+                                // 库的 RegularMedium 与 RegularLarge 五个参数完全一致，
+                                // 「标准 / 厚重」其实一模一样，分档只会有「没生效」的错觉。
+                                GlassFrostSlider(
+                                    committed = state.settings.glassFrost,
+                                    onPreview = actions.previewGlassFrost,
+                                    onCommit = actions.setGlassFrost,
                                     modifier = Modifier.fillMaxWidth(),
-                                    height = 34.dp,
                                 )
                             }
                             Divider()
@@ -453,6 +456,44 @@ private fun SettingBlock(
             )
         }
     }
+}
+
+/**
+ * 玻璃厚度滑块。
+ *
+ * 拖动期间只回调 [onPreview]（改内存里的值，整页玻璃实时变），松手才 [onCommit] 落盘。
+ * 单独包一层是为了在「最后一次拖动值」上提交：库的 `onValueChangeFinished` 不带参数，
+ * 而界面上的 state 要等一次重组才更新，直接读它会差一帧。
+ */
+@Composable
+private fun GlassFrostSlider(
+    committed: Float,
+    onPreview: (Float) -> Unit,
+    onCommit: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // 滑块拇指跟本地值走（逐帧平滑），主题只按 2% 的台阶重绘：
+    // 拖动一次整页玻璃就要重建模糊半径，逐帧传会把重绘次数放大到十几倍。
+    var draft by remember { mutableFloatStateOf(committed) }
+    // 外部改动（导入备份、旧数据迁移、落盘回流）时把滑块拉回正确位置
+    LaunchedEffect(committed) { draft = committed }
+    GlassSlider(
+        value = draft,
+        onValueChange = {
+            draft = it
+            onPreview((it * 50f).roundToInt() / 50f)
+        },
+        onValueChangeFinished = { onCommit(draft) },
+        modifier = modifier,
+    )
+}
+
+/** 厚度的一句话说明，按区间给，和滑块的三处刻度对齐。 */
+private fun frostHint(value: Float): String = when {
+    value < 0.14f -> "几乎全通透：背后内容看得最清楚，字会稍淡"
+    value < 0.45f -> "轻薄磨砂：iOS 导航栏的观感，日常推荐"
+    value < 0.72f -> "标准磨砂：背景细节变模糊，正文更清楚"
+    else -> "厚重：接近实心卡片，对比度最高，几乎不透视"
 }
 
 /** 动作行。[onClick] 为 null 时只做展示（版本号）。 */
