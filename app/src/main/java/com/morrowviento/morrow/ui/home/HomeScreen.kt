@@ -71,6 +71,7 @@ import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassTheme
 import com.morrowviento.morrow.ui.glass.glassPressFeedback
+import com.morrowviento.morrow.ui.glass.glassPressHalo
 import com.morrowviento.morrow.ui.glass.glassPressable
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -425,22 +426,26 @@ private fun HomeHeader(
 @Composable
 private fun MoreButton(onClick: () -> Unit) {
     val press = rememberGlassPress()
-    GlassCirclePanel(
-        modifier = Modifier
-            .size(32.dp)
-            .glassPressFeedback(press, scale = 0.08f, shape = CircleShape),
-    ) {
-        Box(
+    Box(contentAlignment = Alignment.Center) {
+        // 光晕层与圆钮同尺寸同心，不裁剪：按下时溢到圆钮之外
+        Box(Modifier.size(32.dp).glassPressHalo(press, CircleShape, spread = 0.45f))
+        GlassCirclePanel(
             modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .glassPressable(press, contentDescription = "更多操作", onClick = onClick),
-            contentAlignment = Alignment.Center,
+                .size(32.dp)
+                .glassPressFeedback(press, scale = 0.08f, lift = 1.dp, shape = CircleShape),
         ) {
-            Text(
-                text = "⋯",
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .glassPressable(press, contentDescription = "更多操作", onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "⋯",
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
+                )
+            }
         }
     }
 }

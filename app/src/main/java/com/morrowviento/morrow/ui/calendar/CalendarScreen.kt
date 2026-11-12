@@ -3,6 +3,8 @@ package com.morrowviento.morrow.ui.calendar
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -27,11 +29,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -44,10 +50,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.domain.time.LunarCalendar
-import com.morrowviento.morrow.ui.component.CreateFab
+import com.morrowviento.morrow.ui.component.GlassBarCreateButton
+import com.morrowviento.morrow.ui.component.GlassBarItem
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.glassPanelShape
+import com.morrowviento.morrow.ui.glass.glassPressClick
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import java.time.LocalDate
@@ -107,11 +116,19 @@ fun CalendarScreen(
                 }
             }
         }
-        CreateFab(
+        // 与首页同一套语言：底栏一条胶囊玻璃，左「视图」循环 / 中「＋」/ 右「今天」。
+        // 旧版这里是顶部一排「月 | 年 | 列表」分段控件 + 右下角悬浮「＋」，
+        // 与首页改造后的底栏对不上，一进日历就像回到了上一版。
+        CalendarBottomBar(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 26.dp),
-            onClick = { onCreate(state.selected ?: state.today) },
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 14.dp),
+            view = state.view,
+            onCycleView = { actions.setView(nextView(state.view)) },
+            onToday = actions.goToToday,
+            onTodayEnabled = !onTodayPeriod(state),
+            onCreate = { onCreate(state.selected ?: state.today) },
         )
     }
 }
@@ -223,20 +240,13 @@ private fun CalendarHeader(
     onDismiss: () -> Unit,
 ) {
     val isMonthView = state.view == CalendarView.MONTH
-    val today = state.today
-    val onTodayPeriod = if (isMonthView) {
-        state.month == YearMonth.from(today)
-    } else {
-        state.month.year == today.year
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 2.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NavButton("‹") {
+        NavButton("‹", "上一${if (isMonthView) "月" else "年"}") {
             if (isMonthView) actions.shiftMonth(-1) else actions.shiftYear(-1)
         }
         Column(
@@ -249,7 +259,7 @@ private fun CalendarHeader(
                 } else {
                     "${state.month.year}年"
                 },
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
             )
             Text(
                 text = if (isMonthView) {
@@ -260,80 +270,130 @@ private fun CalendarHeader(
                 style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
             )
         }
-        NavButton("›") {
+        NavButton("›", "下一${if (isMonthView) "月" else "年"}") {
             if (isMonthView) actions.shiftMonth(1) else actions.shiftYear(1)
         }
-        Spacer(Modifier.width(8.dp))
-        NavButton("✕", onClick = onDismiss)
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ViewSegmented(state.view, actions.setView)
-        Spacer(Modifier.weight(1f))
-        if (!onTodayPeriod) {
-            Text(
-                text = "回到今天",
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .clickable(onClick = actions.goToToday)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                style = TextStyle(fontSize = 12.sp, color = glassTextPrimary()),
-            )
-        }
+        Spacer(Modifier.width(10.dp))
+        NavButton("✕", "关闭日历", onClick = onDismiss)
     }
 }
 
+/** 头部圆钮。光晕走 [glassPressClick]，与首页「⋯」同一套，不再出现矩形 ripple。 */
 @Composable
-private fun NavButton(glyph: String, onClick: () -> Unit) {
-    GlassCirclePanel(modifier = Modifier.size(30.dp)) {
-        Box(
+private fun NavButton(glyph: String, description: String? = null, onClick: () -> Unit) {
+    val primary = glassTextPrimary()
+    GlassCirclePanel(
+        modifier = Modifier
+            .size(34.dp)
+            .glassPressClick(
+                shape = CircleShape,
+                scale = 0.06f,
+                lift = 1.dp,
+                spread = 0.45f,
+                contentDescription = description,
+                onClick = onClick,
+            ),
+    ) {
+        Text(
+            text = glyph,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = primary),
+        )
+    }
+}
+
+// ---------------------------------------------------------------- 底栏
+
+/**
+ * 日历底栏：与首页 [com.morrowviento.morrow.ui.component.HomeBottomBar] 同构，
+ * 左「视图」循环切换、中「＋」、右「今天」。
+ *
+ * 视图切换做成「点一次切下一个」而不是三格分段控件：底栏单格只有三分之一屏宽，
+ * 塞三段中文会挤成一条；而且首页的「排序」本来就是这个交互，两页行为一致更好记。
+ * 当前视图写在标签里（「视图 · 月」），看得见状态。
+ */
+@Composable
+private fun CalendarBottomBar(
+    view: CalendarView,
+    onCycleView: () -> Unit,
+    onToday: () -> Unit,
+    onTodayEnabled: Boolean,
+    onCreate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GlassPanel(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(62.dp),
+        capsule = true,
+    ) {
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CircleShape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = glyph,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = glassTextPrimary()),
-            )
+            GlassBarItem(
+                modifier = Modifier.weight(1.15f),
+                label = "视图 · ${view.label}",
+                contentDescription = "切换视图，当前${view.label}",
+                onClick = onCycleView,
+            ) { color -> ViewGlyph(color) }
+
+            GlassBarCreateButton(onClick = onCreate)
+
+            GlassBarItem(
+                modifier = Modifier.weight(1f),
+                label = "今天",
+                contentDescription = "回到今天",
+                enabled = onTodayEnabled,
+                onClick = onToday,
+            ) { color -> TodayGlyph(color) }
         }
     }
 }
 
+/** 视图图标：2×2 小方块，与日历图标区分开。 */
 @Composable
-private fun ViewSegmented(current: CalendarView, onSelect: (CalendarView) -> Unit) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
-    GlassPanel {
-        Row(Modifier.padding(2.dp)) {
-            CalendarView.entries.forEach { view ->
-                val active = view == current
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(if (active) primary.copy(alpha = 0.16f) else Color.Transparent)
-                        .clickable { onSelect(view) }
-                        .padding(horizontal = 13.dp, vertical = 5.dp),
-                ) {
-                    Text(
-                        text = view.label,
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (active) primary else secondary,
-                        ),
-                    )
-                }
+private fun ViewGlyph(color: Color) {
+    Canvas(Modifier.size(15.dp)) {
+        val gap = 2.5.dp.toPx()
+        val side = (size.width - gap) / 2f
+        val radius = 1.8.dp.toPx()
+        val stroke = 1.2.dp.toPx()
+        for (row in 0..1) {
+            for (col in 0..1) {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(col * (side + gap), row * (side + gap)),
+                    size = Size(side, side),
+                    cornerRadius = CornerRadius(radius, radius),
+                    style = Stroke(width = stroke),
+                )
             }
         }
     }
 }
+
+/** 今天图标：圆环 + 实心点。 */
+@Composable
+private fun TodayGlyph(color: Color) {
+    Canvas(Modifier.size(16.dp)) {
+        val stroke = 1.2.dp.toPx()
+        drawCircle(color, radius = size.minDimension / 2f - stroke, style = Stroke(stroke))
+        drawCircle(color, radius = size.minDimension * 0.22f)
+    }
+}
+
+private fun nextView(view: CalendarView): CalendarView =
+    CalendarView.entries[(view.ordinal + 1) % CalendarView.entries.size]
+
+/** 当前浏览的周期是否已经包含今天（是则「今天」按钮置灰）。 */
+private fun onTodayPeriod(state: CalendarUiState): Boolean =
+    if (state.view == CalendarView.MONTH) {
+        state.month == YearMonth.from(state.today)
+    } else {
+        state.month.year == state.today.year
+    }
 
 // ---------------------------------------------------------------- 月视图
 
@@ -393,15 +453,26 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
         else -> 0.88f
     }
 
+    // 42 个格子不放 GlassPress（每个都带 shader 光斑会明显掉帧），但状态指示仍自己画：
+    // 用 `clickable(indication = null)` 关掉 Material ripple，按下只把格子底色加深一档。
+    // ripple 在方格里也是矩形，和整页的圆角语言冲突。
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val cellAlpha = when {
+        cell.isSelected -> if (pressed) 0.22f else 0.14f
+        pressed -> 0.10f
+        else -> 0f
+    }
+
     Box(
         modifier = modifier
             .aspectRatio(1f)
             // 手势范围要盖满整格：`padding` 若排在 `clickable` 之前，格与格之间那 1dp 缝
             // 就不属于任何格子，点上去等于点在空气上（旧版会穿透到首页卡片）。
             .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(1.dp)
-            .background(if (cell.isSelected) primary.copy(alpha = 0.14f) else Color.Transparent),
+            .background(if (cellAlpha > 0f) primary.copy(alpha = cellAlpha) else Color.Transparent),
         contentAlignment = Alignment.Center,
     ) {
         if (cell.isToday) {
@@ -500,7 +571,8 @@ private fun YearView(state: CalendarUiState, actions: CalendarActions) {
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 4.dp),
+            // 底部留出底栏高度：年视图是滚动的，不给空间最后一排会被底栏压住
+            .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 96.dp),
     ) {
         if (state.yearEventCount == 0) {
             Text(
@@ -536,7 +608,13 @@ private fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () -> 
     GlassPanel(
         modifier = modifier
             .height(84.dp)
-            .clickable(onClick = onClick),
+            .glassPressClick(
+                shape = glassPanelShape(),
+                scale = 0.012f,
+                lift = 0.dp,
+                spread = 0.1f,
+                onClick = onClick,
+            ),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -624,7 +702,13 @@ private fun CalendarEntryRow(entry: CalendarEntry, onClick: () -> Unit) {
     GlassPanel(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .glassPressClick(
+                shape = glassPanelShape(),
+                scale = 0.008f,
+                lift = 0.dp,
+                spread = 0.08f,
+                onClick = onClick,
+            ),
     ) {
         Row(
             modifier = Modifier
