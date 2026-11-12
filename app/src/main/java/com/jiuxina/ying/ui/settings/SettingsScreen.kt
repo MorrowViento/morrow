@@ -70,6 +70,14 @@ fun SettingsScreen(
     state: SettingsUiState,
     actions: SettingsActions,
     onDismiss: () -> Unit,
+    /**
+     * 把「桌面小部件」分组置顶。
+     *
+     * 用途：小部件自动 pin 失败时，[com.jiuxina.ying.widget.WidgetPinActivity] 会带 extra
+     * 把用户带到这里。它是来「加一个小部件」的，不该让他再往下翻三屏去找入口。
+     * 只在这次进入时置顶，普通进入仍按 外观 → 数据 → 提醒 → 小部件 的顺序。
+     */
+    highlightWidgets: Boolean = false,
 ) {
     val context = LocalContext.current
     BackHandler { onDismiss() }
@@ -93,6 +101,50 @@ fun SettingsScreen(
 
         Column(Modifier.fillMaxSize()) {
             SettingsHeader(onDismiss)
+
+            // 小部件分组的内容只写一份，位置由 highlightWidgets 决定（置顶 / 原位）。
+            // 置顶用得上：pin 失败被带进来的人就是来加小部件的，不该再往下翻三屏找入口。
+            val widgetsSection: @Composable () -> Unit = {
+                SettingsGroup("桌面小部件") {
+                    // 两条添加入口与长按图标里的快捷方式走同一条 requestPinAppWidget 链路
+                    ActionRow(
+                        title = "添加总览小部件",
+                        summary = "系统会弹出「添加到主屏幕」确认，确认后直接落在桌面",
+                        value = "添加",
+                        onClick = { WidgetPinActivity.start(context, isDetail = false) },
+                    )
+                    Divider()
+                    ActionRow(
+                        title = "添加单事件小部件",
+                        summary = "添加后在桌面点它一下，选择要盯住的那个日子",
+                        value = "添加",
+                        onClick = { WidgetPinActivity.start(context, isDetail = true) },
+                    )
+                    if (state.widgets.isNotEmpty()) {
+                        state.widgets.forEach { widget ->
+                            Divider()
+                            ActionRow(
+                                title = if (widget.isDetail) {
+                                    "单事件 · ${widget.eventTitle ?: "未选择事件"}"
+                                } else {
+                                    "总览"
+                                },
+                                summary = if (widget.isDetail) "修改样式，或换绑另一个事件" else "修改样式与显示行数",
+                                value = "编辑",
+                                onClick = { WidgetEntries.openConfig(context, widget) },
+                            )
+                        }
+                    }
+                    Divider()
+                    // 厂商桌面不一定给「编辑」，把这条兜底路写明白，否则用户以为改不了
+                    ActionRow(
+                        title = "长按桌面没有「编辑」？",
+                        summary = "用上面这几行进入配置台，效果与长按编辑完全一致",
+                        onClick = null,
+                    )
+                }
+            }
+
             LazyColumn(
                 // weight 而不是 fillMaxSize：后者会把视口撑成整个 Column 的高度，
                 // 头部占掉的那一截就被裁到屏幕外，最后一张卡片滚不到底
@@ -102,6 +154,9 @@ fun SettingsScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                if (highlightWidgets) {
+                    item(key = "widgets") { widgetsSection() }
+                }
                 item(key = "appearance") {
                     SettingsGroup("外观") {
                         Column(Modifier.padding(vertical = 8.dp)) {
@@ -186,45 +241,8 @@ fun SettingsScreen(
                     }
                 }
 
-                item(key = "widgets") {
-                    SettingsGroup("桌面小部件") {
-                        // 两条添加入口与长按图标里的快捷方式走同一条 requestPinAppWidget 链路
-                        ActionRow(
-                            title = "添加总览小部件",
-                            summary = "系统会弹出「添加到主屏幕」确认，确认后直接落在桌面",
-                            value = "添加",
-                            onClick = { WidgetPinActivity.start(context, isDetail = false) },
-                        )
-                        Divider()
-                        ActionRow(
-                            title = "添加单事件小部件",
-                            summary = "添加后在桌面点它一下，选择要盯住的那个日子",
-                            value = "添加",
-                            onClick = { WidgetPinActivity.start(context, isDetail = true) },
-                        )
-                        if (state.widgets.isNotEmpty()) {
-                            state.widgets.forEach { widget ->
-                                Divider()
-                                ActionRow(
-                                    title = if (widget.isDetail) {
-                                        "单事件 · ${widget.eventTitle ?: "未选择事件"}"
-                                    } else {
-                                        "总览"
-                                    },
-                                    summary = if (widget.isDetail) "修改样式，或换绑另一个事件" else "修改样式与显示行数",
-                                    value = "编辑",
-                                    onClick = { WidgetEntries.openConfig(context, widget) },
-                                )
-                            }
-                        }
-                        Divider()
-                        // 厂商桌面不一定给「编辑」，把这条兜底路写明白，否则用户以为改不了
-                        ActionRow(
-                            title = "长按桌面没有「编辑」？",
-                            summary = "用上面这几行进入配置台，效果与长按编辑完全一致",
-                            onClick = null,
-                        )
-                    }
+                if (!highlightWidgets) {
+                    item(key = "widgets") { widgetsSection() }
                 }
 
                 item(key = "about") {

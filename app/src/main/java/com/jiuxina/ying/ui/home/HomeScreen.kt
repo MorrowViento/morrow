@@ -118,6 +118,13 @@ fun HomeScreen(
      * 收到新值时把所有浮层收掉，让人落回首页（要看的详情由 [openDetailRequest] 另开）。
      */
     closeOverlaysRequest: Long = 0L,
+    /**
+     * 每次「小部件没能自动放到桌面」都自增。
+     *
+     * 小部件 pin 走不通时，一句「桌面不支持」等于把路堵死；带上这个请求进来就把用户
+     * 送到设置页并把「桌面小部件」分组置顶，那里点「添加」是真正可用的路径。
+     */
+    openWidgetsRequest: Long = 0L,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -129,6 +136,8 @@ fun HomeScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // 只在「小部件添加失败被带进来」这一路为真：把「桌面小部件」分组顶到设置页最前面
+    var highlightWidgets by remember { mutableStateOf(false) }
     val categoryNames = remember(categories) { categories.map { it.name } }
 
     // 分类改名 / 删除迁移的映射（旧名 → 新名，可链式）。表单状态在面板内部，
@@ -153,6 +162,20 @@ fun HomeScreen(
         showCalendar = false
         showReminders = false
         showSettings = false
+    }
+
+    // 小部件自动添加失败被带进来：清掉其他浮层，直接落到「桌面小部件」分组置顶的设置页
+    LaunchedEffect(openWidgetsRequest) {
+        if (openWidgetsRequest <= 0L) return@LaunchedEffect
+        editingForm = null
+        detailId = null
+        showCategories = false
+        showMoreMenu = false
+        confirmClearAll = false
+        showCalendar = false
+        showReminders = false
+        highlightWidgets = true
+        showSettings = true
     }
 
     // 日历盖在首页之上，返回键应先关日历而不是退出应用
@@ -254,7 +277,11 @@ fun HomeScreen(
                         SettingsScreen(
                             state = settings,
                             actions = settingsActions,
-                            onDismiss = { showSettings = false },
+                            onDismiss = {
+                                showSettings = false
+                                highlightWidgets = false
+                            },
+                            highlightWidgets = highlightWidgets,
                         )
                     }
 
@@ -321,6 +348,8 @@ fun HomeScreen(
                             totalCount = state.totalCount,
                             onOpenSettings = {
                                 showMoreMenu = false
+                                // 常规入口按原顺序展示，不沿用上次的置顶
+                                highlightWidgets = false
                                 showSettings = true
                             },
                             onOpenReminders = {
