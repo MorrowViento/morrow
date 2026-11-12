@@ -8,6 +8,8 @@
 
 M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**228 项单测全绿、lint 0 errors / 10 warnings**（`abortOnError=true`，其中 7 条是依赖有新版本的提示类），debug APK 约 76 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
 
+2026-11-12 完成**按压光晕 + 日历底栏**：`Modifier.glassPressHalo()` 在元素轮廓之外画一圈径向白光 + 外扩后的折射亮边，配 `glassPressFeedback(lift=)` 的放大上浮与 Glasmio shader 光斑，按下即「玻璃被顶起来」；新增 `glassPressClick()` 一条链封装。日历页撤掉顶部「月｜年｜列表」分段控件与右下角悬浮 ＋，换成与首页同构的底栏（视图循环 / ＋ / 今天），头部圆钮与列表行同步去掉 Material ripple。版本号 `4.0.0-alpha4 (43)`。
+
 2026-11-12 完成**底栏改版 + Glasmio 0.1.3**：排序 / 新建 / 日历收进一条底部胶囊玻璃栏（`HomeBottomBar`），首页标题区只留「⋯」，`CreateFab` 从首页移除；顺带修掉「点排序胶囊里冒出方形高亮」——根因是 `Modifier.clickable` 的 Material ripple 只按布局边界裁剪，现改为 `ui/glass/GlassPress.kt` 的手势 + `InteractiveHighlight` 液体光斑，事件卡片与日历页 `＋` 同步切换。Glasmio 升到 0.1.3（`GlassSurface` 自带 `onClick` 按压光学、渲染性能更新），封装层新增 `GlassPanel(capsule=, tint=)` / `glassPanelShape()`。版本号 `4.0.0-alpha3 (42)`。
 
 2026-11-12 完成**品牌重塑**：应用名「萤」→「**朝夕**」，工程 / 目录 / Gradle 根名 → `morrow`，`applicationId` / Kotlin 包 → `com.morrowviento.morrow`，`Ying*` 类与 `Theme.Ying` → `Morrow*`，内部数据标识（`morrow.db`、`morrow_settings`、`morrow://`、action 前缀）同步；新增自适应图标（晨昏渐变 + 日轮），此前没有 `android:icon`。**破坏性变更**：旧「萤」不能覆盖升级到新包，需先导出备份、卸载、装新包后导入；自有签名密钥的生成与注入见 `docs/SIGNING.md`。
