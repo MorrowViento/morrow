@@ -30,14 +30,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
@@ -51,9 +52,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import kotlin.math.roundToInt
 import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.backup.ImportMode
+import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.glass.GlassAlert
 import com.morrowviento.morrow.ui.glass.GlassAlertButton
@@ -64,7 +65,6 @@ import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassSheet
-import com.morrowviento.morrow.ui.glass.GlassSlider
 import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -190,16 +190,20 @@ fun SettingsScreen(
                             Divider()
                             SettingBlock(
                                 label = "玻璃厚度",
-                                hint = frostHint(state.effectiveSettings.glassFrost),
+                                hint = "${state.frostLevel.label} · ${state.frostLevel.hint}",
                             ) {
-                                // 连续滑块，取代原来的四档分段控件：
-                                // 库的 RegularMedium 与 RegularLarge 五个参数完全一致，
-                                // 「标准 / 厚重」其实一模一样，分档只会有「没生效」的错觉。
-                                GlassFrostSlider(
-                                    committed = state.settings.glassFrost,
-                                    onPreview = actions.previewGlassFrost,
-                                    onCommit = actions.setGlassFrost,
+                                // 图标版分段控件：四格各画一张"玻璃卡 + 背后的内容"，
+                                // 通透档能看见背后的两点，厚重档被完全不透明的面盖住。
+                                // 库的指示器是透镜材质，按下时把相邻两格折射挤歪。
+                                GlassSegmentedControl(
+                                    items = GlassFrostLevel.entries.map { it to it.label },
+                                    selected = state.frostLevel,
+                                    onSelected = actions.setGlassFrostLevel,
                                     modifier = Modifier.fillMaxWidth(),
+                                    height = 38.dp,
+                                    itemContent = { level, selected ->
+                                        FrostGlyph(level, alpha = if (selected) 1f else 0.55f)
+                                    },
                                 )
                             }
                             Divider()
@@ -459,41 +463,66 @@ private fun SettingBlock(
 }
 
 /**
- * 玻璃厚度滑块。
+ * 玻璃厚度的四个图标（通透 / 轻盈 / 标准 / 厚重）。
  *
- * 拖动期间只回调 [onPreview]（改内存里的值，整页玻璃实时变），松手才 [onCommit] 落盘。
- * 单独包一层是为了在「最后一次拖动值」上提交：库的 `onValueChangeFinished` 不带参数，
- * 而界面上的 state 要等一次重组才更新，直接读它会差一帧。
+ * 画法就是一张「玻璃卡」叠在「背后的内容」上：卡是圆角矩形，背后是两个小圆点。
+ * 档位越高，卡片的面越实、圆点越看不见——**透明度这个抽象量被画成了可见的遮挡关系**，
+ * 这是四格图标能一眼分辨的原因（只画四条粗细不同的横线是看不出透明的）。
  */
 @Composable
-private fun GlassFrostSlider(
-    committed: Float,
-    onPreview: (Float) -> Unit,
-    onCommit: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // 滑块拇指跟本地值走（逐帧平滑），主题只按 2% 的台阶重绘：
-    // 拖动一次整页玻璃就要重建模糊半径，逐帧传会把重绘次数放大到十几倍。
-    var draft by remember { mutableFloatStateOf(committed) }
-    // 外部改动（导入备份、旧数据迁移、落盘回流）时把滑块拉回正确位置
-    LaunchedEffect(committed) { draft = committed }
-    GlassSlider(
-        value = draft,
-        onValueChange = {
-            draft = it
-            onPreview((it * 50f).roundToInt() / 50f)
-        },
-        onValueChangeFinished = { onCommit(draft) },
-        modifier = modifier,
-    )
-}
+private fun FrostGlyph(level: GlassFrostLevel, size: Dp = 19.dp, alpha: Float = 1f) {
+    val ink = glassTextPrimary()
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val inset = 1.5.dp.toPx()
+        val cardTop = h * 0.26f
+        val cardHeight = h * 0.48f
+        val corner = CornerRadius(cardHeight * 0.34f, cardHeight * 0.34f)
+        val cardLeft = inset
+        val cardWidth = w - 2 * inset
+        val cardCenterY = cardTop + cardHeight / 2f
+        val t = level.frost.coerceIn(0f, 1f)
 
-/** 厚度的一句话说明，按区间给，和滑块的三处刻度对齐。 */
-private fun frostHint(value: Float): String = when {
-    value < 0.14f -> "几乎全通透：背后内容看得最清楚，字会稍淡"
-    value < 0.45f -> "轻薄磨砂：iOS 导航栏的观感，日常推荐"
-    value < 0.72f -> "标准磨砂：背景细节变模糊，正文更清楚"
-    else -> "厚重：接近实心卡片，对比度最高，几乎不透视"
+        // 背后的内容：两个圆点，被卡片盖住多少就看不见多少
+        val dotAlpha = (1f - t) * 0.95f
+        if (dotAlpha > 0.02f) {
+            val r = 1.15.dp.toPx()
+            drawCircle(ink.copy(alpha = alpha * dotAlpha), r, Offset(w * 0.38f, cardCenterY))
+            drawCircle(ink.copy(alpha = alpha * dotAlpha), r, Offset(w * 0.62f, cardCenterY))
+        }
+
+        // 玻璃面：越厚越实（0.06 → 0.92），和渲染层的色纱曲线同向
+        val face = 0.06f + 0.86f * t
+        drawRoundRect(
+            color = ink.copy(alpha = alpha * face),
+            topLeft = Offset(cardLeft, cardTop),
+            size = Size(cardWidth, cardHeight),
+            cornerRadius = corner,
+        )
+        // 顶部镜面高光：厚度越高越亮，模拟折射后的边缘
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = alpha * (0.10f + 0.45f * t)),
+                    Color.Transparent,
+                ),
+                startY = cardTop,
+                endY = cardCenterY,
+            ),
+            topLeft = Offset(cardLeft, cardTop),
+            size = Size(cardWidth, cardHeight),
+            cornerRadius = corner,
+        )
+        // 轮廓：细一圈，避免深色底下整块糊成一个点
+        drawRoundRect(
+            color = ink.copy(alpha = alpha * 0.55f),
+            topLeft = Offset(cardLeft, cardTop),
+            size = Size(cardWidth, cardHeight),
+            cornerRadius = corner,
+            style = Stroke(width = 1.dp.toPx()),
+        )
+    }
 }
 
 /** 动作行。[onClick] 为 null 时只做展示（版本号）。 */

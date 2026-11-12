@@ -21,12 +21,42 @@ enum class ThemeMode(val prefValue: String, val label: String) {
 }
 
 /**
- * 玻璃「厚度」的默认值。
+ * 玻璃「厚度」的默认值（= [GlassFrostLevel.STANDARD]）。
  *
  * 0 = 几乎全通透（能看清背后内容），1 = 厚实磨砂（iOS 那种实心卡片）。
- * 默认 0.35 接近 iOS 导航栏的观感——既看得出是玻璃，文字也够清楚。
  */
-const val GLASS_FROST_DEFAULT = 0.35f
+const val GLASS_FROST_DEFAULT = 0.62f
+
+/**
+ * 玻璃厚度的四个档位（设置页的图标分段控件）。
+ *
+ * 底层仍然存 0~1 的连续值 [AppSettings.glassFrost]——连续性留给渲染层（模糊半径、
+ * 内侧色纱都能跟着变），UI 只暴露四个有明确名字的落点，免得滑块停在「37%」这种
+ * 说不清意思的位置。
+ *
+ * 档位的取值不是等距的：`frostRadius` 从 2dp 到 24dp、色纱从 0 到 0.72，人眼对
+ * 前段（0→0.35）的差异远比对后段（0.7→1）敏感，所以前两档贴得近、后两档拉得开。
+ *
+ * [prefValue] 与旧的四档字符串（`clear/light/standard/heavy`）同名，升级时
+ * [legacyGlassFrost] 映射过来的值正好落在对应档位的判定区间里。
+ */
+enum class GlassFrostLevel(
+    val frost: Float,
+    val prefValue: String,
+    val label: String,
+    val hint: String,
+) {
+    CLEAR(0f, "clear", "通透", "几乎没有底色，能看清背后内容的轮廓"),
+    LIGHT(0.34f, "light", "轻盈", "薄磨砂，背景细节还看得见，文字略微发淡"),
+    STANDARD(0.62f, "standard", "标准", "iOS 分组列表的观感，背景糊开、正文清楚"),
+    HEAVY(0.95f, "heavy", "厚重", "接近实心卡片，几乎不透视，对比度最高");
+
+    companion object {
+        /** 连续厚度 → 最近的档位（分段控件用它决定哪一格亮着）。 */
+        fun nearest(frost: Float): GlassFrostLevel =
+            entries.minByOrNull { kotlin.math.abs(it.frost - frost) } ?: STANDARD
+    }
+}
 
 /**
  * 旧版「材质档位」字符串 → 连续厚度。
@@ -63,10 +93,11 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val sortMode: SortMode = SortMode.DISTANCE,
     /**
-     * 玻璃厚度，0~1 连续可调（设置页的滑块）。
+     * 玻璃厚度，0~1 连续值。
      *
-     * 之前是一个四值枚举，实际渲染上只有第一档与其它三档能看出区别
-     * （见 [legacyGlassFrost] 的注释），所以换成滑块。
+     * UI 上是 [GlassFrostLevel] 的四档图标分段控件，落盘时写的是该档位的 [GlassFrostLevel.frost]；
+     * 保留连续类型是为了兼容上一版滑块写入的任意值（例如 0.37），
+     * 读取时用 [GlassFrostLevel.nearest] 归到最近的档位显示，不悄悄改写用户的设置。
      */
     val glassFrost: Float = GLASS_FROST_DEFAULT,
     /**

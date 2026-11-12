@@ -1,7 +1,10 @@
 package com.morrowviento.morrow.ui.component
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -21,10 +24,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -87,7 +95,16 @@ fun GlassTextField(
     }
 }
 
-/** 可选中的胶囊标签（多选语义，例如「全天 / 每年重复 / 显示元素」）。 */
+/**
+ * 可选中的胶囊标签（多选语义，例如「全天 / 每年重复 / 显示元素」）。
+ *
+ * 按下去的反馈照 Glasmio 的玻璃按钮做，但**不套一层 `GlassSurface`**：编辑面板里
+ * 这样的 chip 一次能看到十几颗，每颗都开一次材质采样与折射，滚动表单会明显掉帧。
+ * 这里只取它那两下「可感知」的部分——缩小 + 边缘高光 + 底色加深，用同一条弹簧：
+ * 压下 0.94、松手弹回（`dampingRatio = 0.55` 会有一点点回弹，和库的按压曲线一致）。
+ *
+ * 不用默认 ripple：它只按布局边界裁，会在圆角胶囊外面留一圈方块（与底栏那次同一个坑）。
+ */
 @Composable
 fun ChoiceChip(
     label: String,
@@ -97,12 +114,35 @@ fun ChoiceChip(
 ) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
-    // 不用默认 ripple：它只按布局边界裁，会在圆角胶囊外面留一圈方块（与底栏那次同一个坑）
     val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 1200f, visibilityThreshold = 0.01f),
+        label = "chipPress",
+    )
+    val base = if (selected) 0.16f else 0.06f
     Box(
         modifier = modifier
+            .graphicsLayer {
+                // 缩小而不是放大：手指压下去，控件"沉"进玻璃里
+                val scale = 1f - 0.055f * press
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(RoundedCornerShape(50))
-            .background(primary.copy(alpha = if (selected) 0.16f else 0.06f))
+            .background(primary.copy(alpha = base + 0.05f * press))
+            .drawWithContent {
+                drawContent()
+                // 边缘高光：按住时胶囊外圈亮一圈，像被光照到的玻璃边
+                if (press > 0.01f) {
+                    drawRoundRect(
+                        color = primary.copy(alpha = 0.18f * press),
+                        style = Stroke(width = 0.8.dp.toPx()),
+                        cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                    )
+                }
+            }
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 8.dp),
     ) {

@@ -15,6 +15,7 @@ import com.morrowviento.morrow.data.backup.BackupRepository
 import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.reminder.ReminderPermissions
 import com.morrowviento.morrow.data.reminder.ReminderScheduler
+import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.SettingsRepository
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.data.widget.WidgetRefreshTrigger
@@ -28,7 +29,6 @@ import com.morrowviento.morrow.ui.update.UpdateUiState
 import com.morrowviento.morrow.widget.WidgetConfigStore
 import com.morrowviento.morrow.widget.WidgetEntries
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -117,25 +117,8 @@ class SettingsViewModel(
 
     fun setTheme(mode: ThemeMode) = persist { settings.setThemeMode(mode) }
 
-    /** 滑块拖动中：只改内存里的预览值，整页玻璃立刻跟着变厚变薄。 */
-    fun previewGlassFrost(value: Float) = local.update {
-        it.copy(glassFrostPreview = value.coerceIn(0f, 1f))
-    }
-
-    /**
-     * 松手：落盘并保留预览直到 DataStore 回流。
-     *
-     * 如果写完立刻把预览清成 null，中间会有一两帧读回旧值，滑块弹回去再跳过来。
-     */
-    fun setGlassFrost(value: Float) {
-        val frosted = value.coerceIn(0f, 1f)
-        local.update { it.copy(glassFrostPreview = frosted) }
-        persist {
-            settings.setGlassFrost(frosted)
-            delay(220)
-            local.update { it.copy(glassFrostPreview = null) }
-        }
-    }
+    /** 切换玻璃厚度档位：直接写该档位的连续值（分段控件没有拖动预览这回事）。 */
+    fun setGlassFrostLevel(level: GlassFrostLevel) = persist { settings.setGlassFrost(level.frost) }
 
     fun setReduceTransparency(enabled: Boolean) = persist { settings.setReduceTransparency(enabled) }
 

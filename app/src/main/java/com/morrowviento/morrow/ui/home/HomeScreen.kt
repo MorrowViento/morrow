@@ -1,5 +1,6 @@
 package com.morrowviento.morrow.ui.home
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -47,6 +48,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -128,6 +130,7 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var editingForm by remember { mutableStateOf<EventFormState?>(null) }
     var detailId by remember { mutableStateOf<String?>(null) }
     var showCategories by remember { mutableStateOf(false) }
@@ -300,7 +303,7 @@ fun HomeScreen(
                     }
 
                     // 常驻底栏：唯一的一条，画在首页 / 日历 / 设置之上。
-                    // 切页面时它不重建也不换内容，只是「日历」格子会亮一下表示选中——
+                    // 切页面时它不重建也不换内容，只是选中格会滑动过去——
                     // 之前每个页面各放一条，进日历底栏就变成另一套按钮，看起来像换了个应用。
                     if (!showSettings) {
                         HomeBottomBar(
@@ -309,6 +312,10 @@ fun HomeScreen(
                                 .padding(horizontal = 16.dp)
                                 .padding(bottom = 14.dp),
                             calendarActive = showCalendar,
+                            // 搜索还是预留位：点一下给个提示，不做假界面
+                            onSearch = {
+                                Toast.makeText(context, "搜索还在做，先把事件攒着", Toast.LENGTH_SHORT).show()
+                            },
                             onHome = { showCalendar = false },
                             onCalendar = { showCalendar = true },
                             onCreate = {

@@ -137,13 +137,24 @@ data class EventFormState(
          * 秒按分钟截断：滚轮只有时/分两列，留着秒数会让「现在建的这条」比表盘上显示的时刻晚几十秒，
          * 保存后卡片上的剩余时间看起来对不上。
          */
+        /**
+         * 新建表单的初值。
+         *
+         * [date] 传 null 时**从 [now] 取日期**，不能各自 `LocalDate.now()` / `LocalDateTime.now()`
+         * 调一次：跨零点（23:59:59.9 调第一次、00:00:00.1 调第二次）会得到「今天的日期 + 昨天的
+         * 时分」，卡片上的倒计时立刻差一天。单测 `newEvent_defaultsToTodayAndCurrentMinute`
+         * 在凌晨运行时就是这么失败的。
+         */
         fun newEvent(
-            date: LocalDate = LocalDate.now(),
+            date: LocalDate? = null,
             now: LocalDateTime = LocalDateTime.now(),
-        ): EventFormState = EventFormState(
-            date = date,
-            time = now.toLocalTime().withSecond(0).withNano(0),
-        )
+        ): EventFormState {
+            val clock = now.withSecond(0).withNano(0)
+            return EventFormState(
+                date = date ?: clock.toLocalDate(),
+                time = clock.toLocalTime(),
+            )
+        }
 
         /** 快捷日期：今天 / 明天 / 一周后 / 月底 / 年底。 */
         fun quickDates(today: LocalDate = LocalDate.now()): List<Pair<String, LocalDate>> = listOf(

@@ -1,6 +1,7 @@
 package com.morrowviento.morrow.ui.glass
 
 import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
+import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import io.github.neoruaa.glasmio.glass.NavigationGlassMaterial
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -50,9 +51,40 @@ class GlassFrostTest {
     }
 
     @Test
-    fun `默认值落在轻薄磨砂区间`() {
+    fun `默认值落在标准档`() {
         val veil = veilAlphaOf(GLASS_FROST_DEFAULT)
-        assertTrue("默认应能看出是玻璃，又不能太实", veil in 0.15f..0.35f)
-        assertEquals(NavigationGlassMaterial.RegularSmall, materialOf(GLASS_FROST_DEFAULT))
+        assertTrue("默认应能看出是玻璃，又不能太实", veil in 0.3f..0.5f)
+        assertEquals(GlassFrostLevel.STANDARD, GlassFrostLevel.nearest(GLASS_FROST_DEFAULT))
+        assertEquals(NavigationGlassMaterial.RegularMedium, materialOf(GLASS_FROST_DEFAULT))
+    }
+
+    @Test
+    fun `四个档位的观感两两可分`() {
+        val levels = GlassFrostLevel.entries
+        // 相邻档的模糊半径至少差 4dp：肉眼能分出来，而不是「点了没反应」
+        levels.zipWithNext().forEach { (a, b) ->
+            assertTrue(
+                "${a.label} → ${b.label} 的模糊半径差太小",
+                frostRadiusOf(b.frost).value - frostRadiusOf(a.frost).value >= 4f,
+            )
+            assertTrue(
+                "${a.label} → ${b.label} 的色纱差太小",
+                veilAlphaOf(b.frost) - veilAlphaOf(a.frost) >= 0.12f,
+            )
+        }
+        // 通透档必须真的通透
+        assertEquals(0f, veilAlphaOf(GlassFrostLevel.CLEAR.frost), 0.0001f)
+        // 厚重档压得住背景，但不是纯色块
+        assertTrue(veilAlphaOf(GlassFrostLevel.HEAVY.frost) in 0.55f..0.8f)
+    }
+
+    @Test
+    fun `连续值取最近档位，旧值与滑块中间值都归得回去`() {
+        assertEquals(GlassFrostLevel.CLEAR, GlassFrostLevel.nearest(0f))
+        assertEquals(GlassFrostLevel.LIGHT, GlassFrostLevel.nearest(0.28f))
+        assertEquals(GlassFrostLevel.STANDARD, GlassFrostLevel.nearest(0.55f))
+        assertEquals(GlassFrostLevel.HEAVY, GlassFrostLevel.nearest(0.92f))
+        // 滑块曾经能拖到任意位置，读回来只是「显示成哪一格」，不改写已存值
+        assertEquals(GlassFrostLevel.LIGHT, GlassFrostLevel.nearest(0.37f))
     }
 }

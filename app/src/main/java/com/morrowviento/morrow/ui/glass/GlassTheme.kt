@@ -84,8 +84,8 @@ val LocalGlassFrost = staticCompositionLocalOf { GLASS_FROST_DEFAULT }
  * [frostRadiusOf]（模糊半径）与 [veilAlphaOf]（内侧色纱）。
  */
 internal fun materialOf(frost: Float): NavigationGlassMaterial = when {
-    frost < 0.12f -> NavigationGlassMaterial.Clear
-    frost < 0.55f -> NavigationGlassMaterial.RegularSmall
+    frost < 0.10f -> NavigationGlassMaterial.Clear
+    frost < 0.45f -> NavigationGlassMaterial.RegularSmall
     else -> NavigationGlassMaterial.RegularMedium
 }
 
@@ -101,18 +101,19 @@ internal fun materialOf(frost: Float): NavigationGlassMaterial = when {
 internal fun frostRadiusOf(frost: Float): Dp = (2f + 22f * frost.coerceIn(0f, 1f)).dp
 
 /**
- * 厚度 → 面板内侧色纱的不透明度（0 → 0.78）。
+ * 厚度 → 面板内侧色纱的不透明度（0 → 0.72）。
  *
  * 为什么会话里非得自己盖这层纱：库的面层填充（`faceFill`）在深色下是
  * `Color.White.copy(alpha = 0f)` / 0.1 级别，纯靠它做不出「厚重」的实心感；
  * iOS 的「降低透明度」同样是在材质之上再压一层不透明色。
  *
- * 用 1.15 次幂而不是线性：滑块前半段对应「轻微发雾」的细腻区间，
- * 后半段才快速走向实心，符合人眼对透明度的感知（Weber–Fechner）。
+ * 用 1.25 次幂而不是线性：四档里前两档（0 / 0.34）要保持清透，色纱必须几乎为零
+ * （0.34^1.25 ≈ 0.26），后两档才快速走向实心。四个档位落在这条曲线上分别是
+ * 0 / 0.19 / 0.40 / 0.68，相邻档的差值是看得出来的。
  */
 internal fun veilAlphaOf(frost: Float): Float {
     val t = frost.coerceIn(0f, 1f)
-    return 0.78f * t.pow(1.15f)
+    return 0.72f * t.pow(1.25f)
 }
 
 /**
