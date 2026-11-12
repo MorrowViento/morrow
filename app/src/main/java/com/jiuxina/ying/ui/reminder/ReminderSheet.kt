@@ -31,11 +31,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.jiuxina.ying.data.reminder.SystemAlarm
+import com.jiuxina.ying.data.reminder.SystemAlarmOwner
 import com.jiuxina.ying.ui.component.ChoiceChip
 import com.jiuxina.ying.ui.component.SectionTitle
 import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
  * 提醒诊断浮层（M4）。
@@ -97,9 +103,9 @@ fun ReminderSheet(
                     PermissionRow(
                         title = "精确闹钟",
                         detail = if (state.exactAlarmsAllowed) {
-                            // 现在走 setAlarmClock：系统把它当「用户自己设的闹钟」，Doze 与后台冻结都推迟不了，
-                            // 代价是状态栏会挂一个小闹钟图标，得提前说明，否则用户会以为是 bug
-                            "已允许，按系统闹钟级别触发（状态栏会出现闹钟图标）"
+                            // 临近 12 小时的提醒走 setAlarmClock：系统把它当「用户自己设的闹钟」，
+                            // Doze 与后台冻结都推迟不了；代价是状态栏会短暂出现闹钟图标
+                            "已允许，临近提醒按系统闹钟级别触发"
                         } else {
                             "未允许，系统可能把提醒推迟几分钟"
                         },
@@ -119,6 +125,8 @@ fun ReminderSheet(
                         actionLabel = "去设置",
                         onClick = actions.openBatterySettings,
                     )
+
+                    SystemAlarmNote(state.systemAlarm)
 
                     Spacer(Modifier.height(14.dp))
                     SectionTitle("排期中的提醒 · ${state.alarmCount} 条 / ${state.eventCount} 个事件")
@@ -166,6 +174,26 @@ fun ReminderSheet(
         }
     }
 }
+
+@Composable
+private fun SystemAlarmNote(alarm: SystemAlarm) {
+    val text = when (alarm.owner) {
+        SystemAlarmOwner.NONE -> "状态栏当前没有闹钟图标"
+        SystemAlarmOwner.THIS_APP ->
+            "状态栏的闹钟图标来自萤：下一个 ${formatTrigger(alarm.triggerAtMillis)}，" +
+                "这次提醒触发后自动消失"
+        SystemAlarmOwner.OTHER_APP -> "状态栏的闹钟图标来自其他应用（如系统时钟），与萤无关"
+    }
+    Text(
+        text = text,
+        style = TextStyle(fontSize = 11.sp, color = glassTextSecondary().copy(alpha = 0.85f)),
+        modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp),
+    )
+}
+
+private fun formatTrigger(millis: Long): String =
+    LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("M 月 d 日 HH:mm"))
 
 @Composable
 private fun PermissionRow(

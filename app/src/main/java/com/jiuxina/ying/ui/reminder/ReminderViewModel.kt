@@ -115,6 +115,7 @@ class ReminderViewModel(
             notificationsAllowed = permissions.notificationsAllowed(),
             exactAlarmsAllowed = permissions.exactAlarmsAllowed(),
             batteryUnrestricted = permissions.batteryUnrestricted(),
+            systemAlarm = permissions.nextSystemAlarm(),
             rows = planned.take(MAX_ROWS).map { it.toRow(zone, nowMillis) },
             alarmCount = planned.size,
             eventCount = list.count { event ->

@@ -89,21 +89,28 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
     /**
      * 排期。
      *
-     * 优先 `setAlarmClock`：在系统眼里它和「用户自己设的闹钟」同级——Doze 不推迟、
-     * 应用待机也照常唤醒，是目前唯一能扛住国产 ROM 后台冻结的公开 API。真机实测：
-     * 精确闹钟权限齐备时 `setExactAndAllowWhileIdle` 仍会晚到一分钟，而这一分钟正是
-     * 应用被冻结、广播排队到下一次唤醒窗口的量级。代价是状态栏/锁屏会出现一个小闹钟图标，
-     * 直到这次提醒触发为止。
+     * 落点在 [ALARM_CLOCK_HORIZON_MILLIS] 以内时优先 `setAlarmClock`：在系统眼里它和
+     * 「用户自己设的闹钟」同级——Doze 不推迟、应用待机也照常唤醒，是目前唯一能扛住
+     * 国产 ROM 后台冻结的公开 API。真机实测：精确闹钟权限齐备时
+     * `setExactAndAllowWhileIdle` 仍会晚到一分钟，而这一分钟正是应用被冻结、
+     * 广播排队到下一次唤醒窗口的量级。
+     *
+     * 代价是状态栏/锁屏会挂一个小闹钟图标，直到这次提醒触发为止。所以**只给临近的落点**
+     * 登记成系统闹钟：一年后的纪念日现在就把图标挂上是纯粹的视觉污染，而那些落点也不差
+     * 这一分钟。等时间推进到窗口内，冷启动自愈或上一条提醒触发后的重排会自动升级。
      *
      * 被拒（个别 ROM / 用户关闭闹钟权限）再退回精确闹钟，最后退到不精确闹钟。
      * 降级必须留日志：真机上「提前 10 分钟实际晚 4 分钟」就是这条路径的表现。
      */
     private fun setAt(atMillis: Long, pi: PendingIntent, origin: String) {
-        val armed = runCatching {
-            alarms.setAlarmClock(AlarmManager.AlarmClockInfo(atMillis, showAppIntent()), pi)
+        val withinHorizon = withinAlarmClockHorizon(System.currentTimeMillis(), atMillis)
+        if (withinHorizon) {
+            val armed = runCatching {
+                alarms.setAlarmClock(AlarmManager.AlarmClockInfo(atMillis, showAppIntent()), pi)
+            }
+            if (armed.isSuccess) return
+            Log.w(TAG, "setAlarmClock 被拒，退回精确闹钟：$origin", armed.exceptionOrNull())
         }
-        if (armed.isSuccess) return
-        Log.w(TAG, "setAlarmClock 被拒，退回精确闹钟：$origin", armed.exceptionOrNull())
 
         try {
             if (alarms.canScheduleExactAlarms()) {
@@ -160,6 +167,23 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
         private const val MINUTE_MILLIS = 60_000L
         private const val SNOOZE_REQUEST = 9_000
         private const val SHOW_APP_REQUEST = 9_100
+
+        /**
+         * 「登记成系统闹钟」的时间窗：只有 12 小时内的落点才用 `setAlarmClock`。
+         *
+         * 它会在状态栏挂闹钟图标，而远期提醒并不需要分钟级精度（差一分钟没人感知），
+         * 却要为它挂好几天图标。窗口内的落点由冷启动自愈 / 提醒触发后重排自动升级。
+         */
+        const val ALARM_CLOCK_HORIZON_MILLIS = 12 * 60 * 60 * 1000L
+
+        /**
+         * 落点是否近到值得登记成「系统闹钟」。
+         *
+         * 抽成纯函数是为了能测：这条判断直接决定状态栏会不会出现图标，
+         * 一旦回归成「所有排期都挂图标」，用户会以为应用坏了一直占着状态栏。
+         */
+        fun withinAlarmClockHorizon(nowMillis: Long, triggerAtMillis: Long): Boolean =
+            triggerAtMillis - nowMillis <= ALARM_CLOCK_HORIZON_MILLIS
 
         /** 与 [ReminderPlan.MAX_ALARMS] 保持一致：5 条提醒 × 2 次落点。 */
         const val SLOT_COUNT = ReminderPlan.MAX_ALARMS

@@ -1,8 +1,5 @@
 package com.jiuxina.ying.ui.calendar
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,24 +26,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -61,9 +50,6 @@ import com.jiuxina.ying.ui.glass.GlassCirclePanel
 import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.abs
@@ -85,10 +71,9 @@ fun CalendarScreen(
     onCreate: (LocalDate) -> Unit,
     onOpenEvent: (String) -> Unit,
     onDismiss: () -> Unit,
-    /** 左侧相邻页；翻页动画期间一起渲染，已到边界为 null。 */
-    prevPage: CalendarUiState? = null,
-    /** 右侧相邻页；同上。 */
-    nextPage: CalendarUiState? = null,
+    /** 还能不能往左 / 往右翻；到农历年表边界时为 false，滑动只被判为无效。 */
+    canPrev: Boolean = false,
+    canNext: Boolean = false,
 ) {
     Box(Modifier.fillMaxSize()) {
         GlassBackdrop()
@@ -109,17 +94,14 @@ fun CalendarScreen(
                 state.isLoading -> CenterHint("载入中…", null)
                 else -> SwipePager(
                     modifier = Modifier.weight(1f),
-                    canPrev = prevPage != null,
-                    canNext = nextPage != null,
-                    pageKey = state.view to state.month,
+                    canPrev = canPrev,
+                    canNext = canNext,
                     onPrev = {
                         if (state.view == CalendarView.MONTH) actions.shiftMonth(-1) else actions.shiftYear(-1)
                     },
                     onNext = {
                         if (state.view == CalendarView.MONTH) actions.shiftMonth(1) else actions.shiftYear(1)
                     },
-                    prevPage = { prevPage?.let { CalendarPage(it, actions, onOpenEvent) } },
-                    nextPage = { nextPage?.let { CalendarPage(it, actions, onOpenEvent) } },
                 ) {
                     CalendarPage(state, actions, onOpenEvent)
                 }
@@ -157,17 +139,16 @@ internal fun swipeDirection(
 private const val SWIPE_DISTANCE_RATIO = 0.18f
 
 /**
- * 左右滑动翻页：跟手位移，相邻页**同时**渲染在屏上。
+ * 左右滑动翻页：**只做手势判定**，翻页动作与点头部箭头完全一致（瞬时切页）。
  *
- * 前一版是「当前页滑出去 → 换数据 → 新页从另一侧滑进来」，中间有整整一屏空白
- * （真机反馈「两个界面之间有一段空白动画间隔」）。现在滑到哪、哪一页就已经在那里了。
+ * 之前试过三版带动画的实现，真机上都会留下「翻完之后整页日期抖一下」：
+ * 双页位移要求相邻页跟着数据重组跑（先闪一帧再换回来）；换页那一帧的位移归零
+ * 与内容切换又跨了两次状态更新（图层先动、重组后到）。它们的共同点是
+ * **屏上内容由两个状态源共同决定**，只要两者差一帧就会被看见。
  *
- * 换页不换位置：滑到位时当前页在 offset = ±width，新页的 translationX 恰好是 0，
- * 这时才切 nav；等新数据到位、正中那一页本身就是新页了，再把 offset 悄悄归零。
- * 归零前后画面完全静止，所以既没有空白帧，也不会看到两页错位。
- *
- * 只有当前页可点：翻页动画那两百毫秒里，正中那页是「相邻页」的副本，
- * 它的 nav 还没生效，点下去只会得到一个即将被丢弃的选中态。
+ * 所以这里干脆不做位移、不渲染相邻页：松手即切页，与点箭头走同一条路径，
+ * 屏幕上永远只有一个内容来源，没有能抖的余地。判定仍在松手时做
+ * （甩动速度优先、位移其次），滑动灵敏度与之前一致。
  *
  * 回调必须经 [rememberUpdatedState] 取：手势协程只启动一次且一直存活，
  * 直接捕获 `onPrev` / `onNext` 会永远用第一帧那份闭包（滚轮就是这么错的）。
@@ -176,60 +157,21 @@ private const val SWIPE_DISTANCE_RATIO = 0.18f
 private fun SwipePager(
     canPrev: Boolean,
     canNext: Boolean,
-    /** 换页后变化的值（视图 + 月份）；等它变了才把位移归零。 */
-    pageKey: Any,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
-    prevPage: @Composable () -> Unit,
-    nextPage: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
     val latestOnPrev by rememberUpdatedState(onPrev)
     val latestOnNext by rememberUpdatedState(onNext)
     val latestCanPrev by rememberUpdatedState(canPrev)
     val latestCanNext by rememberUpdatedState(canNext)
-    val latestKey by rememberUpdatedState(pageKey)
-    val latestPrevPage by rememberUpdatedState(prevPage)
-    val latestNextPage by rememberUpdatedState(nextPage)
-    var width by remember { mutableFloatStateOf(0f) }
-    var offset by remember { mutableFloatStateOf(0f) }
-    var busy by remember { mutableStateOf(false) }
-    // 拖动开始时把两页内容「冻住」。不冻的话，切完数据那一刻相邻页 lambda 已经指向
-    // 「新的下一页」，会在屏中央闪一帧不该出现的月份，再被归零换回来——真机看到的就是
-    // 「翻完之后所有日期抖一下」
-    var frozen by remember { mutableStateOf<FrozenPages?>(null) }
-    // 屏上要额外画哪一侧：0 不画，1 下一页，-1 上一页。
-    // 把「每帧位移」收敛成「只在跨过中线时变化」，拖动过程中才不会重组整页内容。
-    val side by remember {
-        derivedStateOf {
-            when {
-                offset < -1f -> 1
-                offset > 1f -> -1
-                else -> 0
-            }
-        }
-    }
+    val density = LocalDensity.current
     val flingVelocity = with(density) { 600.dp.toPx() }
-
-    /** 把位移滑到 [target]：时长随剩余距离走，抖一下就松手时不会慢吞吞挪一整屏。 */
-    suspend fun glide(target: Float) {
-        val remaining = abs(target - offset)
-        val ratio = remaining / width.coerceAtLeast(1f)
-        val duration = (60f + 180f * ratio).toInt().coerceIn(60, 240)
-        animate(
-            initialValue = offset,
-            targetValue = target,
-            animationSpec = tween(durationMillis = duration, easing = FastOutSlowInEasing),
-        ) { value, _ -> offset = value }
-    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .onSizeChanged { width = it.width.toFloat() }
             .pointerInput(Unit) {
                 val tracker = VelocityTracker()
                 var dragged = 0f
@@ -237,113 +179,26 @@ private fun SwipePager(
                     onDragStart = {
                         tracker.resetTracking()
                         dragged = 0f
-                        // 冻结两份相邻页：整段手势 + 动画期间屏上显示的都是这一份快照
-                        frozen = FrozenPages(latestPrevPage, latestNextPage)
-                    },
-                    onDragCancel = {
-                        scope.launch {
-                            glide(0f)
-                            frozen = null
-                        }
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        if (!busy) {
-                            val raw = offset + dragAmount
-                            val min = if (latestCanNext) -width else 0f
-                            val max = if (latestCanPrev) width else 0f
-                            // 到边界还继续拖时只给 1/4 位移：手感上「拽到头了」比硬停更好懂
-                            offset = when {
-                                raw < min -> min + (raw - min) * EDGE_RESISTANCE
-                                raw > max -> max + (raw - max) * EDGE_RESISTANCE
-                                else -> raw
-                            }
-                            dragged += dragAmount
-                            tracker.addPosition(change.uptimeMillis, change.position)
-                        }
+                        dragged += dragAmount
+                        tracker.addPosition(change.uptimeMillis, change.position)
                     },
                     onDragEnd = {
                         val velocity = tracker.calculateVelocity().x
-                        val direction = swipeDirection(dragged, velocity, width, flingVelocity)
-                        val allowed = when (direction) {
-                            1 -> latestCanNext
-                            -1 -> latestCanPrev
-                            else -> false
-                        }
-                        if (!allowed) {
-                            scope.launch {
-                                glide(0f)
-                                frozen = null
-                            }
-                        } else {
-                            busy = true
-                            scope.launch {
-                                glide(if (direction > 0) -width else width)
-                                val from = latestKey
-                                if (direction > 0) latestOnNext() else latestOnPrev()
-                                // 等新一页的数据落位再归零：这期间画面静止在新页正中，
-                                // 用户看不到任何等待，也不会闪一帧旧内容
-                                withTimeoutOrNull(SETTLE_TIMEOUT_MILLIS) {
-                                    snapshotFlow { latestKey }.first { it != from }
-                                }
-                                offset = 0f
-                                frozen = null
-                                busy = false
-                            }
+                        val width = size.width.toFloat()
+                        when (swipeDirection(dragged, velocity, width, flingVelocity)) {
+                            1 -> if (latestCanNext) latestOnNext()
+                            -1 -> if (latestCanPrev) latestOnPrev()
                         }
                     },
                 )
             },
     ) {
-        // 相邻页先画、当前页后画：万一两页有重叠，当前页在上。
-        // 渲染的是拖动开始时冻住的那份内容，而不是跟着最新数据重组——后者会在
-        // 换页那一帧把「再下一页」闪进屏中央，看起来就是整页日期抖了一下。
-        if (side == 1) {
-            val page = frozen?.next ?: nextPage
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { translationX = width + offset },
-            ) {
-                page()
-            }
-        }
-        if (side == -1) {
-            val page = frozen?.prev ?: prevPage
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { translationX = offset - width },
-            ) {
-                page()
-            }
-        }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { translationX = offset },
-        ) {
-            content()
-        }
+        content()
     }
 }
-
-/** 拖到边界后的位移衰减系数。 */
-private const val EDGE_RESISTANCE = 0.25f
-
-/** 拖动开始时冻住的相邻两页内容。 */
-private class FrozenPages(
-    val prev: @Composable () -> Unit,
-    val next: @Composable () -> Unit,
-)
-
-/**
- * 等新页数据的上限。
- *
- * 正常 1~3 帧就到位；给上限是为了「翻页没改变 nav」这种意外（比如数据源被 clamp 回来）
- * 也能收尾，不会把 busy 永久挂住导致页面拖不动。
- */
-private const val SETTLE_TIMEOUT_MILLIS = 300L
 
 /** 三种视图共用的内容分派。 */
 @Composable

@@ -41,12 +41,22 @@ class MainActivity : ComponentActivity() {
      */
     private val pendingDetailId = MutableStateFlow<String?>(null)
 
+    /**
+     * 从通知进入应用的次数。
+     *
+     * 通知点击大多发生在应用还在任务栈里的时候（例如刚在提醒页发完测试通知），
+     * 此时 Activity 被直接带回前台，界面上仍留着提醒诊断面板——用户点通知想「进应用」，
+     * 结果看到的是刚才那个面板，像没进去一样。次数一变，[HomeScreen] 就把所有覆盖层收掉。
+     * 用自增计数而不是布尔量：连续点两次通知也要各收一次。
+     */
+    private val notificationEntries = MutableStateFlow(0L)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("main", "onCreate enter")
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as YingApp
-        pendingDetailId.value = intent?.getStringExtra(EXTRA_EVENT_ID)
+        handleIntent(intent)
 
         setContent {
             val viewModel: EventViewModel = viewModel(
@@ -86,6 +96,7 @@ class MainActivity : ComponentActivity() {
             val categories by categoryViewModel.items.collectAsStateWithLifecycle()
             val reminders by reminderViewModel.state.collectAsStateWithLifecycle()
             val openDetail by pendingDetailId.collectAsStateWithLifecycle()
+            val notificationEntry by notificationEntries.collectAsStateWithLifecycle()
             val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
 
             // 回调集合只取决于 ViewModel 实例：避免每帧重组都新建 lambda
@@ -166,6 +177,7 @@ class MainActivity : ComponentActivity() {
                 onSaveEvent = viewModel::save,
                 openDetailRequest = openDetail,
                 onDetailRequestConsumed = { pendingDetailId.value = null },
+                closeOverlaysRequest = notificationEntry,
             )
         }
         StartupTrace.mark("main", "setContent returned")
@@ -178,7 +190,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingDetailId.value = intent.getStringExtra(EXTRA_EVENT_ID)
+        handleIntent(intent)
+    }
+
+    /** 冷启动与复用实例两条路径共用，避免只处理其中一条导致「点通知没反应」。 */
+    private fun handleIntent(intent: Intent?) {
+        pendingDetailId.value = intent?.getStringExtra(EXTRA_EVENT_ID)
+        if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
+            notificationEntries.value += 1
+        }
     }
 
     /**
@@ -202,5 +222,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** 通知 -> 详情页的事件 id 额外字段，与 [com.jiuxina.ying.reminder.ReminderNotifier] 对齐。 */
         const val EXTRA_EVENT_ID = "event_id"
+
+        /** 由通知点进来的标记：用来收起上一次留在界面上的浮层。 */
+        const val EXTRA_FROM_NOTIFICATION = "from_notification"
     }
 }

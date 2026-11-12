@@ -1,5 +1,7 @@
 package com.jiuxina.ying.ui.reminder
 
+import com.jiuxina.ying.data.reminder.SystemAlarm
+
 /** 排期列表的一行。 */
 data class ReminderRow(
     /** 事件 id + 触发时刻，保证同一事件的多个提醒各自有稳定 key。 */
@@ -24,6 +26,13 @@ data class ReminderUiState(
     val exactAlarmsAllowed: Boolean = false,
     /** 是否已豁免电池优化（国产 ROM 的后台冻结是「晚几秒到几十秒」的常见来源）。 */
     val batteryUnrestricted: Boolean = false,
+    /**
+     * 系统当前登记的下一个闹钟及其归属。
+     *
+     * 临近提醒会被登记成「系统闹钟」，状态栏随之出现小闹钟图标；用户没法从图标本身
+     * 判断它由谁排、什么时候消失，这里直接给出答案。
+     */
+    val systemAlarm: SystemAlarm = SystemAlarm(),
     val rows: List<ReminderRow> = emptyList(),
     /** 排期中的提醒总数（可能大于 [rows] 展示条数）。 */
     val alarmCount: Int = 0,

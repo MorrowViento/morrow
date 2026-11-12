@@ -2,6 +2,27 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 翻页彻底改成瞬时切页；通知点进应用不再停在通知面板；闹钟图标可辨认
+
+- 现象（真机反馈）：
+  1. 双页动画版本翻完仍然「所有日期抖一下」；
+  2. 测试通知能进应用了，但落回的是刚才那个提醒界面；
+  3. 锁屏/状态栏的小闹钟图标触发后不消失，也不确定是不是本应用挂的。
+- 处置：
+  1. 丢掉一切位移动画：滑动只做手势判定，松手直接切页，与点头部箭头走同一条路径。
+     屏上内容从此只有一个来源（单一 CalendarUiState），不存在两个状态源差一帧就抖的可能。
+     浮层里删掉 FrozenPages / 位移 / 归零等待与相关 import。
+  2. 通知 Intent 带 `EXTRA_FROM_NOTIFICATION`；MainActivity 自增计数传给 HomeScreen，
+     收到后收起所有浮层（表单 / 分类 / 菜单 / 日历 / 提醒 / 设置），落回首页；
+     真实提醒仍由 `EXTRA_EVENT_ID` 另开详情。
+  3. `setAlarmClock` 只用于 **12 小时内**的落点（`ALARM_CLOCK_HORIZON_MILLIS`）：
+     远期提醒改用 `setExactAndAllowWhileIdle`，不再为一年后的纪念日现在就挂图标。
+     诊断页新增一行「系统闹钟」：读 `AlarmManager.getNextAlarmClock()`，
+     用 `showIntent.creatorPackage` 判断归属，写明「来自萤 / 来自其他应用 / 当前没有」
+     与下一个触发时刻，图标不再需要靠猜。
+- 测试：196 项全绿（新增 `AlarmClockHorizonTest` 3 项），lint 11 项基线。
+  MANUAL-TEST 更新 F12/F13/F14、G1/G2b，新增 G2c。
+
 ## [2026-11-12] 翻页后的抖动；测试通知点不进应用；提醒改用系统闹钟级别
 
 - 现象（真机反馈）：

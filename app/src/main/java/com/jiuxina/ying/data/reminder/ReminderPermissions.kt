@@ -7,6 +7,29 @@ import android.provider.Settings
 import androidx.core.net.toUri
 
 /**
+ * 状态栏那颗小闹钟图标目前由谁登记。
+ *
+ * 「萤」用 `setAlarmClock` 排临近提醒时会登记成系统闹钟，图标因此出现；
+ * 但同一颗图标也可能来自系统时钟或其他应用，必须能区分，否则用户会把它当成应用的 bug。
+ */
+enum class SystemAlarmOwner {
+    /** 当前没有任何闹钟，状态栏不会有图标。 */
+    NONE,
+
+    /** 萤自己排的。 */
+    THIS_APP,
+
+    /** 其他应用排的（系统时钟等），与萤无关。 */
+    OTHER_APP,
+}
+
+/** 系统「下一个闹钟」的快照；[owner] 为 [SystemAlarmOwner.NONE] 时时刻无意义。 */
+data class SystemAlarm(
+    val owner: SystemAlarmOwner = SystemAlarmOwner.NONE,
+    val triggerAtMillis: Long = 0L,
+)
+
+/**
  * 提醒所需的两项系统能力探测与跳转。
  *
  * 与调度器分开：权限状态要能在 UI 线程按需读取（每次进入诊断页、每次回到前台），
@@ -33,6 +56,27 @@ class ReminderPermissions(context: Context) {
      * 就是这一类的典型表现。所以这一项要和精确闹钟分开显示，不能合并成「权限已开」。
      */
     fun batteryUnrestricted(): Boolean = powerManager.isIgnoringBatteryOptimizations(appContext.packageName)
+
+    /**
+     * 系统当前登记的「下一个闹钟」。
+     *
+     * 状态栏/锁屏那颗小闹钟图标不是应用自己画的，而是系统对 AlarmClock 的统一展示，
+     * 任何应用都能登记（系统时钟、其他倒数日应用）。用户看到图标时的第一反应是
+     * 「这是谁排的、什么时候消失」，所以这里连归属一起读出来：`showIntent` 的
+     * creatorPackage 就是登记方的包名。
+     *
+     * 读不到（ROM 裁掉了接口 / 权限异常）时按「无」处理，不阻塞诊断页。
+     */
+    fun nextSystemAlarm(): SystemAlarm {
+        val info = runCatching { alarmManager.nextAlarmClock }.getOrNull()
+            ?: return SystemAlarm()
+        val owner = if (info.showIntent?.creatorPackage == appContext.packageName) {
+            SystemAlarmOwner.THIS_APP
+        } else {
+            SystemAlarmOwner.OTHER_APP
+        }
+        return SystemAlarm(owner = owner, triggerAtMillis = info.triggerTime)
+    }
 
     fun openNotificationSettings() {
         launch(

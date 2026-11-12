@@ -110,6 +110,14 @@ fun HomeScreen(
     /** 从提醒通知点进来时要直接打开的事件；消费后由调用方清零。 */
     openDetailRequest: String? = null,
     onDetailRequestConsumed: () -> Unit = {},
+    /**
+     * 每次从通知进入应用都自增。
+     *
+     * 通知被点时应用往往还活着（例如刚在提醒页发完测试通知），Activity 只是被带回前台，
+     * 于是屏幕上仍留着刚才那个诊断面板——用户以为「点了通知却没进应用」。
+     * 收到新值时把所有浮层收掉，让人落回首页（要看的详情由 [openDetailRequest] 另开）。
+     */
+    closeOverlaysRequest: Long = 0L,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -133,6 +141,18 @@ fun HomeScreen(
         val id = openDetailRequest ?: return@LaunchedEffect
         detailId = id
         onDetailRequestConsumed()
+    }
+
+    // 从通知进入时收起上一次留下的浮层。不清 detailId：真实提醒要靠 openDetailRequest 打开详情
+    LaunchedEffect(closeOverlaysRequest) {
+        if (closeOverlaysRequest <= 0L) return@LaunchedEffect
+        editingForm = null
+        showCategories = false
+        showMoreMenu = false
+        confirmClearAll = false
+        showCalendar = false
+        showReminders = false
+        showSettings = false
     }
 
     // 日历盖在首页之上，返回键应先关日历而不是退出应用
@@ -210,8 +230,8 @@ fun HomeScreen(
                     ) {
                         CalendarScreen(
                             state = calendar.current,
-                            prevPage = calendar.prev,
-                            nextPage = calendar.next,
+                            canPrev = calendar.prev != null,
+                            canNext = calendar.next != null,
                             actions = calendarActions,
                             onCreate = { date ->
                                 categoryAliases = emptyMap()

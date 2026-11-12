@@ -114,6 +114,7 @@ class ReminderNotifier(context: Context) {
                     appContext,
                     TEST_ID,
                     Intent(appContext, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_FROM_NOTIFICATION, true)
                         .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 ),
@@ -150,6 +151,7 @@ class ReminderNotifier(context: Context) {
                 .setAction(Intent.ACTION_VIEW)
                 .setData("$SCHEME_EVENT/$eventId".toUri())
                 .putExtra(MainActivity.EXTRA_EVENT_ID, eventId)
+                .putExtra(MainActivity.EXTRA_FROM_NOTIFICATION, true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
