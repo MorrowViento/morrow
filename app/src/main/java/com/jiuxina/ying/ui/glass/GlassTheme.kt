@@ -42,13 +42,20 @@ val LocalGlassDark = staticCompositionLocalOf { false }
 /** 用户是否要求减弱动效（无障碍「移除动画」）。页面切换据此跳过淡入淡出。 */
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
+/** 用户是否要求减弱透明（无障碍「降低透明度」）。底色据此压平，玻璃本身不降级。 */
+val LocalReduceTransparency = staticCompositionLocalOf { false }
+
 /**
  * 主题入口。
  *
  * @param darkTheme 最终明暗。跟随系统时由调用方传 `isSystemInDarkTheme()`，
  *   设置里选了浅色/深色时直接传对应值（见 `AppSettings.isDark`）。
- * @param reduceTransparency 减弱透明：交给 Glasmio 把玻璃降级为不透明面板，
- *   比在外面叠一层纯色遮罩更彻底（遮罩挡得住背景，挡不住折射与高光）。
+ * @param reduceTransparency 减弱透明：**不交给 Glasmio**。
+ *   库内建的 `GlassAppearance(reduceTransparency = true)` 会让 `getUsesBackdrop()`
+ *   返回 false，`GlassSurface` 直接放弃背景采样与折射，退化成一块纯黑 / 纯白面板——
+ *   真机上「打开减弱透明后控件变成纯色块、玻璃效果全没了」就是这么来的。
+ *   这里只压平被采样的底色（见 [GlassBackdrop]），玻璃材质完整保留，
+ *   既降低背景干扰、提高文字对比度，又不会把控件变成色块。
  */
 @Composable
 fun GlassTheme(
@@ -60,10 +67,11 @@ fun GlassTheme(
     CompositionLocalProvider(
         LocalGlassDark provides darkTheme,
         LocalReduceMotion provides reduceMotion,
+        LocalReduceTransparency provides reduceTransparency,
     ) {
         GlasmioTheme(
             isDark = darkTheme,
-            appearance = GlassAppearance(reduceTransparency = reduceTransparency),
+            appearance = GlassAppearance(),
         ) {
             content()
         }
@@ -79,12 +87,29 @@ fun GlassTheme(
  */
 @Composable
 fun GlassBackdrop(modifier: Modifier = Modifier) {
-    val colors = if (LocalGlassDark.current) {
+    val dark = LocalGlassDark.current
+    val colors = if (dark) {
         listOf(Color(0xFF151A35), Color(0xFF2A1436), Color(0xFF3F1630))
     } else {
         listOf(Color(0xFF3B6FE0), Color(0xFF9B4BE8), Color(0xFFE84B8A))
     }
-    Box(modifier.fillMaxSize().background(Brush.linearGradient(colors)))
+    Box(modifier.fillMaxSize().background(Brush.linearGradient(colors))) {
+        if (LocalReduceTransparency.current) {
+            // 「减弱透明」的正确落点是**被采样的内容**，不是玻璃材质本身：
+            // 压平高饱和渐变后，玻璃仍会折射/高光/模糊，只是背后不再有花哨色块穿过，
+            // 面板上的文字对比度随之提高。刻意保留一层柔和渐变，避免又退化成纯黑/纯白。
+            val quiet = if (dark) {
+                listOf(Color(0xFF20263F), Color(0xFF2C2743))
+            } else {
+                listOf(Color(0xFFF3F4F9), Color(0xFFE7E9F3))
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(Brush.linearGradient(quiet.map { it.copy(alpha = 0.88f) })),
+            )
+        }
+    }
 }
 
 /** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */

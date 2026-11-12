@@ -125,13 +125,6 @@ fun SettingsScreen(
                             )
                         }
                     }
-                    Divider()
-                    // 厂商桌面不一定给「编辑」，把这条兜底路写明白，否则用户以为改不了
-                    ActionRow(
-                        title = "长按桌面没有「编辑」？",
-                        summary = "用上面这几行进入配置台，效果与长按编辑完全一致",
-                        onClick = null,
-                    )
                 }
             }
 
@@ -164,7 +157,7 @@ fun SettingsScreen(
                         Divider()
                         SwitchRow(
                             title = "减弱透明",
-                            summary = "把玻璃材质降级为不透明面板，内容更清晰、更省电",
+                            summary = "压平玻璃背后的渐变，保留玻璃质感，文字更清晰",
                             checked = state.settings.reduceTransparency,
                             onCheckedChange = actions.setReduceTransparency,
                         )
@@ -452,7 +445,7 @@ private fun ActionRow(
  * 自绘开关。
  *
  * 不用 Material3 的 `Switch`：它带 Material 主题色与固定尺寸，
- * 在玻璃面板上会显得比周围控件"亮一档"，且颜色不受 `reduceTransparency` 影响。
+ * 在玻璃面板上会显得比周围控件"亮一档"，且颜色不受「减弱透明」影响。
  */
 @Composable
 private fun GlassSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
