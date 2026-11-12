@@ -71,9 +71,8 @@ fi
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
     die "本地已存在标签 $TAG：发新版本请先把 versionCode / versionName 改大"
 fi
-if [[ -n "$(git ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null || true)" ]]; then
-    die "远端已存在标签 $TAG：同一版本不能重复发布"
-fi
+# 远端标签**不能**用 git ls-remote 判断：代理一抖它就返回空，守卫会静默放行
+# （首次实现就这么漏过一次）。这里放到拿到令牌后用 API 查，查不动就报错退出。
 
 # ---- 4. 选签名与产物名 ------------------------------------------------------
 HAS_KEYSTORE=false
@@ -98,7 +97,29 @@ if [[ "$DRY_RUN" == true ]]; then
     exit 0
 fi
 
-# ---- 5. 构建 ----------------------------------------------------------------
+# ---- 5. 令牌与 API ----------------------------------------------------------
+TOKEN="${GITHUB_TOKEN:-}"
+if [[ -z "$TOKEN" ]]; then
+    TOKEN="$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed -n 's/^password=//p')"
+fi
+[[ -n "$TOKEN" ]] || die "拿不到 GitHub 令牌：设置 GITHUB_TOKEN，或让 git 凭据里存好 github.com 的凭据"
+
+API="https://api.github.com/repos/$OWNER/$REPO"
+UA="Morrow-Release-Script"
+api() { curl -sS --max-time 60 -H "Authorization: Bearer $TOKEN" \
+        -H "Accept: application/vnd.github+json" -H "User-Agent: $UA" "$@"; }
+
+# ---- 6. 远端标签占用（查不动就退出，别在断网时建出重复标签） ------------------
+TAG_PROBE="$(mktemp)"
+TAG_HTTP="$(api -o "$TAG_PROBE" -w '%{http_code}' "$API/releases/tags/$TAG" || true)"
+case "$TAG_HTTP" in
+    404) : ;;
+    200) die "远端已存在 $TAG：同一版本号不能重复发布，先把 versionCode 改大" ;;
+    *)   head -c 300 "$TAG_PROBE" 2>/dev/null; echo
+         die "无法校验远端标签（HTTP ${TAG_HTTP:-000}）：网络不稳时不要发版" ;;
+esac
+
+# ---- 7. 构建 ----------------------------------------------------------------
 say "构建中（${VARIANT}）…"
 JAVA_HOME="$JAVA_HOME_DIR" "$GRADLE_BIN" ":app:assemble${VARIANT^}" --offline --console=plain \
     | tail -5
@@ -112,19 +133,7 @@ SHA="$(sha256sum "$DIST_DIR/$ASSET" | cut -d' ' -f1)"
 say "已产出 $DIST_DIR/$ASSET（$BYTES B）"
 say "sha256 $SHA"
 
-# ---- 6. 令牌 ----------------------------------------------------------------
-TOKEN="${GITHUB_TOKEN:-}"
-if [[ -z "$TOKEN" ]]; then
-    TOKEN="$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed -n 's/^password=//p')"
-fi
-[[ -n "$TOKEN" ]] || die "拿不到 GitHub 令牌：设置 GITHUB_TOKEN，或让 git 凭据里存好 github.com 的凭据"
-
-API="https://api.github.com/repos/$OWNER/$REPO"
-UA="Morrow-Release-Script"
-api() { curl -sS --max-time 60 -H "Authorization: Bearer $TOKEN" \
-        -H "Accept: application/vnd.github+json" -H "User-Agent: $UA" "$@"; }
-
-# ---- 7. 发布说明 ------------------------------------------------------------
+# ---- 8. 发布说明 ------------------------------------------------------------
 if [[ -n "$NOTES_FILE" ]]; then
     [[ -f "$NOTES_FILE" ]] || die "找不到说明文件：$NOTES_FILE"
 else
@@ -150,7 +159,7 @@ else
     } > "$NOTES_FILE"
 fi
 
-# ---- 8. 建 Release ----------------------------------------------------------
+# ---- 9. 建 Release ----------------------------------------------------------
 PAYLOAD="$(mktemp)"
 python - "$TAG" "$NAME" "$CODE" "$NOTES_FILE" "$PRERELEASE" > "$PAYLOAD" <<'PY'
 import json, sys
@@ -173,7 +182,7 @@ REL_ID="$(printf '%s' "$RESP" | python -c 'import sys,json;print(json.load(sys.s
 [[ -n "$REL_ID" ]] || { printf '%s\n' "$RESP" | head -c 500; die "创建 Release 失败"; }
 say "Release id=$REL_ID"
 
-# ---- 9. 传资产（代理抖动是常态，重试几轮） ----------------------------------
+# ---- 10. 传资产（代理抖动是常态，重试几轮） ----------------------------------
 say "上传资产（$BYTES B）…"
 for attempt in 1 2 3; do
     HTTP="$(curl -sS --retry 2 --retry-delay 5 --max-time 900 \
@@ -189,7 +198,7 @@ done
 [[ "${HTTP:-}" == "201" ]] || { head -c 400 "$DIST_DIR/.upload.json" 2>/dev/null; die "上传失败"; }
 rm -f "$DIST_DIR/.upload.json"
 
-# ---- 10. 回读校验 -----------------------------------------------------------
+# ---- 11. 回读校验 -----------------------------------------------------------
 # 走临时文件而不是 argv：发布说明可能有几 KB，塞进参数会被系统长度限制截断
 LATEST_FILE="$(mktemp)"
 api "$API/releases/latest" > "$LATEST_FILE"
@@ -210,7 +219,7 @@ if digest and digest.split(":")[-1].lower() != sha.lower():
 print(f"✓ /releases/latest = {tag}，资产 {asset} 摘要一致")
 PY
 
-# ---- 11. 回填清单 -----------------------------------------------------------
+# ---- 12. 回填清单 -----------------------------------------------------------
 if [[ "$SKIP_MANIFEST" == true ]]; then
     warn "--skip-manifest：跳过 update/manifest.json"
 else
