@@ -12,10 +12,15 @@ import io.github.neoruaa.glasmio.ui.GlasmioSwitch
 /**
  * 分段控件（Glasmio `GlasmioSegmentedControl`）。
  *
- * 之前日历头部的「月 / 年 / 列表」是三颗各自独立的玻璃按钮、选中态靠换材质：
- * 切换时没有指示器滑动，也没有按下时「指示块被拉过去」的粘连感。
- * 库的分段控件是一条玻璃轨道 + 一块会滑动/拉伸的指示器（`positionAnimation`
- * 走同一条弹簧），并且按 iOS 的规则处理文字压暗与禁用态。
+ * 一条玻璃轨道 + 一块会滑动/拉伸的指示器（`positionAnimation` 走同一条弹簧），
+ * 按 iOS 的规则处理文字压暗与禁用态。**指示器是真正的透镜材质**
+ * （库内 `NativeControlLensStyle.SegmentedIndicator`）：按下时它几乎完全透明，
+ * 边缘把身后的图标折射、挤歪——这就是示例里 Icon Segmented Control 的那一下。
+ *
+ * @param itemContent 非空时接管每一格的绘制（图标版：只画图标不画文字），
+ *   文字标签仍会作为无障碍描述传给读屏。
+ * @param deferSelection 点下去先只做按压反馈、抬手才回调选中（库用于「拖动选择」场景，
+ *   默认 false 即点即选）。
  */
 @Composable
 fun <T> GlassSegmentedControl(
@@ -25,6 +30,8 @@ fun <T> GlassSegmentedControl(
     modifier: Modifier = Modifier,
     height: Dp = 32.dp,
     enabled: Boolean = true,
+    deferSelection: Boolean = false,
+    itemContent: (@Composable BoxScope.(T, Boolean) -> Unit)? = null,
 ) {
     GlasmioSegmentedControl(
         items = items,
@@ -33,6 +40,8 @@ fun <T> GlassSegmentedControl(
         modifier = modifier,
         height = height,
         enabled = enabled,
+        deferSelection = deferSelection,
+        itemContent = itemContent,
     )
 }
 

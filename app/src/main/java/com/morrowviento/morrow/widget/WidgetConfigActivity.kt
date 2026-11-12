@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,11 +50,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.R
 import com.morrowviento.morrow.MorrowApp
+import com.morrowviento.morrow.data.settings.AppSettings
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.component.SectionTitle
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassBackdropHost
+import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTheme
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -103,7 +106,14 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
 
         val app = application as MorrowApp
         setContent {
-            GlassTheme {
+            // 与设置页同一套外观：用户选了「厚重」或浅色主题，这个页面也要跟着变
+            val prefs by app.settingsRepository.appSettings.collectAsState(initial = AppSettings())
+            GlassTheme(
+                darkTheme = prefs.isDark(isSystemInDarkTheme()),
+                reduceTransparency = prefs.usesOpaqueGlass,
+                reduceMotion = prefs.reduceMotion,
+                material = prefs.glassMaterial,
+            ) {
                 GlassBackdropHost(
                     modifier = Modifier.fillMaxSize(),
                     sampledContent = { GlassBackdrop() },
@@ -285,13 +295,15 @@ private fun ConfigContent(
 
                 item(key = "preset-title") { SectionTitle("样式预设") }
                 item(key = "preset") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WidgetPreset.entries.forEach { preset ->
-                            ChoiceChip(preset.label, style.preset == preset) {
-                                onStyleChange(style.withPreset(preset))
-                            }
-                        }
-                    }
+                    // 单选组一律用分段控件（和设置页、日历视图同一套玻璃指示器）；
+                    // 「显示元素」那种多选仍用 chip，语义不同不能混
+                    GlassSegmentedControl(
+                        items = WidgetPreset.entries.map { it to it.label },
+                        selected = style.preset,
+                        onSelected = { onStyleChange(style.withPreset(it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 34.dp,
+                    )
                 }
 
                 item(key = "preset-hint") {
@@ -308,24 +320,24 @@ private fun ConfigContent(
 
                 item(key = "font-title") { SectionTitle("字号") }
                 item(key = "font") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WidgetFontScale.entries.forEach { scale ->
-                            ChoiceChip(scale.label, style.fontScale == scale) {
-                                onStyleChange(style.copy(fontScale = scale))
-                            }
-                        }
-                    }
+                    GlassSegmentedControl(
+                        items = WidgetFontScale.entries.map { it to it.label },
+                        selected = style.fontScale,
+                        onSelected = { onStyleChange(style.copy(fontScale = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 34.dp,
+                    )
                 }
 
                 item(key = "palette-title") { SectionTitle("配色") }
                 item(key = "palette") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WidgetPalette.entries.forEach { palette ->
-                            ChoiceChip(palette.label, style.palette == palette) {
-                                onStyleChange(style.copy(palette = palette))
-                            }
-                        }
-                    }
+                    GlassSegmentedControl(
+                        items = WidgetPalette.entries.map { it to it.label },
+                        selected = style.palette,
+                        onSelected = { onStyleChange(style.copy(palette = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 34.dp,
+                    )
                 }
 
                 item(key = "elements-title") {

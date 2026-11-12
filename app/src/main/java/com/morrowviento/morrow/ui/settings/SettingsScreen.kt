@@ -4,11 +4,10 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,53 +18,58 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.backup.ImportMode
+import com.morrowviento.morrow.data.settings.GlassMaterialLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
-import com.morrowviento.morrow.ui.component.ChoiceChip
-import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassAlert
 import com.morrowviento.morrow.ui.glass.GlassAlertButton
 import com.morrowviento.morrow.ui.glass.GlassAlertRole
+import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
+import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.GlassSwitch
-import com.morrowviento.morrow.ui.glass.GlassPanel
-import com.morrowviento.morrow.ui.glass.LocalReduceMotion
+import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
+import com.morrowviento.morrow.ui.glass.glassTextTertiary
 import com.morrowviento.morrow.ui.update.UpdateActions
 import com.morrowviento.morrow.ui.update.UpdateSheet
 import com.morrowviento.morrow.widget.WidgetEntries
-import io.github.neoruaa.glasmio.ui.GlasmioGroupedList
-import io.github.neoruaa.glasmio.ui.GlasmioListRow
-import io.github.neoruaa.glasmio.ui.GlasmioSectionTitle
 import kotlinx.coroutines.delay
 
 /**
@@ -74,8 +78,13 @@ import kotlinx.coroutines.delay
  * 与日历页同为**整页覆盖**：必须自带 [GlassBackdrop] 当不透明底（见 HANDOFF「已知坑」28），
  * 并且自己处理返回键——否则按返回会直接退出 App 而不是回到列表。
  *
- * 结构上只有一个 LazyColumn：分组卡片各占一个 item。不用「外层 verticalScroll + 内层 LazyColumn」，
- * 那种组合在纵向约束无限时会直接抛异常（点 + 号闪退的根因）。
+ * 分组卡片用 [GlassPanel]（真正的 `GlassSurface`），不是 `GlasmioGroupedList`：
+ * 后者画的是一层 55% 不透明的**纯色**（`SheetGroupedListBackgroundAlpha`），
+ * 没有采样、没有折射，在纯色底上看起来就是一块死板的深灰方块——
+ * 「设置界面玻璃应用不完全」说的就是这个。换成真玻璃后材质档位也能立刻生效。
+ *
+ * 结构上只有一个 LazyColumn：分组卡片各占一个 item。不用「外层 verticalScroll +
+ * 内层 LazyColumn」，那种组合在纵向约束无限时会直接抛异常（点 + 号闪退的根因）。
  */
 @Composable
 fun SettingsScreen(
@@ -152,142 +161,150 @@ fun SettingsScreen(
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
-            LazyColumn(
-                // weight 而不是 fillMaxSize：后者会把视口撑成整个 Column 的高度，
-                // 头部占掉的那一截就被裁到屏幕外，最后一张卡片滚不到底
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                item(key = "appearance") {
-                    SettingsGroup("外观") {
-                        Column(Modifier.padding(vertical = 8.dp)) {
-                            SettingLabel("主题")
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ThemeMode.entries.forEach { mode ->
-                                    ChoiceChip(
-                                        label = mode.label,
-                                        selected = state.settings.themeMode == mode,
-                                        onClick = { actions.setTheme(mode) },
-                                    )
-                                }
+                LazyColumn(
+                    // weight 而不是 fillMaxSize：后者会把视口撑成整个 Column 的高度，
+                    // 头部占掉的那一截就被裁到屏幕外，最后一张卡片滚不到底
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 40.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    item(key = "appearance") {
+                        SettingsGroup("外观") {
+                            SettingBlock("主题") {
+                                // 图标版分段控件（示例里的 Icon Segmented Control）：选中块的
+                                // 指示器是透镜材质，按下去几乎全透明、边缘把旁边图标折射变形
+                                GlassSegmentedControl(
+                                    items = ThemeMode.entries.map { it to it.label },
+                                    selected = state.settings.themeMode,
+                                    onSelected = actions.setTheme,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    height = 38.dp,
+                                    // 未选中的那两格压暗，和 iOS 分段控件一致
+                                    itemContent = { mode, selected ->
+                                        ThemeGlyph(mode, alpha = if (selected) 1f else 0.55f)
+                                    },
+                                )
                             }
-                            Spacer(Modifier.height(6.dp))
-                            SettingHint("「跟随系统」会随手机的深色模式自动切换")
+                            Divider()
+                            SettingBlock(
+                                label = "玻璃材质",
+                                hint = state.settings.glassMaterial.hint,
+                            ) {
+                                // 四档 = Glasmio 的 Clear / RegularSmall / Medium / Large，
+                                // 也就是示例 Materials 页那四张卡
+                                GlassSegmentedControl(
+                                    items = GlassMaterialLevel.entries.map { it to it.label },
+                                    selected = state.settings.glassMaterial,
+                                    onSelected = actions.setGlassMaterial,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    height = 34.dp,
+                                )
+                            }
+                            Divider()
+                            SwitchRow(
+                                title = "减弱动效",
+                                summary = "关闭页面切换的淡入淡出，只保留即时切换",
+                                checked = state.settings.reduceMotion,
+                                onCheckedChange = actions.setReduceMotion,
+                            )
                         }
-                        Divider()
-                        SwitchRow(
-                            title = "减弱透明",
-                            summary = "让玻璃面板更实、文字更清晰，背景配色保持不变",
-                            checked = state.settings.reduceTransparency,
-                            onCheckedChange = actions.setReduceTransparency,
-                        )
-                        SwitchRow(
-                            title = "减弱动效",
-                            summary = "关闭页面切换的淡入淡出，只保留即时切换",
-                            checked = state.settings.reduceMotion,
-                            onCheckedChange = actions.setReduceMotion,
+                    }
+
+                    item(key = "data") {
+                        SettingsGroup("数据") {
+                            ActionRow(
+                                title = "导出备份",
+                                summary = "事件、分类、外观设置与小部件样式，存成一个 JSON 文件",
+                                enabled = !state.busy,
+                                onClick = { exportLauncher.launch(BackupFiles.suggestedName()) },
+                            )
+                            Divider()
+                            ActionRow(
+                                title = "导入备份",
+                                summary = "可以选择只合并事件，或整套覆盖本机数据",
+                                enabled = !state.busy,
+                                onClick = {
+                                    // 只认 json：先收窄文件选择器，减少用户误选相册里的图片
+                                    importLauncher.launch(arrayOf(BackupFiles.MIME_TYPE, "text/plain", "*/*"))
+                                },
+                            )
+                            Divider()
+                            ActionRow(
+                                title = "清除全部数据",
+                                summary = "事件、分类、小部件样式与设置全部恢复初始状态",
+                                danger = true,
+                                enabled = !state.busy,
+                                onClick = actions.requestClearAll,
+                            )
+                        }
+                    }
+
+                    item(key = "reminder") {
+                        SettingsGroup("提醒") {
+                            ActionRow(
+                                title = "通知权限",
+                                summary = if (state.notificationAllowed) "已开启" else "已关闭，到点不会提醒",
+                                value = if (state.notificationAllowed) null else "去开启",
+                                onClick = actions.openNotificationSettings,
+                            )
+                            Divider()
+                            ActionRow(
+                                title = "精确闹钟",
+                                summary = if (state.exactAlarmAllowed) {
+                                    "已允许，提醒会在设定时刻准点触发"
+                                } else {
+                                    "未允许，系统可能推迟几分钟才提醒"
+                                },
+                                value = if (state.exactAlarmAllowed) null else "去允许",
+                                onClick = actions.openExactAlarmSettings,
+                            )
+                        }
+                    }
+
+                    item(key = "widgets") { widgetsSection() }
+
+                    item(key = "about") {
+                        SettingsGroup("关于") {
+                            ActionRow(
+                                title = "朝夕",
+                                summary = "用 Kotlin + Compose + Glasmio 重写",
+                                value = state.appVersion.ifBlank { "—" },
+                                onClick = null,
+                            )
+                            Divider()
+                            ActionRow(
+                                title = "检查更新",
+                                summary = "从 GitHub Releases 与镜像源比对版本，可在应用内下载安装",
+                                value = if (state.update.busy) "进行中" else "检查",
+                                enabled = !state.update.busy,
+                                onClick = actions.checkUpdate,
+                            )
+                            Divider()
+                            ActionRow(title = "开源许可", onClick = actions.showLicenses)
+                            Divider()
+                            ActionRow(
+                                title = "项目主页",
+                                summary = "github.com/MorrowViento/morrow",
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, BackupFiles.projectUri())
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+
+                    item(key = "footer") {
+                        Text(
+                            text = "备份文件是纯文本 JSON，可以用任何编辑器打开查看",
+                            modifier = Modifier.padding(start = 6.dp, end = 6.dp),
+                            style = TextStyle(fontSize = 11.sp, color = glassTextTertiary()),
                         )
                     }
                 }
-
-                item(key = "data") {
-                    SettingsGroup("数据") {
-                        ActionRow(
-                            title = "导出备份",
-                            summary = "事件、分类、外观设置与小部件样式，存成一个 JSON 文件",
-                            enabled = !state.busy,
-                            onClick = { exportLauncher.launch(BackupFiles.suggestedName()) },
-                        )
-                        Divider()
-                        ActionRow(
-                            title = "导入备份",
-                            summary = "可以选择只合并事件，或整套覆盖本机数据",
-                            enabled = !state.busy,
-                            onClick = {
-                                // 只认 json：先收窄文件选择器，减少用户误选相册里的图片
-                                importLauncher.launch(arrayOf(BackupFiles.MIME_TYPE, "text/plain", "*/*"))
-                            },
-                        )
-                        Divider()
-                        ActionRow(
-                            title = "清除全部数据",
-                            summary = "事件、分类、小部件样式与设置全部恢复初始状态",
-                            danger = true,
-                            enabled = !state.busy,
-                            onClick = actions.requestClearAll,
-                        )
-                    }
-                }
-
-                item(key = "reminder") {
-                    SettingsGroup("提醒") {
-                        ActionRow(
-                            title = "通知权限",
-                            summary = if (state.notificationAllowed) "已开启" else "已关闭，到点不会提醒",
-                            value = if (state.notificationAllowed) null else "去开启",
-                            onClick = actions.openNotificationSettings,
-                        )
-                        Divider()
-                        ActionRow(
-                            title = "精确闹钟",
-                            summary = if (state.exactAlarmAllowed) {
-                                "已允许，提醒会在设定时刻准点触发"
-                            } else {
-                                "未允许，系统可能推迟几分钟才提醒"
-                            },
-                            value = if (state.exactAlarmAllowed) null else "去允许",
-                            onClick = actions.openExactAlarmSettings,
-                        )
-                    }
-                }
-
-                item(key = "widgets") { widgetsSection() }
-
-                item(key = "about") {
-                    SettingsGroup("关于") {
-                        ActionRow(
-                            title = "朝夕",
-                            summary = "用 Kotlin + Compose + Glasmio 重写",
-                            value = state.appVersion.ifBlank { "—" },
-                            onClick = null,
-                        )
-                        Divider()
-                        ActionRow(
-                            title = "检查更新",
-                            summary = "从 GitHub Releases 与镜像源比对版本，可在应用内下载安装",
-                            value = if (state.update.busy) "进行中" else "检查",
-                            enabled = !state.update.busy,
-                            onClick = actions.checkUpdate,
-                        )
-                        Divider()
-                        ActionRow(title = "开源许可", onClick = actions.showLicenses)
-                        Divider()
-                        ActionRow(
-                            title = "项目主页",
-                            summary = "github.com/MorrowViento/morrow",
-                            onClick = {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, BackupFiles.projectUri())
-                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                    )
-                                }
-                            },
-                        )
-                    }
-                }
-
-                item(key = "footer") {
-                    Text(
-                        text = "备份文件是纯文本 JSON，可以用任何编辑器打开查看",
-                        modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 2.dp),
-                        style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
-                    )
-                }
-            }
             }
         }
 
@@ -338,19 +355,14 @@ private fun SettingsHeader(onDismiss: () -> Unit) {
             .padding(start = 12.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassCirclePanel(modifier = Modifier.size(32.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "‹",
-                    style = TextStyle(fontSize = 20.sp, color = glassTextPrimary()),
-                )
-            }
+        GlassCirclePanel(
+            modifier = Modifier.size(32.dp),
+            onClick = onDismiss,
+        ) {
+            Text(
+                text = "‹",
+                style = TextStyle(fontSize = 20.sp, color = glassTextPrimary()),
+            )
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -362,14 +374,27 @@ private fun SettingsHeader(onDismiss: () -> Unit) {
 
 // ---------------------------------------------------------------- 分组与行
 
+/**
+ * 一组设置：小节标题 + 一张玻璃卡。
+ *
+ * 标题不复用 `GlasmioSectionTitle`：它的内边距按 iOS 整页算（左右各 16dp），
+ * 而我们已经在 LazyColumn 里留了 16dp，叠加后标题会比卡片缩进一大截。
+ */
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        // Glasmio 的 iOS 分组列表：分组标题 + 一条连续圆角材质（行与行共享同一块玻璃，
-        // 分隔线由 `glasmioGroupedListSeparator` 画在行内，不再是我们自己画的细线）
-        GlasmioSectionTitle(title)
-        GlasmioGroupedList {
-            content()
+        Text(
+            text = title,
+            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
+        )
+        GlassPanel(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.TopStart,
+        ) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                content()
+            }
         }
     }
 }
@@ -379,29 +404,46 @@ private fun Divider() {
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(start = 2.dp)
+            .padding(start = 16.dp)
             .height(0.6.dp)
-            .background(glassTextPrimary().copy(alpha = 0.08f)),
+            .background(glassColors().separator),
     )
 }
 
+/**
+ * 标题 + 控件的一整块（主题 / 玻璃材质这种「下面还得塞个分段控件」的项）。
+ *
+ * 之前这类项是「一行 title + 右边一排 chip」，chip 一多就挤成两行、说明文字还会被
+ * 省略号截断；改成上下排布后文字能整行铺开，分段控件也能拿到整条宽度。
+ */
 @Composable
-private fun SettingLabel(text: String) {
-    Text(
-        text = text,
-        style = TextStyle(fontSize = 14.sp, color = glassTextPrimary()),
-    )
+private fun SettingBlock(
+    label: String,
+    hint: String? = null,
+    control: @Composable () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = label,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = glassTextPrimary()),
+        )
+        Spacer(Modifier.height(10.dp))
+        control()
+        hint?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = it,
+                style = TextStyle(fontSize = 11.sp, lineHeight = 15.sp, color = glassTextSecondary()),
+            )
+        }
+    }
 }
 
-@Composable
-private fun SettingHint(text: String) {
-    Text(
-        text = text,
-        style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
-    )
-}
-
-/** 开关行。 */
+/** 开关行。说明文字限制两行，超出才省略（以前是一行就截断）。 */
 @Composable
 private fun SwitchRow(
     title: String,
@@ -409,15 +451,13 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    GlasmioListRow(
+    SettingRow(
         title = title,
-        subtitle = summary,
-        showTopSeparator = false,
+        summary = summary,
         onClick = { onCheckedChange(!checked) },
-        trailing = {
-            GlassSwitch(checked = checked, onCheckedChange = onCheckedChange)
-        },
-    )
+    ) {
+        GlassSwitch(checked = checked, onCheckedChange = onCheckedChange)
+    }
 }
 
 /** 动作行。[onClick] 为 null 时只做展示（版本号）。 */
@@ -430,17 +470,149 @@ private fun ActionRow(
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
 ) {
-    GlasmioListRow(
+    SettingRow(
         title = title,
-        subtitle = summary,
+        summary = summary,
         detail = value,
-        // 分隔线由我们的 Divider() 画（行的 showTopSeparator 会把线画在行内顶部，
-        // 与分组首行叠在一起会多一条）
-        showTopSeparator = false,
+        danger = danger,
         enabled = enabled,
-        titleColor = if (danger) Color(0xFFFF7A7A) else Color.Unspecified,
+        showChevron = onClick != null,
         onClick = if (enabled) onClick else null,
     )
+}
+
+/**
+ * 设置行的底座：左侧「标题 + 说明（可换行）」占满剩余宽度，右侧尾随内容。
+ *
+ * 不复用 `GlasmioListRow`：它的 subtitle 是单行 + 省略号，设置页里几条长说明
+ * 全被截成「让玻璃面板更实、文字更清晰，…」。这里让说明吃满两行。
+ * 点击也不带 Material 的矩形 ripple（玻璃卡片上会出现一块方块），只留按下态。
+ */
+@Composable
+private fun SettingRow(
+    title: String,
+    summary: String? = null,
+    detail: String? = null,
+    danger: Boolean = false,
+    enabled: Boolean = true,
+    showChevron: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick == null) {
+                    Modifier
+                } else {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                },
+            )
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    color = when {
+                        !enabled -> primary.copy(alpha = 0.4f)
+                        danger -> glassColors().destructive
+                        else -> primary
+                    },
+                ),
+            )
+            summary?.let {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = it,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        color = secondary.copy(alpha = if (enabled) 1f else 0.5f),
+                    ),
+                )
+            }
+        }
+        detail?.let {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = it,
+                style = TextStyle(fontSize = 13.sp, color = secondary),
+            )
+        }
+        trailing?.let {
+            Spacer(Modifier.width(10.dp))
+            it()
+        }
+        if (showChevron) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "›",
+                style = TextStyle(fontSize = 18.sp, color = secondary.copy(alpha = 0.7f)),
+            )
+        }
+    }
+}
+
+/**
+ * 主题的三个图标（自动 / 浅色 / 深色）。
+ *
+ * 用 Canvas 手画而不是引 SF Symbols：库里的 `SfSymbol` 只有 House / Clock / Gearshape
+ * 这一套，没有太阳与月亮，硬凑会认不出来。
+ */
+@Composable
+private fun ThemeGlyph(mode: ThemeMode, size: Dp = 18.dp, alpha: Float = 1f) {
+    val color = glassTextPrimary().copy(alpha = alpha)
+    Canvas(Modifier.size(size)) {
+        val r = this.size.minDimension / 2f
+        val c = Offset(this.size.width / 2f, this.size.height / 2f)
+        val hair = 1.5.dp.toPx()
+        when (mode) {
+            ThemeMode.SYSTEM -> {
+                drawCircle(color, radius = r * 0.80f, style = Stroke(width = hair))
+                val half = Path().apply {
+                    moveTo(c.x, c.y - r * 0.80f)
+                    arcTo(Rect(c, r * 0.80f), -90f, 180f, true)
+                    close()
+                }
+                drawPath(half, color)
+            }
+
+            ThemeMode.LIGHT -> {
+                drawCircle(color, radius = r * 0.36f)
+                repeat(8) { index ->
+                    rotate(index * 45f, pivot = c) {
+                        drawLine(
+                            color = color,
+                            start = Offset(c.x, c.y - r * 0.62f),
+                            end = Offset(c.x, c.y - r * 0.92f),
+                            strokeWidth = hair,
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
+            }
+
+            ThemeMode.DARK -> {
+                val disc = Path().apply { addOval(Rect(c, r * 0.86f)) }
+                val bite = Path().apply {
+                    addOval(Rect(Offset(c.x + r * 0.44f, c.y - r * 0.34f), r * 0.76f))
+                }
+                val crescent = Path().apply { op(disc, bite, PathOperation.Difference) }
+                drawPath(crescent, color)
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------- 弹层
@@ -454,7 +626,10 @@ private fun ImportConfirmSheet(
     // 短内容用 fitContent：弹层高度跟着内容走，不会留一大片空白
     GlassSheet(title = "导入备份", onDismiss = onDismiss, fitContent = true) { dismiss ->
         Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
-            SettingHint(pending.summary)
+            Text(
+                text = pending.summary,
+                style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp, color = glassTextSecondary()),
+            )
             Spacer(Modifier.height(16.dp))
             MenuAction(
                 label = "合并（保留本机事件）",
@@ -537,12 +712,15 @@ private fun MenuAction(
             text = label,
             style = TextStyle(
                 fontSize = 14.sp,
-                color = if (danger) Color(0xFFFF7A7A) else glassTextPrimary(),
+                color = if (danger) glassColors().destructive else glassTextPrimary(),
             ),
         )
         hint?.let {
             Spacer(Modifier.height(2.dp))
-            SettingHint(it)
+            Text(
+                text = it,
+                style = TextStyle(fontSize = 11.sp, lineHeight = 15.sp, color = glassTextSecondary()),
+            )
         }
     }
 }

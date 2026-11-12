@@ -3,6 +3,7 @@ package com.morrowviento.morrow.ui.component
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,7 +87,7 @@ fun GlassTextField(
     }
 }
 
-/** 可选中的胶囊标签。 */
+/** 可选中的胶囊标签（多选语义，例如「全天 / 每年重复 / 显示元素」）。 */
 @Composable
 fun ChoiceChip(
     label: String,
@@ -95,11 +97,13 @@ fun ChoiceChip(
 ) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
+    // 不用默认 ripple：它只按布局边界裁，会在圆角胶囊外面留一圈方块（与底栏那次同一个坑）
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(primary.copy(alpha = if (selected) 0.18f else 0.06f))
-            .clickable(onClick = onClick)
+            .background(primary.copy(alpha = if (selected) 0.16f else 0.06f))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 8.dp),
     ) {
         Text(

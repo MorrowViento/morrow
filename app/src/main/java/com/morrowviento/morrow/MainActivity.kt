@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
                 SettingsActions(
                     refresh = settingsViewModel::refreshPermissions,
                     setTheme = settingsViewModel::setTheme,
-                    setReduceTransparency = settingsViewModel::setReduceTransparency,
+                    setGlassMaterial = settingsViewModel::setGlassMaterial,
                     setReduceMotion = settingsViewModel::setReduceMotion,
                     exportTo = settingsViewModel::exportTo,
                     loadImport = settingsViewModel::loadImport,

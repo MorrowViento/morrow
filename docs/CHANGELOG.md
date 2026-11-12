@@ -2,6 +2,30 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 4.0.0-alpha7 (46)：配色回到 Glasmio 默认、材质四档、控件统一成分段控件
+
+- **底色换成库的默认色板**：删掉蓝紫粉三段渐变，页面底色改为
+  `GlassColors.groupedBackground` + 顶部一团 `elevatedBackground` 的径向光
+  （深色 #000 / #1C1C1E，浅色 #F2F2F7 / #FFF）。文字色改读
+  `GlassColors.content / secondaryContent / tertiaryContent`，底栏强调色改用
+  `GlassColors.accent`（iOS 蓝，原来是自定义的朝霞橙）。
+- **玻璃材质四档**：`GlassMaterialLevel`（通透 / 轻盈 / 标准 / 厚重）= 库的
+  `NavigationGlassMaterial.Clear / RegularSmall / RegularMedium / RegularLarge`，
+  即示例 Materials 页那四张卡。`LocalGlassMaterial` 一处注入，所有 `GlassPanel` /
+  `GlassCirclePanel` 透传 `material`，改一档整屏同时变厚变薄。设置项取代原来的
+  布尔「减弱透明」开关（厚重档 = 原来的减弱透明，旧数据与旧备份都会自动映射过来）。
+- **设置页第二次改造**：分组卡片从 `GlasmioGroupedList` 换成真正的 `GlassSurface` ——
+  前者画的是 55% 不透明的**纯色**（`SheetGroupedListBackgroundAlpha`），没有采样与折射，
+  纯色底上就是一块死板方块，这就是「玻璃应用不完全」。行改成自绘：
+  subtitle 允许两行（原来单行 + 省略号，几条长说明全被截成「…」），点击不带 Material
+  的矩形 ripple。
+- **主题改成图标分段控件**（Icon Segmented Control）：三个 Canvas 手画字形
+  （自动 / 太阳 / 弯月）+ 未选压暗；指示器是库的 `SegmentedIndicator` 透镜，
+  按下时几乎全透明、边缘把相邻图标折射变形。
+- **单选组统一成分段控件**：小部件配置页的「样式预设 / 字号 / 配色」由三排 chip
+  改成 `GlassSegmentedControl`；`ChoiceChip` 只留给多选语义（全天、每年重复、显示元素），
+  并去掉 ripple（它只按布局边界裁，会在圆角外留方块）。
+
 ## [2026-11-12] 4.0.0-alpha6 (45)：界面效果与动效整体移植 Glasmio
 
 > 分支策略：`archive/4.0.0-alpha2` 保留 alpha2 (41) 的完整快照（含 Release 对应提交），

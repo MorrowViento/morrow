@@ -37,6 +37,24 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     val reduceTransparency: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) ?: false }
 
+    /**
+     * 玻璃材质档位。
+     *
+     * 旧版本只有布尔「减弱透明」，没有这个键：键缺失时按布尔值反推
+     * （true → 厚重，false → 标准），用户升级后看到的是自己原来的观感，
+     * 而不是被重置成标准档。
+     */
+    val glassMaterial: Flow<GlassMaterialLevel> = store.data.map { prefs ->
+        val raw = prefs.stringOrNull(LegacySettingsKeys.GLASS_MATERIAL)
+        if (raw != null) {
+            GlassMaterialLevel.fromPref(raw)
+        } else if (prefs.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) == true) {
+            GlassMaterialLevel.HEAVY
+        } else {
+            GlassMaterialLevel.STANDARD
+        }
+    }
+
     val reduceMotion: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false }
 
     val onboardingCompleted: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.ONBOARDING_COMPLETED) ?: false }
@@ -50,13 +68,15 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val appSettings: Flow<AppSettings> = combine(
         themeMode,
         sortMode,
-        reduceTransparency,
+        glassMaterial,
         reduceMotion,
-    ) { theme, sort, transparency, motion ->
+    ) { theme, sort, material, motion ->
         AppSettings(
             themeMode = ThemeMode.fromPref(theme),
             sortMode = SortMode.fromPref(sort),
-            reduceTransparency = transparency,
+            glassMaterial = material,
+            // 与档位保持同步：厚重档同时打开无障碍的「降低透明度」语义
+            reduceTransparency = material == GlassMaterialLevel.HEAVY,
             reduceMotion = motion,
         )
     }
@@ -64,8 +84,17 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setThemeMode(mode: ThemeMode) =
         putString(LegacySettingsKeys.THEME_MODE, mode.prefValue)
 
+    /** 写材质档位：同时更新旧布尔键，保证降级安装旧版本时观感一致。 */
+    suspend fun setGlassMaterial(level: GlassMaterialLevel) {
+        store.edit { prefs ->
+            prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = level.prefValue
+            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] =
+                level == GlassMaterialLevel.HEAVY
+        }
+    }
+
     suspend fun setReduceTransparency(enabled: Boolean) =
-        putBoolean(LegacySettingsKeys.REDUCE_TRANSPARENCY, enabled)
+        setGlassMaterial(if (enabled) GlassMaterialLevel.HEAVY else GlassMaterialLevel.STANDARD)
 
     suspend fun setReduceMotion(enabled: Boolean) =
         putBoolean(LegacySettingsKeys.REDUCE_MOTION, enabled)
@@ -78,10 +107,17 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
      */
     suspend fun snapshotSettings(): AppSettings {
         val prefs = store.data.first()
+        val material = prefs.stringOrNull(LegacySettingsKeys.GLASS_MATERIAL)?.let(GlassMaterialLevel::fromPref)
+            ?: if (prefs.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) == true) {
+                GlassMaterialLevel.HEAVY
+            } else {
+                GlassMaterialLevel.STANDARD
+            }
         return AppSettings(
             themeMode = ThemeMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.THEME_MODE)),
             sortMode = SortMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE)),
-            reduceTransparency = prefs.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) ?: false,
+            glassMaterial = material,
+            reduceTransparency = material == GlassMaterialLevel.HEAVY,
             reduceMotion = prefs.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
         )
     }
@@ -91,7 +127,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { prefs ->
             prefs[stringPreferencesKey(LegacySettingsKeys.THEME_MODE)] = value.themeMode.prefValue
             prefs[stringPreferencesKey(LegacySettingsKeys.EVENT_SORT_MODE)] = value.sortMode.prefValue
-            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = value.reduceTransparency
+            prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = value.glassMaterial.prefValue
+            prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] =
+                value.glassMaterial == GlassMaterialLevel.HEAVY
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] = value.reduceMotion
         }
     }

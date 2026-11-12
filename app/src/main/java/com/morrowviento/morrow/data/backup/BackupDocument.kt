@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.morrowviento.morrow.data.settings.AppSettings
+import com.morrowviento.morrow.data.settings.GlassMaterialLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
@@ -63,6 +64,11 @@ data class BackupSettings(
     val sortMode: String,
     val reduceTransparency: Boolean,
     val reduceMotion: Boolean,
+    /**
+     * 玻璃材质档位。**留空表示是旧备份**（那时只有布尔 reduceTransparency），
+     * 导入时按布尔反推，见 [BackupMapper.toSettings]。
+     */
+    val glassMaterial: String = "",
 )
 
 data class BackupWidget(
@@ -156,6 +162,7 @@ object BackupCodec {
     private fun encodeSettings(settings: BackupSettings): JsonObject = JsonObject().apply {
         addProperty("themeMode", settings.themeMode)
         addProperty("sortMode", settings.sortMode)
+        addProperty("glassMaterial", settings.glassMaterial)
         addProperty("reduceTransparency", settings.reduceTransparency)
         addProperty("reduceMotion", settings.reduceMotion)
     }
@@ -207,6 +214,7 @@ object BackupCodec {
                 sortMode = SortMode.DISTANCE.prefValue,
                 reduceTransparency = false,
                 reduceMotion = false,
+                glassMaterial = GlassMaterialLevel.STANDARD.prefValue,
             )
 
         return BackupParse.Ok(
@@ -272,6 +280,8 @@ object BackupCodec {
     private fun decodeSettings(obj: JsonObject): BackupSettings = BackupSettings(
         themeMode = obj.stringOrNull("themeMode") ?: ThemeMode.SYSTEM.prefValue,
         sortMode = obj.stringOrNull("sortMode") ?: SortMode.DISTANCE.prefValue,
+        // 旧备份没有这个键：留空，交给 toSettings 按布尔反推
+        glassMaterial = obj.stringOrNull("glassMaterial").orEmpty(),
         reduceTransparency = obj.boolOrNull("reduceTransparency") ?: false,
         reduceMotion = obj.boolOrNull("reduceMotion") ?: false,
     )
@@ -389,17 +399,27 @@ object BackupMapper {
         )
     }
 
-    fun toSettings(backup: BackupSettings): AppSettings = AppSettings(
-        themeMode = ThemeMode.fromPref(backup.themeMode),
-        sortMode = SortMode.fromPref(backup.sortMode),
-        reduceTransparency = backup.reduceTransparency,
-        reduceMotion = backup.reduceMotion,
-    )
+    fun toSettings(backup: BackupSettings): AppSettings {
+        val material = if (backup.glassMaterial.isBlank()) {
+            // 旧备份：只有布尔，true 就是原来的「减弱透明」= 厚重档
+            if (backup.reduceTransparency) GlassMaterialLevel.HEAVY else GlassMaterialLevel.STANDARD
+        } else {
+            GlassMaterialLevel.fromPref(backup.glassMaterial)
+        }
+        return AppSettings(
+            themeMode = ThemeMode.fromPref(backup.themeMode),
+            sortMode = SortMode.fromPref(backup.sortMode),
+            glassMaterial = material,
+            reduceTransparency = material == GlassMaterialLevel.HEAVY,
+            reduceMotion = backup.reduceMotion,
+        )
+    }
 
     fun ofSettings(settings: AppSettings): BackupSettings = BackupSettings(
         themeMode = settings.themeMode.prefValue,
         sortMode = settings.sortMode.prefValue,
-        reduceTransparency = settings.reduceTransparency,
+        glassMaterial = settings.glassMaterial.prefValue,
+        reduceTransparency = settings.glassMaterial == GlassMaterialLevel.HEAVY,
         reduceMotion = settings.reduceMotion,
     )
 

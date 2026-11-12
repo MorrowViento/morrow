@@ -12,6 +12,8 @@ object LegacySettingsKeys {
     const val THEME_MODE = "theme_mode"
     const val EVENT_SORT_MODE = "event_sort_mode"
     const val REDUCE_TRANSPARENCY = "reduce_transparency"
+    /** 玻璃材质档位（`clear` / `light` / `standard` / `heavy`）。 */
+    const val GLASS_MATERIAL = "glass_material"
     const val REDUCE_MOTION = "reduce_motion"
     const val AUTO_CHECK_UPDATE = "auto_check_update"
     const val AVATAR_PATH = "avatar_path"

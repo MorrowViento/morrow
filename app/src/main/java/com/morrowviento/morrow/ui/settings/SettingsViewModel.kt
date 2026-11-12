@@ -116,6 +116,9 @@ class SettingsViewModel(
 
     fun setTheme(mode: ThemeMode) = persist { settings.setThemeMode(mode) }
 
+    fun setGlassMaterial(level: com.morrowviento.morrow.data.settings.GlassMaterialLevel) =
+        persist { settings.setGlassMaterial(level) }
+
     fun setReduceTransparency(enabled: Boolean) = persist { settings.setReduceTransparency(enabled) }
 
     fun setReduceMotion(enabled: Boolean) = persist { settings.setReduceMotion(enabled) }

@@ -4,6 +4,7 @@ import com.morrowviento.morrow.data.backup.BackupDocument
 import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.backup.ImportReport
 import com.morrowviento.morrow.data.settings.AppSettings
+import com.morrowviento.morrow.data.settings.GlassMaterialLevel
 import com.morrowviento.morrow.ui.update.UpdateUiState
 import com.morrowviento.morrow.widget.PlacedWidget
 
@@ -53,7 +54,8 @@ data class SettingsActions(
     /** 页面重新可见时刷新系统权限状态（通知 / 精确闹钟只能在系统界面改）。 */
     val refresh: () -> Unit,
     val setTheme: (com.morrowviento.morrow.data.settings.ThemeMode) -> Unit,
-    val setReduceTransparency: (Boolean) -> Unit,
+    /** 玻璃材质四档（通透 / 轻盈 / 标准 / 厚重）。 */
+    val setGlassMaterial: (GlassMaterialLevel) -> Unit,
     val setReduceMotion: (Boolean) -> Unit,
     val exportTo: (android.net.Uri) -> Unit,
     val loadImport: (android.net.Uri) -> Unit,

@@ -173,8 +173,9 @@ fun HomeScreen(
 
     GlassTheme(
         darkTheme = appSettings.isDark(isSystemInDarkTheme()),
-        reduceTransparency = appSettings.reduceTransparency,
+        reduceTransparency = appSettings.usesOpaqueGlass,
         reduceMotion = appSettings.reduceMotion,
+        material = appSettings.glassMaterial,
     ) {
         GlassBackdropHost(
             modifier = Modifier.fillMaxSize(),

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionHost
 import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionStyle
@@ -44,8 +45,14 @@ import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionStyle
  */
 private val BarHeight = 62.dp
 
-/** 中央「＋」的强调色：朝霞橙，与启动图标的渐变同色系。 */
-private val CreateAccent = Color(0xFFF2795C)
+/**
+ * 强调色：直接用 Glasmio 的默认 accent（iOS 蓝）。
+ *
+ * 原来是朝霞橙 `#F2795C`——它配原来的蓝紫粉底还算协调，但整页换成库的默认中性色之后，
+ * 橙色成了画面上唯一的暖色，反而比玻璃本身更抢眼，所以一并交给主题。
+ */
+@Composable
+private fun createAccent(): Color = glassColors().accent
 
 @Composable
 fun HomeBottomBar(
@@ -105,7 +112,7 @@ private fun BarCell(
     GlassPanel(
         modifier = modifier,
         capsule = true,
-        tint = if (active) CreateAccent.copy(alpha = 0.16f) else null,
+        tint = if (active) createAccent().copy(alpha = 0.16f) else null,
         onClick = onClick,
     ) {
         Column(
@@ -131,7 +138,7 @@ private fun BarCreateCell(modifier: Modifier, onClick: () -> Unit) {
             modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(CreateAccent.copy(alpha = 0.58f)),
+                .background(createAccent().copy(alpha = 0.58f)),
             contentAlignment = Alignment.Center,
         ) {
             PlusGlyph(Color.White)

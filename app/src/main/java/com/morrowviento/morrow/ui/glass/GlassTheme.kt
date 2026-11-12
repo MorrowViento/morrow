@@ -12,18 +12,22 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
+import com.morrowviento.morrow.data.settings.GlassMaterialLevel
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.core.LocalGlassDimensions
 import io.github.neoruaa.glasmio.glass.GlassEmphasis
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
+import io.github.neoruaa.glasmio.glass.NavigationGlassMaterial
 import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
 
 /**
@@ -52,10 +56,25 @@ val LocalReduceMotion = staticCompositionLocalOf { false }
 /**
  * 用户是否要求减弱透明（无障碍「降低透明度」）。
  *
- * 只作用于**玻璃面板内侧**（见 [glassVeil]）：让面板更实、文字更清晰；
- * 页面底色的蓝紫粉渐变在任何模式下都原样保留。
+ * 只作用于**玻璃面板内侧**（见 [glassVeil]）：让面板更实、文字更清晰。
  */
 val LocalReduceTransparency = staticCompositionLocalOf { false }
+
+/**
+ * 当前玻璃材质档位（设置页「通透 / 轻盈 / 标准 / 厚重」）。
+ *
+ * 单一来源：所有 [GlassPanel] / [GlassCirclePanel] 都读它，因此设置里换一档，
+ * 首页卡片、底栏、日历、弹层同时变厚变薄，不需要逐个传参。
+ */
+val LocalGlassMaterial = staticCompositionLocalOf { GlassMaterialLevel.STANDARD }
+
+/** 档位 → Glasmio 的四档材质（示例 Materials 页那四张卡的对应关系）。 */
+internal fun GlassMaterialLevel.toGlasmio(): NavigationGlassMaterial = when (this) {
+    GlassMaterialLevel.CLEAR -> NavigationGlassMaterial.Clear
+    GlassMaterialLevel.LIGHT -> NavigationGlassMaterial.RegularSmall
+    GlassMaterialLevel.STANDARD -> NavigationGlassMaterial.RegularMedium
+    GlassMaterialLevel.HEAVY -> NavigationGlassMaterial.RegularLarge
+}
 
 /**
  * 主题入口。
@@ -67,20 +86,22 @@ val LocalReduceTransparency = staticCompositionLocalOf { false }
  *   与 `getUsesRefraction()` 一起返回 false，`GlassSurface` 放弃背景采样与折射，
  *   退化成一块纯黑 / 纯白面板——真机上「打开减弱透明后控件变成纯色块」就是这么来的。
  *   这里始终保持 `GlassAppearance()`（液态玻璃全开），只在玻璃面板内侧加一层
- *   柔和色纱（见 [glassVeil]）。**不动背景渐变**：真机上曾把「压平整个底色」
- *   当成减弱透明，结果浅色变整屏近白、深色变整屏近黑，颜色全丢了，那是错的。
+ *   柔和的同色纱（见 [glassVeil]）。
+ * @param material 玻璃材质档位，透传给每一个玻璃面板。
  */
 @Composable
 fun GlassTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     reduceTransparency: Boolean = false,
     reduceMotion: Boolean = false,
+    material: GlassMaterialLevel = GlassMaterialLevel.STANDARD,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(
         LocalGlassDark provides darkTheme,
         LocalReduceMotion provides reduceMotion,
         LocalReduceTransparency provides reduceTransparency,
+        LocalGlassMaterial provides material,
     ) {
         GlasmioTheme(
             isDark = darkTheme,
@@ -94,41 +115,63 @@ fun GlassTheme(
 /**
  * 页面底色（同时充当玻璃的采样源）。
  *
- * 渐变只在这里定义一份：首页把它放进 `sampledContent`，日历等**整页覆盖**视图
- * 必须再画一遍同款渐变当自己的不透明底。否则覆盖层是透明的，下层首页文字会穿出来
- * （日历与列表重叠的成因），且覆盖层上的玻璃采样到的颜色与周围底色对不上。
+ * **只用 Glasmio 自己的色板**（`GlassColors`）：上一版是蓝紫粉三段渐变，
+ * 和液态玻璃的冷白高光放在一起会互相打，所以整页换回库的默认配色——
+ * 深色 `groupedBackground`（#000）+ 顶部一团 `elevatedBackground`（#1C1C1E），
+ * 浅色 `groupedBackground`（#F2F2F7）+ 顶部一团白，也就是 iOS 分组列表那套底。
+ *
+ * 为什么不是纯色：玻璃要采样到亮度差才有「透过去」的层次，纯色底会让面板看起来
+ * 像一张半透明色纸。这团光是同系的中性色、不是装饰性彩色，所以仍然算「默认配色」。
+ *
+ * 渐变只在这里定义一份：首页把它放进 `sampledContent`，日历 / 设置等**整页覆盖**
+ * 视图必须再画一遍同款当自己的不透明底。否则覆盖层是透明的，下层首页文字会穿出来，
+ * 且覆盖层上的玻璃采样到的颜色与周围底色对不上。
  */
 @Composable
 fun GlassBackdrop(modifier: Modifier = Modifier) {
-    val dark = LocalGlassDark.current
-    val colors = if (dark) {
-        listOf(Color(0xFF151A35), Color(0xFF2A1436), Color(0xFF3F1630))
-    } else {
-        listOf(Color(0xFF3B6FE0), Color(0xFF9B4BE8), Color(0xFFE84B8A))
-    }
-    // 渐变永远画满，不受「减弱透明」影响：那是面板的事，不是背景的事。
-    // 曾经在这里叠过一层 alpha 0.88 的中性色，真机上浅色直接整屏泛白、深色整屏发黑，
-    // 等于把应用的配色抹掉——已废弃。
-    Box(modifier.fillMaxSize().background(Brush.linearGradient(colors)))
+    val colors = GlasmioTheme.colors
+    val base = colors.groupedBackground
+    val glow = colors.elevatedBackground
+    Box(
+        modifier
+            .fillMaxSize()
+            .drawBehind {
+                drawRect(base)
+                drawRect(
+                    Brush.radialGradient(
+                        colors = listOf(glow, Color.Transparent),
+                        // 光源放在顶部偏上：卡片从亮处往暗处排，采样才有变化
+                        center = Offset(size.width * 0.5f, size.height * 0.06f),
+                        radius = size.maxDimension * 0.9f,
+                    ),
+                )
+            },
+    )
 }
 
 /**
  * 「减弱透明」的落点：盖在玻璃**内侧**的一层柔和不透明色纱。
  *
  * 玻璃材质（模糊 / 折射 / 高光）由 Glasmio 正常绘制，色纱只把透过面板看到的
- * 背景压低到约 45%，面板因此更实、文字对比度更高；面板之外的彩色渐变、以及
- * 从色纱透出来的那部分颜色都还在，不会变成纯黑 / 纯白色块。
+ * 背景压低，面板因此更实、文字对比度更高；面板之外的底色仍在，不会变成纯黑 / 纯白块。
  *
- * 取带一点紫的浅色 / 深色而不是纯白 / 纯黑，是为了和蓝紫粉渐变同色系。
+ * 纱的颜色取 `elevatedBackground`（深色 #1C1C1E / 浅色 #FFFFFF），
+ * 正是 iOS 分组列表卡片的底色，所以「厚重」档看起来就是 iOS 的标准卡片。
+ *
+ * 强度由材质档位决定，不再是一个布尔：通透 0 → 轻盈 0.10 → 标准 0.22 → 厚重 0.58。
  */
 @Composable
 private fun glassVeil(): Color? {
-    if (!LocalReduceTransparency.current) return null
-    return if (LocalGlassDark.current) {
-        Color(0xFF24213F).copy(alpha = 0.55f)
-    } else {
-        Color(0xFFF7F3FF).copy(alpha = 0.55f)
+    val base = when (LocalGlassMaterial.current) {
+        GlassMaterialLevel.CLEAR -> 0f
+        GlassMaterialLevel.LIGHT -> 0.10f
+        GlassMaterialLevel.STANDARD -> 0.22f
+        GlassMaterialLevel.HEAVY -> 0.58f
     }
+    // 无障碍「降低透明度」打开时，至少要到厚重档的实度
+    val alpha = if (LocalReduceTransparency.current) maxOf(base, 0.58f) else base
+    if (alpha <= 0f) return null
+    return GlasmioTheme.colors.elevatedBackground.copy(alpha = alpha)
 }
 
 /** Glasmio 主题配色（Composable 取值器，需在组合内调用）。 */
@@ -138,21 +181,19 @@ fun glassColors() = GlasmioTheme.colors
 /**
  * 玻璃上的主文字色。
  *
- * 跟随 [LocalGlassDark] 而不是系统深浅：用户强制浅色主题时，
- * 玻璃材质已经是浅色，再用白字会完全看不见。
+ * 直接用库的 `GlassColors.content`（深色白 / 浅色近黑），不再自己写死：
+ * 之前硬编码的 `#1C1C1E` 在跟随系统浅色但用户强制浅色时会偏灰。
  */
 @Composable
-fun glassTextPrimary(): Color =
-    if (LocalGlassDark.current) Color.White else Color(0xFF1C1C1E)
+fun glassTextPrimary(): Color = GlasmioTheme.colors.content
 
 /** 玻璃上的次级文字色（分类、日期、说明文字）。 */
 @Composable
-fun glassTextSecondary(): Color =
-    if (LocalGlassDark.current) {
-        Color.White.copy(alpha = 0.62f)
-    } else {
-        Color(0xFF3C3C43).copy(alpha = 0.6f)
-    }
+fun glassTextSecondary(): Color = GlasmioTheme.colors.secondaryContent
+
+/** 玻璃上的三级文字色（脚注、计数）。 */
+@Composable
+fun glassTextTertiary(): Color = GlasmioTheme.colors.tertiaryContent
 
 /**
  * 玻璃背景宿主（自定义内容版，与 Glasmio 0.1.2 原始签名一一对应）。
@@ -227,6 +268,7 @@ fun GlassPanel(
         shape = shape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
+        material = LocalGlassMaterial.current.toGlasmio(),
         onClick = onClick,
         enabled = enabled,
         contentAlignment = contentAlignment,
@@ -262,6 +304,7 @@ fun GlassCirclePanel(
         shape = CircleShape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
+        material = LocalGlassMaterial.current.toGlasmio(),
         onClick = onClick,
         enabled = enabled,
         contentAlignment = Alignment.Center,
