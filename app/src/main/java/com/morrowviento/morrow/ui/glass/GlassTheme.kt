@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
@@ -31,6 +30,7 @@ import io.github.neoruaa.glasmio.core.LocalGlassDimensions
 import io.github.neoruaa.glasmio.glass.GlassEmphasis
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
+import io.github.neoruaa.glasmio.glass.NavigationGlassMaterial
 import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
 
 /**
@@ -83,8 +83,7 @@ val LocalGlassFrost = staticCompositionLocalOf { GLASS_FROST_DEFAULT }
  * **`Lighten` 1.0**）：`Lighten` 会把每个比 26/255 暗的像素抬到 26/255，
  * 于是深色下整块面板被压成一片均匀的 #1A1A1A——**这才是「怎么看都不透明」的真凶**。
  * 浅色下对应的是 `White 0.7 Lighten`，同样接近实心白。
- * 现在全部走 `material = null`（库的默认「按尺寸自动挑面层」），它没有任何
- * `fills`，采样到的背景会原样透上来；厚度只由模糊半径和 [veilAlphaOf] 决定。
+ * 现在统一用 [CLEAR_MATERIAL]，厚度只由模糊半径和 [veilAlphaOf] 决定。
  *
  * 上限压在 25.5dp：再大在 3x 屏上就是 76px 的高斯，逐帧重绘的代价高于观感收益。
  */
@@ -104,6 +103,16 @@ internal fun veilAlphaOf(frost: Float): Float {
     val t = frost.coerceIn(0f, 1f)
     return 0.26f * t * t
 }
+
+/**
+ * 所有玻璃面板统一使用的材质（见 [GlassPanel] 的说明）。
+ *
+ * 为什么不是按厚度切材质：`RegularMedium` / `RegularLarge` 的 `fills` 是不透明的
+ * （深色三层 #1A1A1A、其中一层 `Lighten`；浅色 `White 0.7 Lighten`），
+ * 一块采样本就暗的背景经过它们会被压成均匀实色——那正是「完全不透明」的来源。
+ * `Clear` 的面接近直通，厚度改由模糊半径与色纱表达。
+ */
+private val CLEAR_MATERIAL = NavigationGlassMaterial.Clear
 
 /**
  * 主题入口。
@@ -150,15 +159,18 @@ fun GlassTheme(
  * 24dp，面板看起来都是同一块平板，唯一还能动的是材质自己画的内阴影与边缘光，
  * 于是就有了「调厚度只看到边缘发光变了」的反馈。
  *
- * 所以这里改成一幅**丝缎质感的背景**（和 Glasmio 示例里那张壁纸同一路数，但仍是
- * 中性色，没有紫蓝）：
+ * 所以这里改成一幅**丝缎壁纸**（和 Glasmio 示例里那张壁纸同一路数）：
  *
  * 1. 底色：库的 `groupedBackground`；
- * 2. 三团大色斑：暖象牙（左上）、冷钢灰（右侧）、淡天青（左下）——负责「透过去有颜色」；
- * 3. 顶部一团柔光：负责标题区的亮度，和上一版一致；
- * 4. 两道路径光带（一条宽的柔光 + 一条发丝级高光）：负责「透过去有边缘」。
- *    高光带是整幅背景里唯一的高频细节，模糊半径一小一大，它就从「一道锐利的光」
- *    变成「一片发白」——**厚度的差异就是靠它被看见的**。
+ * 2. 四团大色斑：暖象牙（左上）、冷钢蓝（右上）、天青（左下）、冷灰（右下）。
+ *    四角四种色、中间留一片静区，卡片压在哪个位置都能采到不同的颜色；
+ * 3. 两条倾斜光带：一条宽（柔和亮面 + 相邻暗面，像布料折了一下），一条发丝级。
+ *    发丝高光是整幅背景里唯一的高频细节，模糊半径一小一大，它就从「一道锐利的光」
+ *    变成「一片发白」——**厚度的差异靠它被看见**。
+ *
+ * 不再有「顶部一团白柔光」：那团光在浅色下等于把整页刷白（半径给到
+ * `maxDimension * 0.9` 时能盖住九成屏幕），卡片压上去就完全看不出透的是什么。
+ * 这也是上一版「看起来完全不透明」的另一半原因。
  *
  * 渐变一律淡到「同色 alpha=0」而不是 `Color.Transparent`：Compose 的渐变按非预乘
  * 插值，淡向黑色透明会在色斑边缘留一圈脏灰。
@@ -170,14 +182,17 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     val colors = GlasmioTheme.colors
     val dark = LocalGlassDark.current
     val base = colors.groupedBackground
-    // 顶部柔光：只能是「底色 → 卡片色」之间的一半，等于卡片色的话顶部卡片会和背景糊在一起
-    val glow = lerp(base, colors.elevatedBackground, 0.6f)
 
-    val warm = if (dark) Color(0xFF2A2016) else Color(0xFFFFDCB0)
-    val cool = if (dark) Color(0xFF141C26) else Color(0xFFC6D6E8)
-    val sky = if (dark) Color(0xFF0C1724) else Color(0xFFA8C4E6)
-    val sheen = Color.White.copy(alpha = if (dark) 0.14f else 0.55f)
-    val shade = (if (dark) Color.Black else Color(0xFF6E6558)).copy(alpha = if (dark) 0.55f else 0.32f)
+    val warm = if (dark) Color(0xFF4E3820) else Color(0xFFF7DDB8)
+    val cool = if (dark) Color(0xFF25333F) else Color(0xFFAFC0D6)
+    val sky = if (dark) Color(0xFF18293C) else Color(0xFF9FB9D8)
+    val deep = if (dark) Color(0xFF28323E) else Color(0xFF7E8B9E)
+    val sheen = Color.White.copy(alpha = if (dark) 0.20f else 0.60f)
+    // 浅色下折痕的暗面用中性冷灰：白色在浅底上不可能更亮
+    val shade = (if (dark) Color.Black else Color(0xFF3F4956))
+        .copy(alpha = if (dark) 0.70f else 0.35f)
+    // 发丝线在浅色下走暗色，白线在 #F2F2F7 上等于隐形
+    val edge = if (dark) sheen else shade.copy(alpha = 0.30f)
 
     Box(
         modifier
@@ -186,26 +201,25 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                 val w = size.width
                 val h = size.height
                 val blobs = listOf(
-                    // 暖光在左上，冷光在右，天青压在底部：和示例壁纸同一套冷暖关系
                     Brush.radialGradient(
                         listOf(warm, warm.copy(alpha = 0f)),
-                        center = Offset(w * 0.10f, h * 0.08f),
-                        radius = h * 0.78f,
+                        center = Offset(w * 0.08f, h * 0.05f),
+                        radius = h * 0.55f,
                     ),
                     Brush.radialGradient(
                         listOf(cool, cool.copy(alpha = 0f)),
-                        center = Offset(w * 1.04f, h * 0.40f),
-                        radius = h * 0.72f,
+                        center = Offset(w * 0.98f, h * 0.30f),
+                        radius = h * 0.62f,
                     ),
                     Brush.radialGradient(
                         listOf(sky, sky.copy(alpha = 0f)),
-                        center = Offset(w * 0.22f, h * 1.00f),
-                        radius = h * 0.85f,
+                        center = Offset(w * 0.18f, h * 0.90f),
+                        radius = h * 0.65f,
                     ),
                     Brush.radialGradient(
-                        listOf(glow, glow.copy(alpha = 0f)),
-                        center = Offset(w * 0.5f, h * 0.06f),
-                        radius = size.maxDimension * 0.9f,
+                        listOf(deep, deep.copy(alpha = 0f)),
+                        center = Offset(w * 0.92f, h * 1.00f),
+                        radius = h * 0.55f,
                     ),
                 )
                 // 光带画在「3 倍屏幕大小、以屏幕为中心」的一块矩形上（旋转后仍能盖满四角），
@@ -226,13 +240,13 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                 // 发丝高光：屏幕上只有一两个像素宽，模糊一开就整条化掉——
                 // 「通透」和「厚重」的差别，一半是靠它被看清 / 被糊掉
                 val hairline = Brush.verticalGradient(
-                    bandY(0.00f) to sheen.copy(alpha = 0f),
-                    bandY(0.462f) to sheen.copy(alpha = 0f),
-                    bandY(0.4655f) to sheen,
-                    bandY(0.469f) to sheen.copy(alpha = 0f),
-                    bandY(0.700f) to sheen.copy(alpha = 0f),
-                    bandY(0.7030f) to sheen.copy(alpha = sheen.alpha * 0.8f),
-                    bandY(0.7060f) to sheen.copy(alpha = 0f),
+                    bandY(0.000f) to edge.copy(alpha = 0f),
+                    bandY(0.462f) to edge.copy(alpha = 0f),
+                    bandY(0.4655f) to edge,
+                    bandY(0.469f) to edge.copy(alpha = 0f),
+                    bandY(0.700f) to edge.copy(alpha = 0f),
+                    bandY(0.7030f) to edge.copy(alpha = edge.alpha * 0.8f),
+                    bandY(0.7060f) to edge.copy(alpha = 0f),
                 )
                 val bandLeft = Offset(-w, -h)
                 val bandSize = Size(w * 3f, h * 3f)
@@ -348,10 +362,19 @@ fun GlassBackdropHost(
  *   （`GlassSurface` 内部是 `clickable(indication = null)` + 按压高光采样，
  *   因此天然没有 Material 的矩形 ripple）。点击后不会有任何 Material 指示器。
  *
- * 这里**刻意不传 `material`**：留空即库的默认「按控件尺寸自动挑面层」，它没有任何
- * `fills`，采样到的背景原样透上来。传 `RegularMedium` / `RegularLarge` 反而会拿到
- * 一组接近不透明的填充（深色下是三层 #1A1A1A，其中一层还是 `Lighten`），
- * 面板会变成一块均匀的实色板——上一版「完全不透明」就是这么来的。
+ * 这里**固定用 `NavigationGlassMaterial.Clear`**（示例里那张能看见壁纸的 Clear 卡）。
+ * 翻源码可以看到另外三个材质的「面」有多实：
+ *
+ * - `RegularMedium` / `RegularLarge` 的 `fills` 在深色下是三层 `#1A1A1A`，
+ *   其中一层是 `Lighten`——把所有比 26/255 暗的像素抬到 26/255，整块面板被压成
+ *   一片均匀实色；浅色下对应 `White 0.7 Lighten`，同样接近实心白；
+ * - 不传 `material`（库的自动面层）在浅色下 `black = 0.4`：输出亮度 =
+ *   `0.4 + 0.63 × 输入`，任何背景都被抬到 40% 以上并压掉近四成对比度。
+ *
+ * `Clear` 是唯一「面」接近直通的一档（`black = 0.125`、无 `faceFill`、只有
+ * `+16/255` 的加色与 4% 白），透过去的背景几乎原样保留。
+ * 厚重感不再由材质负责，而是由模糊半径与 [veilAlphaOf] 的色纱负责——
+ * 这样「通透 ↔ 厚重」才是同一块玻璃的两种状态，而不是四个不同的材质。
  */
 @Composable
 fun GlassPanel(
@@ -372,6 +395,7 @@ fun GlassPanel(
         shape = shape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
+        material = CLEAR_MATERIAL,
         // 连续的模糊半径：厚度档位真正改变光学的地方
         frostRadius = frostRadiusOf(LocalGlassFrost.current),
         onClick = onClick,
@@ -409,6 +433,7 @@ fun GlassCirclePanel(
         shape = CircleShape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
+        material = CLEAR_MATERIAL,
         frostRadius = frostRadiusOf(LocalGlassFrost.current),
         onClick = onClick,
         enabled = enabled,
@@ -445,6 +470,7 @@ fun GlassTile(
     GlassSurface(
         modifier = modifier,
         shape = shape,
+        material = CLEAR_MATERIAL,
         frostRadius = frostRadiusOf(LocalGlassFrost.current),
         contentAlignment = Alignment.Center,
     ) {

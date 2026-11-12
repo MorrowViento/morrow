@@ -15,8 +15,8 @@ import org.junit.Test
  * 2. 第二次的根因是 `RegularMedium` 的 `fills` 在深色下是三层 #1A1A1A（其中一层
  *    还是 `Lighten`），整块面板被压成均匀实色，同时又叠了峰值 0.72 的色纱。
  *
- * 所以现在**不再按厚度切材质枚举**（材质交给库的默认自动面层），厚度只映射到
- * 两个连续光学参数：模糊半径 [frostRadiusOf] 与奶白色纱 [veilAlphaOf]。
+ * 所以现在**不再按厚度切材质枚举**（统一用 Clear 这一档「面接近直通」的材质），
+ * 厚度只映射到两个连续光学参数：模糊半径 [frostRadiusOf] 与奶白色纱 [veilAlphaOf]。
  * 这里断言的就是这两条曲线：单调、相邻档可分、且任何一档都不会把透明吃掉。
  */
 class GlassFrostTest {
