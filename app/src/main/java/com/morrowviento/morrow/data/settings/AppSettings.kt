@@ -23,7 +23,8 @@ enum class ThemeMode(val prefValue: String, val label: String) {
 /**
  * 玻璃「厚度」的默认值（= [GlassFrostLevel.STANDARD]）。
  *
- * 0 = 几乎全通透（能看清背后内容），1 = 厚实磨砂（iOS 那种实心卡片）。
+ * 0 = 完全不糊（只剩边缘折射），1 = 厚磨砂（背后只剩大色块）。
+ * 任何一档都不会变成实心卡片——透明是液态玻璃的前提。
  */
 const val GLASS_FROST_DEFAULT = 0.62f
 
@@ -34,7 +35,7 @@ const val GLASS_FROST_DEFAULT = 0.62f
  * 内侧色纱都能跟着变），UI 只暴露四个有明确名字的落点，免得滑块停在「37%」这种
  * 说不清意思的位置。
  *
- * 档位的取值不是等距的：`frostRadius` 从 2dp 到 24dp、色纱从 0 到 0.72，人眼对
+ * 档位的取值不是等距的：`frostRadius` 从 0.5dp 到 25.5dp，色纱从 0 到 0.26，人眼对
  * 前段（0→0.35）的差异远比对后段（0.7→1）敏感，所以前两档贴得近、后两档拉得开。
  *
  * [prefValue] 与旧的四档字符串（`clear/light/standard/heavy`）同名，升级时
@@ -46,10 +47,10 @@ enum class GlassFrostLevel(
     val label: String,
     val hint: String,
 ) {
-    CLEAR(0f, "clear", "通透", "几乎没有底色，能看清背后内容的轮廓"),
-    LIGHT(0.34f, "light", "轻盈", "薄磨砂，背景细节还看得见，文字略微发淡"),
-    STANDARD(0.62f, "standard", "标准", "iOS 分组列表的观感，背景糊开、正文清楚"),
-    HEAVY(0.95f, "heavy", "厚重", "接近实心卡片，几乎不透视，对比度最高");
+    CLEAR(0f, "clear", "通透", "几乎不糊，只剩边缘折射，背后内容一清二楚"),
+    LIGHT(0.34f, "light", "轻盈", "薄磨砂，背景轮廓还看得见，细节化开"),
+    STANDARD(0.62f, "standard", "标准", "背景糊成一片柔光，正文最清楚"),
+    HEAVY(0.95f, "heavy", "厚重", "厚磨砂，只剩大色块，能压住最花的背景");
 
     companion object {
         /** 连续厚度 → 最近的档位（分段控件用它决定哪一格亮着）。 */
@@ -67,8 +68,8 @@ enum class GlassFrostLevel(
  * `luminanceRollOff`（0.65 与 0.4），落在模糊后的亮度调色上，肉眼几乎看不出来。
  * 四档里真正能分辨的只有「Clear ↔ Regular」，所以调档位时会觉得「没生效」。
  *
- * 现在改成 0~1 的连续值，映射到库真正有视觉差异的两个参数：
- * `frostRadius`（模糊半径，2dp→24dp）与面板内侧色纱的不透明度（0→0.8）。
+ * 现在改成 0~1 的连续值，映射到两个真正有视觉差异的参数：
+ * `frostRadius`（模糊半径，0.5dp→25.5dp）与面板内侧色纱的不透明度（0→0.26）。
  *
  * 旧值映射到等距的厚度，保证升级后观感不变。
  */

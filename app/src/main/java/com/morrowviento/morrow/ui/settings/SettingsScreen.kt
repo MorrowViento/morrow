@@ -34,15 +34,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +72,7 @@ import com.morrowviento.morrow.ui.update.UpdateActions
 import com.morrowviento.morrow.ui.update.UpdateSheet
 import com.morrowviento.morrow.widget.WidgetEntries
 import kotlinx.coroutines.delay
+import kotlin.math.PI
 
 /**
  * 设置中心（M6）。
@@ -192,9 +192,8 @@ fun SettingsScreen(
                                 label = "玻璃厚度",
                                 hint = "${state.frostLevel.label} · ${state.frostLevel.hint}",
                             ) {
-                                // 图标版分段控件：四格各画一张"玻璃卡 + 背后的内容"，
-                                // 通透档能看见背后的两点，厚重档被完全不透明的面盖住。
-                                // 库的指示器是透镜材质，按下时把相邻两格折射挤歪。
+                                // 图标版分段控件：四格各画一个圆环——虚线越疏越通透、
+                                // 实线越粗越厚重。库的指示器是透镜材质，按下时把相邻两格折射挤歪。
                                 GlassSegmentedControl(
                                     items = GlassFrostLevel.entries.map { it to it.label },
                                     selected = state.frostLevel,
@@ -463,66 +462,63 @@ private fun SettingBlock(
 }
 
 /**
- * 玻璃厚度的四个图标（通透 / 轻盈 / 标准 / 厚重）。
+ * 玻璃厚度的四个图标（通透 / 轻盈 / 标准 / 厚重）——**四个圆环**。
  *
- * 画法就是一张「玻璃卡」叠在「背后的内容」上：卡是圆角矩形，背后是两个小圆点。
- * 档位越高，卡片的面越实、圆点越看不见——**透明度这个抽象量被画成了可见的遮挡关系**，
- * 这是四格图标能一眼分辨的原因（只画四条粗细不同的横线是看不出透明的）。
+ * 圆环读作「这层玻璃的横截面」：环越细越虚 = 玻璃越薄，越粗越实 = 越厚。
+ * 上一版画的是「玻璃卡压住两个圆点」，但卡片在 19dp 里只有 9dp 高，
+ * 前两档的面几乎全透明，四格看上去只差一点点灰度；圆环把「清晰度」直接画成了
+ * **线本身的虚实**，一眼就能分：
+ *
+ * - 通透：稀疏虚线环（8 段），最细最淡，光几乎不被拦；
+ * - 轻盈：细密虚线环（16 段），虚但看得见走势；
+ * - 标准：实线环；
+ * - 厚重：粗实线外环 + 一圈内环，像一片有厚度的玻璃边。
  */
 @Composable
-private fun FrostGlyph(level: GlassFrostLevel, size: Dp = 19.dp, alpha: Float = 1f) {
+private fun FrostGlyph(level: GlassFrostLevel, size: Dp = 20.dp, alpha: Float = 1f) {
     val ink = glassTextPrimary()
     Canvas(Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val inset = 1.5.dp.toPx()
-        val cardTop = h * 0.26f
-        val cardHeight = h * 0.48f
-        val corner = CornerRadius(cardHeight * 0.34f, cardHeight * 0.34f)
-        val cardLeft = inset
-        val cardWidth = w - 2 * inset
-        val cardCenterY = cardTop + cardHeight / 2f
-        val t = level.frost.coerceIn(0f, 1f)
-
-        // 背后的内容：两个圆点，被卡片盖住多少就看不见多少
-        val dotAlpha = (1f - t) * 0.95f
-        if (dotAlpha > 0.02f) {
-            val r = 1.15.dp.toPx()
-            drawCircle(ink.copy(alpha = alpha * dotAlpha), r, Offset(w * 0.38f, cardCenterY))
-            drawCircle(ink.copy(alpha = alpha * dotAlpha), r, Offset(w * 0.62f, cardCenterY))
+        val side = this.size.minDimension
+        val center = Offset(this.size.width / 2f, this.size.height / 2f)
+        val radius = side / 2f - 1.4.dp.toPx()
+        when (level) {
+            GlassFrostLevel.CLEAR -> drawDashedRing(
+                center, radius, ink.copy(alpha = alpha * 0.42f), 1.0.dp.toPx(), 8,
+            )
+            GlassFrostLevel.LIGHT -> drawDashedRing(
+                center, radius, ink.copy(alpha = alpha * 0.62f), 1.3.dp.toPx(), 16,
+            )
+            GlassFrostLevel.STANDARD -> drawCircle(
+                ink.copy(alpha = alpha * 0.82f), radius, center, style = Stroke(1.8.dp.toPx()),
+            )
+            GlassFrostLevel.HEAVY -> {
+                drawCircle(
+                    ink.copy(alpha = alpha * 0.95f), radius, center, style = Stroke(2.6.dp.toPx()),
+                )
+                drawCircle(
+                    ink.copy(alpha = alpha * 0.30f), radius * 0.50f, center,
+                    style = Stroke(1.1.dp.toPx()),
+                )
+            }
         }
-
-        // 玻璃面：越厚越实（0.06 → 0.92），和渲染层的色纱曲线同向
-        val face = 0.06f + 0.86f * t
-        drawRoundRect(
-            color = ink.copy(alpha = alpha * face),
-            topLeft = Offset(cardLeft, cardTop),
-            size = Size(cardWidth, cardHeight),
-            cornerRadius = corner,
-        )
-        // 顶部镜面高光：厚度越高越亮，模拟折射后的边缘
-        drawRoundRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = alpha * (0.10f + 0.45f * t)),
-                    Color.Transparent,
-                ),
-                startY = cardTop,
-                endY = cardCenterY,
-            ),
-            topLeft = Offset(cardLeft, cardTop),
-            size = Size(cardWidth, cardHeight),
-            cornerRadius = corner,
-        )
-        // 轮廓：细一圈，避免深色底下整块糊成一个点
-        drawRoundRect(
-            color = ink.copy(alpha = alpha * 0.55f),
-            topLeft = Offset(cardLeft, cardTop),
-            size = Size(cardWidth, cardHeight),
-            cornerRadius = corner,
-            style = Stroke(width = 1.dp.toPx()),
-        )
     }
+}
+
+/**
+ * 虚线圆环：dash 长度按周长均分，保证首尾刚好接上。
+ *
+ * 用固定 dash 值会在收口处露出一段半长不短的缺口——周长不是 (dash + gap) 的整数倍。
+ */
+private fun DrawScope.drawDashedRing(
+    center: Offset,
+    radius: Float,
+    color: Color,
+    stroke: Float,
+    segments: Int,
+) {
+    val segment = (2f * PI.toFloat() * radius) / segments
+    val effect = PathEffect.dashPathEffect(floatArrayOf(segment * 0.58f, segment * 0.42f))
+    drawCircle(color, radius, center, style = Stroke(width = stroke, pathEffect = effect))
 }
 
 /** 动作行。[onClick] 为 null 时只做展示（版本号）。 */

@@ -57,6 +57,8 @@ import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTextButton
+import com.morrowviento.morrow.ui.glass.GlassTile
+import com.morrowviento.morrow.ui.glass.glassAccent
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import java.time.LocalDate
@@ -372,11 +374,9 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
     // ripple 在方格里也是矩形，和整页的圆角语言冲突。
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val cellAlpha = when {
-        cell.isSelected -> if (pressed) 0.22f else 0.14f
-        pressed -> 0.10f
-        else -> 0f
-    }
+    // 选中态不再用半透明底色，而是底下垫一整块玻璃（见下面的 GlassTile）；
+    // 只有「按下但未选中」这一种情况还需要自己画底。
+    val cellAlpha = if (!cell.isSelected && pressed) 0.10f else 0f
 
     Box(
         modifier = modifier
@@ -389,6 +389,16 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
             .background(if (cellAlpha > 0f) primary.copy(alpha = cellAlpha) else Color.Transparent),
         contentAlignment = Alignment.Center,
     ) {
+        // 选中的那天是一块**真的玻璃**：一次材质采样（整月只会同时存在一块），
+        // 于是数字浮在折射过的背景上，和整页的材质语言一致。
+        // 注意它必须垫在文字之前：玻璃的采样层是整页背景，压在文字上会把数字糊掉。
+        if (cell.isSelected) {
+            GlassTile(
+                modifier = Modifier.matchParentSize().padding(2.dp),
+                cornerRadius = 11.dp,
+                tint = glassAccent().copy(alpha = 0.20f),
+            )
+        }
         if (cell.isToday) {
             Canvas(Modifier.matchParentSize().padding(6.dp)) {
                 drawCircle(color = primary.copy(alpha = 0.4f), style = Stroke(width = 1.2.dp.toPx()))
