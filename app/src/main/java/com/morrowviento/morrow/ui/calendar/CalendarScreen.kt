@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,13 +52,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.domain.time.LunarCalendar
-import com.morrowviento.morrow.ui.component.GlassBarCreateButton
-import com.morrowviento.morrow.ui.component.GlassBarItem
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
-import com.morrowviento.morrow.ui.glass.glassPanelShape
-import com.morrowviento.morrow.ui.glass.glassPressClick
+import com.morrowviento.morrow.ui.glass.GlassTextButton
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import java.time.LocalDate
@@ -76,8 +75,6 @@ import kotlin.math.abs
 fun CalendarScreen(
     state: CalendarUiState,
     actions: CalendarActions,
-    /** 带日期新建：用当前选中日，没选中就用今天。 */
-    onCreate: (LocalDate) -> Unit,
     onOpenEvent: (String) -> Unit,
     onDismiss: () -> Unit,
     /** 还能不能往左 / 往右翻；到农历年表边界时为 false，滑动只被判为无效。 */
@@ -116,20 +113,6 @@ fun CalendarScreen(
                 }
             }
         }
-        // 与首页同一套语言：底栏一条胶囊玻璃，左「视图」循环 / 中「＋」/ 右「今天」。
-        // 旧版这里是顶部一排「月 | 年 | 列表」分段控件 + 右下角悬浮「＋」，
-        // 与首页改造后的底栏对不上，一进日历就像回到了上一版。
-        CalendarBottomBar(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 14.dp),
-            view = state.view,
-            onCycleView = { actions.setView(nextView(state.view)) },
-            onToday = actions.goToToday,
-            onTodayEnabled = !onTodayPeriod(state),
-            onCreate = { onCreate(state.selected ?: state.today) },
-        )
     }
 }
 
@@ -231,6 +214,14 @@ private fun CalendarPage(
     }
 }
 
+/** 当前浏览的周期是否已经包含今天（是则「今天」按钮置灰）。 */
+private fun onTodayPeriod(state: CalendarUiState): Boolean =
+    if (state.view == CalendarView.MONTH) {
+        state.month == YearMonth.from(state.today)
+    } else {
+        state.month.year == state.today.year
+    }
+
 // ---------------------------------------------------------------- 头部
 
 @Composable
@@ -276,23 +267,41 @@ private fun CalendarHeader(
         Spacer(Modifier.width(10.dp))
         NavButton("✕", "关闭日历", onClick = onDismiss)
     }
+
+    // 视图切换回到头部（底栏是常驻的，三个格子固定为 排序 / ＋ / 日历，不随页面变）。
+    // 三个视图用小号玻璃按钮，选中的那个用 Prominent 材质，按下去仍有折射光斑。
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CalendarView.entries.forEach { view ->
+            GlassTextButton(
+                text = view.label,
+                active = view == state.view,
+                onClick = { actions.setView(view) },
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        GlassTextButton(
+            text = "今天",
+            enabled = !onTodayPeriod(state),
+            onClick = actions.goToToday,
+        )
+    }
 }
 
-/** 头部圆钮。光晕走 [glassPressClick]，与首页「⋯」同一套，不再出现矩形 ripple。 */
+/** 头部圆钮：玻璃材质自己的按压光学。 */
 @Composable
 private fun NavButton(glyph: String, description: String? = null, onClick: () -> Unit) {
     val primary = glassTextPrimary()
     GlassCirclePanel(
         modifier = Modifier
             .size(34.dp)
-            .glassPressClick(
-                shape = CircleShape,
-                scale = 0.06f,
-                lift = 1.dp,
-                spread = 0.45f,
-                contentDescription = description,
-                onClick = onClick,
-            ),
+            .semantics { description?.let { contentDescription = it } },
+        onClick = onClick,
     ) {
         Text(
             text = glyph,
@@ -300,100 +309,6 @@ private fun NavButton(glyph: String, description: String? = null, onClick: () ->
         )
     }
 }
-
-// ---------------------------------------------------------------- 底栏
-
-/**
- * 日历底栏：与首页 [com.morrowviento.morrow.ui.component.HomeBottomBar] 同构，
- * 左「视图」循环切换、中「＋」、右「今天」。
- *
- * 视图切换做成「点一次切下一个」而不是三格分段控件：底栏单格只有三分之一屏宽，
- * 塞三段中文会挤成一条；而且首页的「排序」本来就是这个交互，两页行为一致更好记。
- * 当前视图写在标签里（「视图 · 月」），看得见状态。
- */
-@Composable
-private fun CalendarBottomBar(
-    view: CalendarView,
-    onCycleView: () -> Unit,
-    onToday: () -> Unit,
-    onTodayEnabled: Boolean,
-    onCreate: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassPanel(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(62.dp),
-        capsule = true,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GlassBarItem(
-                modifier = Modifier.weight(1.15f),
-                label = "视图 · ${view.label}",
-                contentDescription = "切换视图，当前${view.label}",
-                onClick = onCycleView,
-            ) { color -> ViewGlyph(color) }
-
-            GlassBarCreateButton(onClick = onCreate)
-
-            GlassBarItem(
-                modifier = Modifier.weight(1f),
-                label = "今天",
-                contentDescription = "回到今天",
-                enabled = onTodayEnabled,
-                onClick = onToday,
-            ) { color -> TodayGlyph(color) }
-        }
-    }
-}
-
-/** 视图图标：2×2 小方块，与日历图标区分开。 */
-@Composable
-private fun ViewGlyph(color: Color) {
-    Canvas(Modifier.size(15.dp)) {
-        val gap = 2.5.dp.toPx()
-        val side = (size.width - gap) / 2f
-        val radius = 1.8.dp.toPx()
-        val stroke = 1.2.dp.toPx()
-        for (row in 0..1) {
-            for (col in 0..1) {
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(col * (side + gap), row * (side + gap)),
-                    size = Size(side, side),
-                    cornerRadius = CornerRadius(radius, radius),
-                    style = Stroke(width = stroke),
-                )
-            }
-        }
-    }
-}
-
-/** 今天图标：圆环 + 实心点。 */
-@Composable
-private fun TodayGlyph(color: Color) {
-    Canvas(Modifier.size(16.dp)) {
-        val stroke = 1.2.dp.toPx()
-        drawCircle(color, radius = size.minDimension / 2f - stroke, style = Stroke(stroke))
-        drawCircle(color, radius = size.minDimension * 0.22f)
-    }
-}
-
-private fun nextView(view: CalendarView): CalendarView =
-    CalendarView.entries[(view.ordinal + 1) % CalendarView.entries.size]
-
-/** 当前浏览的周期是否已经包含今天（是则「今天」按钮置灰）。 */
-private fun onTodayPeriod(state: CalendarUiState): Boolean =
-    if (state.view == CalendarView.MONTH) {
-        state.month == YearMonth.from(state.today)
-    } else {
-        state.month.year == state.today.year
-    }
 
 // ---------------------------------------------------------------- 月视图
 
@@ -606,15 +521,8 @@ private fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () -> 
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     GlassPanel(
-        modifier = modifier
-            .height(84.dp)
-            .glassPressClick(
-                shape = glassPanelShape(),
-                scale = 0.012f,
-                lift = 0.dp,
-                spread = 0.1f,
-                onClick = onClick,
-            ),
+        modifier = modifier.height(84.dp),
+        onClick = onClick,
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -700,15 +608,8 @@ private fun CalendarEntryRow(entry: CalendarEntry, onClick: () -> Unit) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     GlassPanel(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassPressClick(
-                shape = glassPanelShape(),
-                scale = 0.008f,
-                lift = 0.dp,
-                spread = 0.08f,
-                onClick = onClick,
-            ),
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
     ) {
         Row(
             modifier = Modifier

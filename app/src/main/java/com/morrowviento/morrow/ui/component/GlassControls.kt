@@ -31,11 +31,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
-import com.morrowviento.morrow.ui.glass.glassPressFeedback
-import com.morrowviento.morrow.ui.glass.glassPressable
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
-import com.morrowviento.morrow.ui.glass.rememberGlassPress
 
 /**
  * 玻璃风基础控件集合（表单浮层与分类管理浮层共用）。
@@ -145,24 +142,16 @@ fun ChipRow(content: @Composable () -> Unit) {
  * 日历是整页覆盖且有不透明底色，会把首页底栏整个盖住，因此日历页必须自己再放一颗。
  */
 @Composable
-fun CreateFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val press = rememberGlassPress()
+fun CreateFab(modifier: Modifier = Modifier, prominent: Boolean = false, accent: Color? = null, onClick: () -> Unit) {
     GlassCirclePanel(
-        modifier = modifier
-            .size(60.dp)
-            .glassPressFeedback(press, scale = 0.07f, shape = CircleShape),
+        modifier = modifier.size(60.dp),
+        prominent = prominent,
+        accent = accent,
+        onClick = onClick,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .glassPressable(press, contentDescription = "新建事件", onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "+",
-                style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Light, color = glassTextPrimary()),
-            )
-        }
+        Text(
+            text = "+",
+            style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Light, color = glassTextPrimary()),
+        )
     }
 }

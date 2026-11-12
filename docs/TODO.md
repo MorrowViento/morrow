@@ -8,6 +8,8 @@
 
 M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**228 项单测全绿、lint 0 errors / 10 warnings**（`abortOnError=true`，其中 7 条是依赖有新版本的提示类），debug APK 约 76 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
 
+2026-11-12 完成**按压交回 Glasmio + 底栏常驻**：删除自绘的 `GlassPress.kt`，`GlassPanel`/`GlassCirclePanel` 直接透出 `GlassSurface(onClick=)`（库内已含 `clickable(indication = null)` + 按压高光采样，无 Material ripple）；底栏改为 `GlasmioToolbarActionHost(Merged)` + 三个 `GlassSurface` 成员，由库合并材质并绘制按压折射；底栏从 `CalendarScreen` 移出、放到首页层级最后一层，跨页面常驻，视图切换与「今天」回到日历头部。版本号 `4.0.0-alpha5 (44)`。
+
 2026-11-12 完成**按压光晕 + 日历底栏**：`Modifier.glassPressHalo()` 在元素轮廓之外画一圈径向白光 + 外扩后的折射亮边，配 `glassPressFeedback(lift=)` 的放大上浮与 Glasmio shader 光斑，按下即「玻璃被顶起来」；新增 `glassPressClick()` 一条链封装。日历页撤掉顶部「月｜年｜列表」分段控件与右下角悬浮 ＋，换成与首页同构的底栏（视图循环 / ＋ / 今天），头部圆钮与列表行同步去掉 Material ripple。版本号 `4.0.0-alpha4 (43)`。
 
 2026-11-12 完成**底栏改版 + Glasmio 0.1.3**：排序 / 新建 / 日历收进一条底部胶囊玻璃栏（`HomeBottomBar`），首页标题区只留「⋯」，`CreateFab` 从首页移除；顺带修掉「点排序胶囊里冒出方形高亮」——根因是 `Modifier.clickable` 的 Material ripple 只按布局边界裁剪，现改为 `ui/glass/GlassPress.kt` 的手势 + `InteractiveHighlight` 液体光斑，事件卡片与日历页 `＋` 同步切换。Glasmio 升到 0.1.3（`GlassSurface` 自带 `onClick` 按压光学、渲染性能更新），封装层新增 `GlassPanel(capsule=, tint=)` / `glassPanelShape()`。版本号 `4.0.0-alpha3 (42)`。
@@ -18,7 +20,7 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 
 **m6 的「打开即闪退」已结案**：根因是 `MorrowApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.morrowviento.morrow/startup.log` 可确认是哪个自愈步骤失败。
 
-仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.0.0-alpha4 (43)`**（本地构建；线上仍是最新 Release `v4.0.0-alpha2-41`，资产 `morrow-41-4.0.0-alpha2-debug.apk`，debug 签名，可直接覆盖现有的 debug 安装）
+仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.0.0-alpha5 (44)`**（本地构建；线上仍是最新 Release `v4.0.0-alpha2-41`，资产 `morrow-41-4.0.0-alpha2-debug.apk`，debug 签名，可直接覆盖现有的 debug 安装）
 
 M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，并已发布首个 GitHub Release，见 `docs/CHANGELOG.md`。**尚未完成**：正式签名密钥注入（用户自有密钥，见 `docs/SIGNING.md`）、真机走完「检查→下载→安装→升级」全流程（N1–N9）、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
 

@@ -2,6 +2,26 @@
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 
+## [2026-11-12] 4.0.0-alpha5 (44)：按压交回 Glasmio，底栏跨页面常驻
+
+- **删掉自绘的按压层**（`ui/glass/GlassPress.kt` 整文件）。按压不再自己画白光环/描边，
+  改为直接用库的按钮语义：`GlassPanel` / `GlassCirclePanel` 新增 `onClick` / `prominent` /
+  `accent`，内部传给 `GlassSurface(onClick = ...)`。该路径内部是
+  `clickable(indication = null)` + 按压高光采样 + 材质重绘，**光斑由材质本身画**，
+  因此是「玻璃折射」而不是叠一层白。
+- **底栏改用 `GlasmioToolbarActionHost(Merged)`**：三个格子各是一个 `GlassSurface(onClick)`，
+  库把相邻玻璃合并成一整条（`ToolbarActionGroup` 的 connected run），按下时在那一格上做
+  形变 + 折射，这是 0.1.3 自带的底部工具条光学。
+- **底栏改为跨页面常驻**：从 `CalendarScreen` 里移出，放到首页层级最后一层（日历 / 设置之上）。
+  切到日历底栏不重建、按钮不变，只把「日历」格子加一层淡橙色纱表示选中；再点一次即关闭。
+- **日历页**：不再有自带底栏，视图切换（月 / 年 / 列表）与「今天」回到头部，改用
+  `GlassTextButton`（`GlasmioButton`，选中态走 `GlassEmphasis.Prominent`）；
+  头部圆钮、月卡、事件行全部换成 `onClick` 版本；单日格子仍是
+  `clickable(indication = null)` + 底色加深（42 格不进材质链路）。
+- `GlassPanel` 的 `tint` 语义修正：从「顶掉色纱」改为「色纱之上再叠一层 wash」，
+  避免「减弱透明 + 选中格」反而更透。
+- 新增 `ui/glass/GlassButton.kt`（文字玻璃按钮的封装，业务层不直接 import Glasmio）。
+
 ## [2026-11-12] 4.0.0-alpha4 (43)：按压改成「一圈玻璃光晕」，日历页统一到底栏
 
 - **按压缩放升级为三层叠加**：新增 `Modifier.glassPressHalo()`——在元素**轮廓之外**画一圈

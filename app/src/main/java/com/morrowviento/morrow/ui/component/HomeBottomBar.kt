@@ -1,16 +1,15 @@
 package com.morrowviento.morrow.ui.component
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -30,25 +29,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
-import com.morrowviento.morrow.ui.glass.glassPanelShape
-import com.morrowviento.morrow.ui.glass.glassPressFeedback
-import com.morrowviento.morrow.ui.glass.glassPressHalo
-import com.morrowviento.morrow.ui.glass.glassPressable
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
-import com.morrowviento.morrow.ui.glass.rememberGlassPress
+import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionHost
+import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionStyle
 
 /**
- * 首页底部玻璃栏（对齐 iOS / 参考图里的底栏）：
- * 左「排序」、中「＋」、右「日历」，整条是一块胶囊玻璃。
+ * 常驻底栏（首页与日历共用同一条：切页面时它不重建、不换内容）。
  *
- * 为什么把这三个按钮从标题栏挪下来：
- * 标题栏三颗按钮挤在 34sp 大标题右边，点「排序」时 Material ripple 会在胶囊里画出
- * 一个方形高亮框（ripple 只按布局边界裁剪，不认玻璃的圆角）。底栏本来就该放导航/操作，
- * 挪下来之后标题区只剩「朝夕」+ 更多，视觉也松了。
- *
- * 底栏不吸在屏幕最底：外面留 14dp，像 iOS 那样浮在内容上，滚动时列表从它下面穿过去。
+ * 材质与按压**全部交给 Glasmio 自己的玻璃按钮**：三个格子各是一个
+ * `GlassSurface(onClick = ...)`，装在 `GlasmioToolbarActionHost(Merged)` 里，由库把相邻玻璃
+ * 合并成一整条、并在按下的格子上画折射光斑。这条路径内部是 `clickable(indication = null)`
+ * + 按压高光采样，所以天生没有 Material 的矩形 ripple——之前手写的「白光环 + 描边」已删除。
  */
 private val BarHeight = 62.dp
 
@@ -58,36 +50,37 @@ private val CreateAccent = Color(0xFFF2795C)
 @Composable
 fun HomeBottomBar(
     sortLabel: String,
+    calendarActive: Boolean,
     onCreate: () -> Unit,
     onCalendar: () -> Unit,
     onCycleSort: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassPanel(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(BarHeight),
-        capsule = true,
+    GlasmioToolbarActionHost(
+        modifier = modifier.fillMaxWidth(),
+        style = GlasmioToolbarActionStyle.Merged,
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
+                .fillMaxWidth()
+                .height(BarHeight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GlassBarItem(
-                modifier = Modifier.weight(1f),
+            BarCell(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 label = sortLabel,
-                contentDescription = "排序：$sortLabel，点击切换",
                 onClick = onCycleSort,
             ) { color -> SortGlyph(color) }
 
-            GlassBarCreateButton(onClick = onCreate)
+            BarCreateCell(
+                modifier = Modifier.width(84.dp).fillMaxHeight(),
+                onClick = onCreate,
+            )
 
-            GlassBarItem(
-                modifier = Modifier.weight(1f),
+            BarCell(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 label = "日历",
-                contentDescription = "打开日历",
+                active = calendarActive,
                 onClick = onCalendar,
             ) { color -> CalendarGlyph(color, glyphSize = 15.dp) }
         }
@@ -95,102 +88,60 @@ fun HomeBottomBar(
 }
 
 /**
- * 底栏格子（内部共享，日历页复用）。
+ * 一格：图标 + 文字，整格可点。
  *
- * 结构分两层：外圈只负责**光晕**（不裁剪，按下时溢到格子的圆角之外），内圈负责缩放上浮
- * 与手势。`glassPressHalo` 用 `drawBehind` 画，因此不受内圈 `clip` 影响——把两层合成一个
- * Modifier 链，光晕会被裁成一条硬边。
+ * `tint` 只在选中时传：它是叠在玻璃材质之上的一层极淡色纱（不是 Material 的选中背景），
+ * 按压高光由材质绘制，因此选中格按下去依然有光。
  */
 @Composable
-internal fun GlassBarItem(
+private fun BarCell(
     modifier: Modifier,
     label: String,
-    contentDescription: String,
-    enabled: Boolean = true,
+    active: Boolean = false,
     onClick: () -> Unit,
     glyph: @Composable (Color) -> Unit,
 ) {
-    val press = rememberGlassPress()
     val primary = glassTextPrimary()
-    val itemShape = glassPanelShape(capsule = true)
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .padding(horizontal = 4.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center,
+    GlassPanel(
+        modifier = modifier,
+        capsule = true,
+        tint = if (active) CreateAccent.copy(alpha = 0.16f) else null,
+        onClick = onClick,
     ) {
-        // 光晕用**圆形**而不是格子自身的胶囊形：格子是 130×48 的宽条，按轮廓外扩会变成
-        // 两侧各竖一条亮边；圆形光晕才是「手指下面亮起一个圆」，也与下面的圆形径向渐变一致。
-        Box(
-            Modifier
-                .matchParentSize()
-                .glassPressHalo(press, CircleShape, spread = 0.5f),
-        )
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(itemShape)
-                .glassPressFeedback(press, scale = 0.05f, lift = 1.5.dp)
-                .glassPressable(
-                    press,
-                    contentDescription = contentDescription,
-                    enabled = enabled,
-                    onClick = onClick,
-                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            glyph(if (enabled) primary else primary.copy(alpha = 0.42f))
+            glyph(primary)
             Spacer(Modifier.height(3.dp))
             Text(
                 text = label,
                 maxLines = 1,
-                style = TextStyle(
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (enabled) primary else primary.copy(alpha = 0.42f),
-                ),
+                style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, color = primary),
             )
         }
     }
 }
 
-/** 中央「＋」：强调色玻璃圆钮，比两侧图标高一档，充当主操作。 */
+/** 中央「＋」：橙底白十字。橙色是格子里的一层圆，玻璃与按压仍由整条底栏的材质提供。 */
 @Composable
-internal fun GlassBarCreateButton(onClick: () -> Unit) {
-    val press = rememberGlassPress()
-    Box(
-        modifier = Modifier.width(74.dp).fillMaxHeight(),
-        contentAlignment = Alignment.Center,
-    ) {
-        // 与圆钮同尺寸、同心的空 Box，只用来画光晕：外扩 50% 才够「一圈大光」
+private fun BarCreateCell(modifier: Modifier, onClick: () -> Unit) {
+    GlassPanel(modifier = modifier, capsule = true, onClick = onClick) {
         Box(
-            Modifier
-                .size(46.dp)
-                .glassPressHalo(press, CircleShape, spread = 0.5f, intensity = 1.15f),
-        )
-        GlassCirclePanel(
             modifier = Modifier
                 .size(46.dp)
-                .glassPressFeedback(press, scale = 0.08f, lift = 2.dp, shape = CircleShape),
-            tint = CreateAccent.copy(alpha = 0.62f),
+                .clip(CircleShape)
+                .background(CreateAccent.copy(alpha = 0.58f)),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .glassPressable(press, contentDescription = "新建事件", onClick = onClick),
-                contentAlignment = Alignment.Center,
-            ) {
-                PlusGlyph(Color.White)
-            }
+            PlusGlyph(Color.White)
         }
     }
 }
 
 /** 排序：左右两支反向箭头（上/下），不依赖字体里有没有 ↕ 字形。 */
 @Composable
-private fun SortGlyph(color: Color) {
+internal fun SortGlyph(color: Color) {
     Canvas(Modifier.size(17.dp)) {
         val w = size.width
         val h = size.height
@@ -218,9 +169,7 @@ private fun PlusGlyph(color: Color) {
 }
 
 /**
- * 日历图标：外框 + 顶栏横线 + 两个挂环。
- *
- * 首页标题栏、底栏、日历页共用同一份画法，避免三处各画一个版本慢慢跑偏。
+ * 日历图标：外框 + 顶栏横线 + 两个挂环。首页底栏与日历页头部共用同一份画法。
  */
 @Composable
 fun CalendarGlyph(color: Color, glyphSize: Dp = 13.dp) {

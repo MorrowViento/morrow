@@ -70,12 +70,8 @@ import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassTheme
-import com.morrowviento.morrow.ui.glass.glassPressFeedback
-import com.morrowviento.morrow.ui.glass.glassPressHalo
-import com.morrowviento.morrow.ui.glass.glassPressable
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
-import com.morrowviento.morrow.ui.glass.rememberGlassPress
 import com.morrowviento.morrow.ui.reminder.ReminderActions
 import com.morrowviento.morrow.ui.reminder.ReminderSheet
 import com.morrowviento.morrow.ui.reminder.ReminderUiState
@@ -209,22 +205,6 @@ fun HomeScreen(
                         }
                     }
 
-                    // 底栏：排序 / 新建 / 日历。整条是一块胶囊玻璃，浮在列表之上（列表会从它下面穿过）。
-                    // 「＋」从右下角悬浮按钮挪到这里，与 iOS 底栏一致；首页因此不再有自己的 FAB。
-                    HomeBottomBar(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 14.dp),
-                        sortLabel = state.sortMode.label(),
-                        onCycleSort = { onSortChange(nextSort(state.sortMode)) },
-                        onCalendar = { showCalendar = true },
-                        onCreate = {
-                            categoryAliases = emptyMap()
-                            editingForm = EventFormState.newEvent()
-                        },
-                    )
-
                     // 日历是整页替换（不是浮层）：盖住列表与 FAB，但与列表共用同一个 backdrop，
                     // 换成独立窗口会切断采样源让玻璃材质失效。它自己会重铺一层不透明底色，
                     // 不能依赖下层首页透出来。
@@ -239,10 +219,6 @@ fun HomeScreen(
                             canPrev = calendar.prev != null,
                             canNext = calendar.next != null,
                             actions = calendarActions,
-                            onCreate = { date ->
-                                categoryAliases = emptyMap()
-                                editingForm = EventFormState.newEvent(date = date)
-                            },
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },
                         )
@@ -261,6 +237,33 @@ fun HomeScreen(
                             state = settings,
                             actions = settingsActions,
                             onDismiss = { showSettings = false },
+                        )
+                    }
+
+                    // 常驻底栏：唯一的一条，画在首页 / 日历 / 设置之上。
+                    // 切页面时它不重建也不换内容，只是「日历」格子会亮一下表示选中——
+                    // 之前每个页面各放一条，进日历底栏就变成另一套按钮，看起来像换了个应用。
+                    if (!showSettings) {
+                        HomeBottomBar(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 14.dp),
+                            sortLabel = state.sortMode.label(),
+                            calendarActive = showCalendar,
+                            onCycleSort = { onSortChange(nextSort(state.sortMode)) },
+                            onCalendar = { showCalendar = !showCalendar },
+                            onCreate = {
+                                categoryAliases = emptyMap()
+                                editingForm = if (showCalendar) {
+                                    // 在日历里按「＋」按选中日新建，与日历页原有行为一致
+                                    EventFormState.newEvent(
+                                        date = calendar.current.selected ?: calendar.current.today,
+                                    )
+                                } else {
+                                    EventFormState.newEvent()
+                                }
+                            },
                         )
                     }
 
@@ -425,28 +428,14 @@ private fun HomeHeader(
 /** 批量清理入口（清空已完成 / 清空全部），放在标题右侧。 */
 @Composable
 private fun MoreButton(onClick: () -> Unit) {
-    val press = rememberGlassPress()
-    Box(contentAlignment = Alignment.Center) {
-        // 光晕层与圆钮同尺寸同心，不裁剪：按下时溢到圆钮之外
-        Box(Modifier.size(32.dp).glassPressHalo(press, CircleShape, spread = 0.45f))
-        GlassCirclePanel(
-            modifier = Modifier
-                .size(32.dp)
-                .glassPressFeedback(press, scale = 0.08f, lift = 1.dp, shape = CircleShape),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .glassPressable(press, contentDescription = "更多操作", onClick = onClick),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "⋯",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
-                )
-            }
-        }
+    GlassCirclePanel(
+        modifier = Modifier.size(32.dp),
+        onClick = onClick,
+    ) {
+        Text(
+            text = "⋯",
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
+        )
     }
 }
 

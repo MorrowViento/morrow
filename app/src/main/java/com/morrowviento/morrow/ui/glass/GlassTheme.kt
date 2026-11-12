@@ -21,6 +21,7 @@ import com.kyant.shapes.Capsule
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.core.LocalGlassDimensions
+import io.github.neoruaa.glasmio.glass.GlassEmphasis
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
 import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
@@ -200,26 +201,45 @@ fun GlassBackdropHost(
  *   `ContinuousRoundedRectangle(26dp)` 在 64dp 高的底栏上会露出四个直边，不像 iOS 底栏。
  * @param tint 面板内侧色纱的显式颜色（强调色按钮用）。为 null 时走 [glassVeil]：
  *   只有「减弱透明」开启才加纱，否则保持纯玻璃。
+ * @param prominent 强调材质（Glasmio 的 `GlassEmphasis.Prominent`，iOS 的 tinted glass）。
+ *   用于底栏「＋」这类主操作：按下时的高光由材质自己绘制，比内侧叠一层色块更干净。
+ * @param accent 强调材质的底色（配合 [prominent] 使用）。
+ * @param onClick 非空即成为玻璃按钮：**按压光学直接由 Glasmio 材质绘制**
+ *   （`GlassSurface` 内部是 `clickable(indication = null)` + 按压高光采样，
+ *   因此天然没有 Material 的矩形 ripple）。点击后不会有任何 Material 指示器。
  */
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
     capsule: Boolean = false,
     tint: Color? = null,
+    prominent: Boolean = false,
+    accent: Color? = null,
+    onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val veil = tint ?: glassVeil()
+    val veil = glassVeil()
     val shape = glassPanelShape(capsule)
     GlassSurface(
         modifier = modifier,
         shape = shape,
+        emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
+        navigationSurfaceColor = accent,
+        onClick = onClick,
+        enabled = enabled,
         contentAlignment = contentAlignment,
     ) {
         // 色纱是 content 的第一个子项，因此盖住玻璃绘制、又垫在真正的内容下面。
         // matchParentSize 是 BoxScope 的成员函数，不需要（也不能）import。
         if (veil != null) {
             Box(Modifier.matchParentSize().clip(shape).background(veil))
+        }
+        // 色纱之上再叠一层显式 wash（强调色 / 选中态）。两者互不覆盖：
+        // 之前 `tint` 直接把 veil 顶掉，导致「减弱透明 + 选中格」反而更透。
+        if (tint != null) {
+            Box(Modifier.matchParentSize().clip(shape).background(tint))
         }
         content()
     }
@@ -230,16 +250,27 @@ fun GlassPanel(
 fun GlassCirclePanel(
     modifier: Modifier = Modifier,
     tint: Color? = null,
+    prominent: Boolean = false,
+    accent: Color? = null,
+    onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val veil = tint ?: glassVeil()
+    val veil = glassVeil()
     GlassSurface(
         modifier = modifier,
         shape = CircleShape,
+        emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
+        navigationSurfaceColor = accent,
+        onClick = onClick,
+        enabled = enabled,
         contentAlignment = Alignment.Center,
     ) {
         if (veil != null) {
             Box(Modifier.matchParentSize().clip(CircleShape).background(veil))
+        }
+        if (tint != null) {
+            Box(Modifier.matchParentSize().clip(CircleShape).background(tint))
         }
         content()
     }
