@@ -1,8 +1,11 @@
 package com.jiuxina.ying.ui.calendar
 
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,11 +27,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,8 +57,10 @@ import com.jiuxina.ying.ui.glass.GlassCirclePanel
 import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.abs
 
 /**
  * 日历页（M2d）：月视图 / 年视图 / 按月分组列表。
@@ -65,14 +82,36 @@ fun CalendarScreen(
 ) {
     Box(Modifier.fillMaxSize()) {
         GlassBackdrop()
+
+        // 拦住触摸穿透。日历是整页覆盖，但格子之间留了 1dp 缝、面板四周也有留白，
+        // 这些位置没有任何可点击节点，手指落下去会穿到下层首页的卡片上
+        // （真机表现：点日期数字之间的空白，结果打开了某个首页事件）。这层什么都不做，只吃触摸。
+        Box(
+            Modifier
+                .matchParentSize()
+                .pointerInput(Unit) { detectTapGestures { } },
+        )
+
         Column(Modifier.fillMaxSize()) {
             CalendarHeader(state, actions, onDismiss)
             when {
                 state.error != null -> CenterHint("读取事件失败", state.error)
                 state.isLoading -> CenterHint("载入中…", null)
-                state.view == CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
-                state.view == CalendarView.YEAR -> YearView(state, actions)
-                else -> MonthListView(state, onOpenEvent)
+                else -> SwipePager(
+                    modifier = Modifier.weight(1f),
+                    onPrev = {
+                        if (state.view == CalendarView.MONTH) actions.shiftMonth(-1) else actions.shiftYear(-1)
+                    },
+                    onNext = {
+                        if (state.view == CalendarView.MONTH) actions.shiftMonth(1) else actions.shiftYear(1)
+                    },
+                ) {
+                    when (state.view) {
+                        CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
+                        CalendarView.YEAR -> YearView(state, actions)
+                        CalendarView.LIST -> MonthListView(state, onOpenEvent)
+                    }
+                }
             }
         }
         CreateFab(
@@ -81,6 +120,108 @@ fun CalendarScreen(
                 .padding(end = 20.dp, bottom = 26.dp),
             onClick = { onCreate(state.selected ?: state.today) },
         )
+    }
+}
+
+// ---------------------------------------------------------------- 翻页手势
+
+/**
+ * 滑动翻页判定：+1 下一页、-1 上一页、0 回弹。
+ *
+ * 甩动的优先级高于位移——短促快滑通常位移不大，但意图明确；
+ * 反过来慢慢拖过一大段再松手，速度早已衰减到 0，就该按位移判定。
+ */
+internal fun swipeDirection(
+    dragged: Float,
+    velocity: Float,
+    width: Float,
+    flingVelocity: Float,
+): Int = when {
+    abs(velocity) >= flingVelocity -> if (velocity < 0) 1 else -1
+    width > 0f && abs(dragged) >= width * SWIPE_DISTANCE_RATIO -> if (dragged < 0) 1 else -1
+    else -> 0
+}
+
+/** 位移判定阈值：屏宽的 18%，约等于「明显划了一下」而不是误触。 */
+private const val SWIPE_DISTANCE_RATIO = 0.18f
+
+/**
+ * 左右滑动翻页：跟手位移，松手后要么回弹、要么把当前页推出去再从另一侧拉回新页。
+ *
+ * 刻意不引入真正的 Pager：相邻页的数据（42 格 + 农历 + 事件点）只对当前页构建，
+ * 要一屏两页就得再算一整月；而只要「旧页滑出 → 换页 → 新页滑入」衔接得上，
+ * 观感与 Pager 没有区别，代价却小得多。
+ *
+ * 回调必须经 [rememberUpdatedState] 取：手势协程只启动一次且一直存活，
+ * 直接捕获 `onPrev` / `onNext` 会永远用第一帧那份闭包（滚轮就是这么错的）。
+ */
+@Composable
+private fun SwipePager(
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val latestOnPrev by rememberUpdatedState(onPrev)
+    val latestOnNext by rememberUpdatedState(onNext)
+    var width by remember { mutableFloatStateOf(0f) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    var busy by remember { mutableStateOf(false) }
+    val flingVelocity = with(density) { 600.dp.toPx() }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { width = it.width.toFloat() }
+            .pointerInput(Unit) {
+                val tracker = VelocityTracker()
+                var dragged = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        tracker.resetTracking()
+                        dragged = 0f
+                    },
+                    onDragCancel = {
+                        scope.launch { animate(offset, 0f) { value, _ -> offset = value } }
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        if (!busy) {
+                            offset += dragAmount
+                            dragged += dragAmount
+                            tracker.addPosition(change.uptimeMillis, change.position)
+                        }
+                    },
+                    onDragEnd = {
+                        val velocity = tracker.calculateVelocity().x
+                        val direction = swipeDirection(dragged, velocity, width, flingVelocity)
+                        if (direction == 0) {
+                            scope.launch { animate(offset, 0f) { value, _ -> offset = value } }
+                        } else {
+                            busy = true
+                            scope.launch {
+                                val exit = if (direction > 0) -width else width
+                                animate(offset, exit) { value, _ -> offset = value }
+                                if (direction > 0) latestOnNext() else latestOnPrev()
+                                // 从相反一侧出发再拉回正中，形成「新页推入」
+                                offset = -exit
+                                animate(offset, 0f) { value, _ -> offset = value }
+                                busy = false
+                            }
+                        }
+                    },
+                )
+            },
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = offset },
+        ) {
+            content()
+        }
     }
 }
 
@@ -266,10 +407,12 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .padding(1.dp)
+            // 手势范围要盖满整格：`padding` 若排在 `clickable` 之前，格与格之间那 1dp 缝
+            // 就不属于任何格子，点上去等于点在空气上（旧版会穿透到首页卡片）。
             .clip(RoundedCornerShape(10.dp))
-            .background(if (cell.isSelected) primary.copy(alpha = 0.14f) else Color.Transparent)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(1.dp)
+            .background(if (cell.isSelected) primary.copy(alpha = 0.14f) else Color.Transparent),
         contentAlignment = Alignment.Center,
     ) {
         if (cell.isToday) {
