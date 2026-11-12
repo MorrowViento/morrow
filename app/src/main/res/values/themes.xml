@@ -3,4 +3,19 @@
     <style name="Theme.Ying" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
+
+    <!--
+      小部件 pin 请求用的过渡主题：**必须真的可见**。
+
+      `requestPinAppWidget` 在部分 ROM（ColorOS 等）上要求调用方在前台可见，
+      用 Theme.NoDisplay 的话这个 Activity 永远到不了 RESUMED，系统会拒掉请求，
+      表现出来就是「不先打开 App 就提示桌面不支持」。这里用透明但可见的窗口，
+      请求发完再自己结束。
+    -->
+    <style name="Theme.Ying.PinWidget" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

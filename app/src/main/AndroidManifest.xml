@@ -117,7 +117,13 @@
             android:excludeFromRecents="true"
             android:exported="true"
             android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay" />
+            android:theme="@style/Theme.Ying.PinWidget" />
+
+        <!-- 集合视图的数据源。BIND_REMOTEVIEWS 由系统在绑定集合视图时授予，必须声明 -->
+        <service
+            android:name=".widget.WidgetListService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
 
         <!-- 跨天刷新闹钟。exported=false：只接受本应用 PendingIntent 的投递 -->
         <receiver

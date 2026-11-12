@@ -213,13 +213,13 @@ private fun ConfigContent(
                 }
 
                 item(key = "preset-hint") {
-                    // 行数与小部件高度强相关：塞不下时不会滚动，只会被裁掉
+                    // 行数现在由卡片高度决定，预设只影响信息密度，不再"卡"住条数
                     Text(
                         text = when (style.preset) {
-                            WidgetPreset.MINIMAL -> "1 行，2 格高就够"
-                            WidgetPreset.STANDARD -> "3 行，建议 3 格高"
-                            WidgetPreset.DETAILED -> "5 行，建议 5 格高（长按小部件可调尺寸）"
-                        },
+                            WidgetPreset.MINIMAL -> "只留标题和天数，最省地方"
+                            WidgetPreset.STANDARD -> "标题 + 分类/日期，日常够用"
+                            WidgetPreset.DETAILED -> "再加上进度条，信息最全"
+                        } + "；卡片拉多高就排多少行，内容多了可以在卡片里上下滑动",
                         style = TextStyle(fontSize = 11.sp, color = secondary),
                     )
                 }

@@ -1,25 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  总览小部件。
+  总览小部件：头部 + 可滚动的列表 + 空态。
 
-  为什么是 5 组写死的行而不是一个列表：RemoteViews 只能直连静态视图，
-  集合视图必须走 RemoteViewsService + Adapter，为一个 1~5 行的小部件引入整套
-  Service 生命周期不划算。多出来的行在刷新时直接 GONE。
-
-  颜色、字号、显隐全部由 WidgetRefresher 在运行时套用，这里只放中性占位值。
+  为什么改成 ListView（集合视图）：RemoteViews 只能直连静态视图，静态视图**不能滚动**，
+  于是「拖大之后下方还是空白」成了必然——固定 5 行，多出来的空间没有任何东西可填。
+  集合视图由桌面接管，条目按高度自然排布，内容超出时可以在卡片里上下滑动。
+  代价是需要一个 RemoteViewsService（见 WidgetListService）。
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:background="@drawable/widget_bg_dark"
     android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_dark"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="10dp">
 
     <LinearLayout
+        android:id="@+id/widget_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
         android:baselineAligned="false"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <TextView
@@ -38,14 +41,26 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
+            android:ellipsize="end"
             android:gravity="end"
             android:maxLines="1"
-            android:ellipsize="end"
             android:text="@string/widget_loading"
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- 空态：没有事件时顶掉所有行 -->
+    <ListView
+        android:id="@+id/widget_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:scrollbars="none" />
+
     <TextView
         style="@style/WidgetText.Dim"
         android:id="@+id/widget_empty"
@@ -55,354 +70,4 @@
         android:text="@string/widget_empty"
         android:textSize="13sp"
         android:visibility="gone" />
-
-    <LinearLayout
-        android:id="@+id/row0"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row0_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="15sp" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row0_meta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="11sp" />
-
-            <ProgressBar
-                android:id="@+id/row0_progress"
-                style="@android:style/Widget.Material.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row0_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row0_unit"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/row1"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row1_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="15sp" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row1_meta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="11sp" />
-
-            <ProgressBar
-                android:id="@+id/row1_progress"
-                style="@android:style/Widget.Material.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row1_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row1_unit"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/row2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row2_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="15sp" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row2_meta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="11sp" />
-
-            <ProgressBar
-                android:id="@+id/row2_progress"
-                style="@android:style/Widget.Material.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row2_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row2_unit"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/row3"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row3_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="15sp" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row3_meta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="11sp" />
-
-            <ProgressBar
-                android:id="@+id/row3_progress"
-                style="@android:style/Widget.Material.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row3_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row3_unit"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/row4"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row4_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="15sp" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row4_meta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textSize="11sp" />
-
-            <ProgressBar
-                android:id="@+id/row4_progress"
-                style="@android:style/Widget.Material.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_marginTop="4dp"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/WidgetText"
-                android:id="@+id/row4_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                style="@style/WidgetText.Dim"
-                android:id="@+id/row4_unit"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp" />
-        </LinearLayout>
-    </LinearLayout>
 </LinearLayout>

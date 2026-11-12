@@ -16,7 +16,6 @@ import com.jiuxina.ying.R
 import com.jiuxina.ying.data.EventRepository
 import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.widget.WidgetRefreshTrigger
-import com.jiuxina.ying.data.widget.WidgetRow
 import com.jiuxina.ying.data.widget.WidgetSnapshotBuilder
 import com.jiuxina.ying.domain.model.CountdownEvent
 import java.time.LocalDate
@@ -44,16 +43,6 @@ class WidgetRefresher(
 
     private val overviewComponent = ComponentName(appContext, YingWidgetProvider::class.java)
     private val detailComponent = ComponentName(appContext, YingDetailWidgetProvider::class.java)
-
-    /** 总览小部件固定 5 组行视图（XML 里写死），按样式决定显示前几行。 */
-    private class RowIds(
-        val container: Int,
-        val title: Int,
-        val meta: Int,
-        val progress: Int,
-        val badge: Int,
-        val unit: Int,
-    )
 
     override suspend fun refreshAll() {
         // 小部件是「顺带」的能力，任何一处出错都不该波及 App 本体：
@@ -90,15 +79,21 @@ class WidgetRefresher(
             val views = if (isDetail) {
                 buildDetail(widgetId, style, all, today, now, systemDark)
             } else {
-                buildOverview(style, all, today, now, systemDark)
+                buildOverview(widgetId, style, all, today, now, systemDark)
             }
             manager.updateAppWidget(widgetId, views)
+            if (!isDetail) {
+                // 集合视图的内容不在 RemoteViews 里，改完必须单独通知一次数据变化，
+                // 否则拖大 / 增删事件之后列表还是旧的（甚至是空的）
+                manager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+            }
         }
     }
 
     // ---------------------------------------------------------------- 总览
 
     private fun buildOverview(
+        widgetId: Int,
         style: WidgetStyle,
         events: List<CountdownEvent>,
         today: LocalDate,
@@ -113,9 +108,10 @@ class WidgetRefresher(
             backgroundAccent = R.drawable.widget_bg_accent,
         )
         views.setInt(R.id.widget_root, "setBackgroundResource", colors.backgroundRes)
-        views.setOnClickPendingIntent(R.id.widget_root, openAppIntent())
+        views.setOnClickPendingIntent(R.id.widget_header, openAppIntent())
 
-        val snapshot = WidgetSnapshotBuilder.overview(events, today, now, style.rows)
+        // 行数不再由预设决定，也不再截断到 5：集合视图按卡片高度排版，内容超出可上下滑动
+        val snapshot = WidgetSnapshotBuilder.overview(events, today, now, OVERVIEW_ROW_LIMIT)
         views.setTextViewText(R.id.widget_header_meta, snapshot.headerMeta)
         views.setTextColor(R.id.widget_header_title, colors.textPrimary)
         views.setTextColor(R.id.widget_header_meta, colors.textSecondary)
@@ -125,57 +121,16 @@ class WidgetRefresher(
             (style.fontScale.metaSp + 1f),
         )
         views.setViewVisibility(R.id.widget_empty, if (snapshot.isEmpty) View.VISIBLE else View.GONE)
+        views.setViewVisibility(R.id.widget_list, if (snapshot.isEmpty) View.GONE else View.VISIBLE)
         views.setTextColor(R.id.widget_empty, colors.textSecondary)
+        views.setOnClickPendingIntent(R.id.widget_empty, openAppIntent())
 
-        ROW_IDS.forEachIndexed { index, ids ->
-            val row = snapshot.rows.getOrNull(index)
-            if (row == null) {
-                views.setViewVisibility(ids.container, View.GONE)
-                return@forEachIndexed
-            }
-            bindRow(views, ids, row, style, colors)
-        }
+        val adapter = Intent(appContext, WidgetListService::class.java)
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+        views.setRemoteAdapter(widgetId, R.id.widget_list, adapter)
+        // 条目点击 = 模板（目标 Activity）+ fill-in（事件 id/data），模板必须是 MUTABLE 才能被填
+        views.setPendingIntentTemplate(R.id.widget_list, listTemplateIntent())
         return views
-    }
-
-    private fun bindRow(
-        views: RemoteViews,
-        ids: RowIds,
-        row: WidgetRow,
-        style: WidgetStyle,
-        colors: WidgetColors,
-    ) {
-        views.setViewVisibility(ids.container, View.VISIBLE)
-        views.setOnClickPendingIntent(ids.container, eventIntent(row.id))
-
-        views.setTextViewText(ids.title, row.title)
-        views.setTextColor(ids.title, colors.textPrimary)
-        views.setTextViewTextSize(ids.title, TypedValue.COMPLEX_UNIT_SP, style.fontScale.titleSp)
-
-        val meta = row.metaLine(style.showCategory, style.showDate)
-        views.setTextViewText(ids.meta, meta)
-        views.setTextColor(ids.meta, colors.textSecondary)
-        views.setTextViewTextSize(ids.meta, TypedValue.COMPLEX_UNIT_SP, style.fontScale.metaSp)
-        views.setViewVisibility(ids.meta, if (meta.isEmpty()) View.GONE else View.VISIBLE)
-
-        views.setTextViewText(ids.badge, row.badgeText)
-        views.setTextColor(ids.badge, colors.textPrimary)
-        views.setTextViewTextSize(ids.badge, TypedValue.COMPLEX_UNIT_SP, style.fontScale.badgeSp)
-
-        views.setTextViewText(ids.unit, row.badgeUnit)
-        views.setTextColor(ids.unit, colors.textSecondary)
-        views.setTextViewTextSize(ids.unit, TypedValue.COMPLEX_UNIT_SP, style.fontScale.metaSp)
-
-        val showProgress = style.showProgress && row.progressPercent >= 0
-        views.setViewVisibility(ids.progress, if (showProgress) View.VISIBLE else View.GONE)
-        if (showProgress) {
-            views.setProgressBar(ids.progress, 100, row.progressPercent, false)
-            views.setColorStateList(
-                ids.progress,
-                "setProgressTintList",
-                android.content.res.ColorStateList.valueOf(colors.accent),
-            )
-        }
     }
 
     // ---------------------------------------------------------------- 单事件
@@ -283,6 +238,26 @@ class WidgetRefresher(
     }
 
     /**
+     * 集合视图条目的点击模板。
+     *
+     * 集合视图的每个条目不能各自带 PendingIntent（条目由桌面按需创建，那时没有权限），
+     * 只能「模板定目标 Activity + 条目 fill-in 补 data/extras」。
+     * 因此模板**必须可被填充**（`FLAG_MUTABLE`），用 IMMUTABLE 的话 fill-in 会被丢弃，
+     * 点哪条都只打开首页。
+     */
+    private fun listTemplateIntent(): PendingIntent {
+        val intent = Intent(appContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            appContext,
+            2_000,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+    }
+
+    /**
      * 单事件小部件点空白处（未绑定时也点它）= 重新配置。
      *
      * 必须指向 `DetailWidgetConfigActivity`：总览的配置台没有「绑定事件」区，
@@ -309,15 +284,12 @@ class WidgetRefresher(
     companion object {
         private const val TAG = "YingWidget"
 
-        /** 与 `widget_overview.xml` 里写死的 5 组行保持一致。 */
-        private const val ROW_COUNT = 5
-
-        private val ROW_IDS = arrayOf(
-            RowIds(R.id.row0, R.id.row0_title, R.id.row0_meta, R.id.row0_progress, R.id.row0_badge, R.id.row0_unit),
-            RowIds(R.id.row1, R.id.row1_title, R.id.row1_meta, R.id.row1_progress, R.id.row1_badge, R.id.row1_unit),
-            RowIds(R.id.row2, R.id.row2_title, R.id.row2_meta, R.id.row2_progress, R.id.row2_badge, R.id.row2_unit),
-            RowIds(R.id.row3, R.id.row3_title, R.id.row3_meta, R.id.row3_progress, R.id.row3_badge, R.id.row3_unit),
-            RowIds(R.id.row4, R.id.row4_title, R.id.row4_meta, R.id.row4_progress, R.id.row4_badge, R.id.row4_unit),
-        )
+        /**
+         * 集合视图的条数上限。
+         *
+         * 之所以还有上限：列表由桌面排版，滚多少条都能滚，但一次塞几百条会拖慢
+         * binder 传输与首帧。50 与首页列表的量级一致，实际没人会在桌面滚到底。
+         */
+        private const val OVERVIEW_ROW_LIMIT = 50
     }
 }
