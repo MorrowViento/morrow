@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标背景：晨曦到暮色的线性渐变。
+  取色刻意避开高饱和纯色 —— 前景的日轮与地平线要在两种遮罩下都清楚。
+  渐变直接写在 VectorDrawable 里（aapt inline gradient，API 24+），
+  这样不必为每种密度准备 PNG，minSdk 33 上没有任何兼容负担。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="8"
+                android:startY="2"
+                android:endX="100"
+                android:endY="106"
+                android:startColor="#FFCF8A"
+                android:centerColor="#F2795C"
+                android:endColor="#3A3161" />
+        </aapt:attr>
+    </path>
+</vector>

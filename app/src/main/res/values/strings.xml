@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">萤</string>
+    <string name="app_name">朝夕</string>
 
     <!-- M4 提醒 -->
     <string name="reminder_channel_name">事件提醒</string>
@@ -11,11 +11,11 @@
     <string name="reminder_test_body">通知链路正常，到点会以这条形式提醒你</string>
 
     <!-- M5 小部件 -->
-    <string name="widget_overview_label">萤 · 总览</string>
+    <string name="widget_overview_label">朝夕 · 总览</string>
     <string name="widget_overview_desc">最近要到的几个倒数日，一行一个</string>
-    <string name="widget_detail_label">萤 · 单事件</string>
+    <string name="widget_detail_label">朝夕 · 单事件</string>
     <string name="widget_detail_desc">盯住一个重要日子的大天数</string>
-    <string name="widget_header_title">萤</string>
+    <string name="widget_header_title">朝夕</string>
     <string name="widget_loading">载入中…</string>
     <string name="widget_empty">还没有倒数日</string>
     <string name="widget_detail_unbound">未选择事件</string>
@@ -31,8 +31,8 @@
 
     <!-- 长按桌面图标弹出的快捷方式（静态 shortcut） -->
     <string name="shortcut_widget_overview_short">总览小部件</string>
-    <string name="shortcut_widget_overview_long">添加「萤 · 总览」到桌面</string>
+    <string name="shortcut_widget_overview_long">添加「朝夕 · 总览」到桌面</string>
     <string name="shortcut_widget_detail_short">单事件小部件</string>
-    <string name="shortcut_widget_detail_long">添加「萤 · 单事件」到桌面</string>
+    <string name="shortcut_widget_detail_long">添加「朝夕 · 单事件」到桌面</string>
     <string name="shortcut_widget_disabled">当前版本已移除该快捷方式</string>
 </resources>

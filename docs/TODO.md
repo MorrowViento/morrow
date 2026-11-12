@@ -1,18 +1,20 @@
-# TODO — 萤 · Kotlin 重构
+# TODO — 朝夕 · Kotlin 重构
 
 ## 项目概述
 
-用 Kotlin + Jetpack Compose + Glasmio（Liquid Glass）重写倒数日应用「萤」（Android 13+），取代 Flutter 主线。
+用 Kotlin + Jetpack Compose + Glasmio（Liquid Glass）重写倒数日应用「朝夕」（Android 13+），取代 Flutter 主线。
 
 ## 当前阶段
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**228 项单测全绿、lint 0 errors / 11 warnings**（`abortOnError=true`），debug APK 约 77 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
+M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**228 项单测全绿、lint 0 errors / 9 warnings**（`abortOnError=true`），debug APK 约 76 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
+
+2026-11-12 完成**品牌重塑**：应用名「萤」→「**朝夕**」，工程 / 目录 / Gradle 根名 → `morrow`，`applicationId` / Kotlin 包 → `com.morrowviento.morrow`，`Ying*` 类与 `Theme.Ying` → `Morrow*`，内部数据标识（`morrow.db`、`morrow_settings`、`morrow://`、action 前缀）同步；新增自适应图标（晨昏渐变 + 日轮），此前没有 `android:icon`。**破坏性变更**：旧「萤」不能覆盖升级到新包，需先导出备份、卸载、装新包后导入；自有签名密钥的生成与注入见 `docs/SIGNING.md`。
 
 真机首轮反馈的两个运行时问题已修：日历整页覆盖缺底色导致与首页重叠、日期滚轮所在的 `verticalScroll` 表单里 `LazyColumn` 无界高导致点 + 号闪退（详见 `docs/CHANGELOG.md` 同名条目）。
 
-**m6 的「打开即闪退」已结案**：根因是 `YingApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.jiuxina.ying/startup.log` 可确认是哪个自愈步骤失败。
+**m6 的「打开即闪退」已结案**：根因是 `MorrowApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.morrowviento.morrow/startup.log` 可确认是哪个自愈步骤失败。
 
-仓库 `https://github.com/MorrowViento/ying-native` · 分支 `main` · 已对齐 `origin/main`（HEAD `a525f2a`，代理 502 下后台重试第 24 次推送成功）· 版本 `4.0.0-alpha1 (40)`
+仓库 `https://github.com/MorrowViento/ying-native`（**GitHub 仓库名待改为 `morrow-native`**；改名后旧地址会自动重定向，本地 remote 无需改）· 分支 `main` · 已对齐 `origin/main` · 版本 `4.0.0-alpha1 (40)`
 
 M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，见 `docs/CHANGELOG.md`。**尚未完成**：发布首个 GitHub Release、正式签名密钥注入、真机走完「检查→下载→安装→升级」全流程、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
 
@@ -64,7 +66,7 @@ M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，见 `d
 | M2b2 | `ui/category/{CategorySheet,CategoryViewModel}.kt`（新建）、`data/category/{CategoryRepository,CategoryRules,CategoryCodec}.kt`（新建）、`domain/model/EventCategory.kt`（新建）、`ui/component/GlassControls.kt`（新建，两个浮层共用）、`data/db/{EventDao,CategoryUsage}.kt`、`ui/event/EventEditSheet.kt` |
 | M2c | `ui/event/{EventDetailScreen,UndoBar,EventActions,EventViewModel,HomeUiState}.kt`、`data/undo/{UndoRepository,UndoCodec}.kt`（新建）、`domain/model/UndoOperation.kt`（新建）、`ui/home/{HomeScreen,EventCardView}.kt` |
 | M2d | `ui/calendar/{CalendarUiState,CalendarActions,CalendarScreen}.kt`（新建）、`domain/time/LunarCalendar.kt`（新建）、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt`、`MainActivity.kt` |
-| M4 | `domain/time/ReminderPlan.kt`、`data/reminder/{ReminderScheduler,AlarmReminderScheduler,ReminderPermissions}.kt`、`reminder/{ReminderNotifier,ReminderReceiver,ReminderBootReceiver}.kt`、`ui/reminder/{ReminderUiState,ReminderViewModel,ReminderSheet}.kt`、`AndroidManifest.xml`（权限 + 两个 receiver）、`res/drawable/ic_notification.xml`、`YingApp.kt`、`MainActivity.kt`、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt` |
+| M4 | `domain/time/ReminderPlan.kt`、`data/reminder/{ReminderScheduler,AlarmReminderScheduler,ReminderPermissions}.kt`、`reminder/{ReminderNotifier,ReminderReceiver,ReminderBootReceiver}.kt`、`ui/reminder/{ReminderUiState,ReminderViewModel,ReminderSheet}.kt`、`AndroidManifest.xml`（权限 + 两个 receiver）、`res/drawable/ic_notification.xml`、`MorrowApp.kt`、`MainActivity.kt`、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt` |
 | M5 | `widget/`、`service/widget/`（均由旧工程迁移） |
 | M6 | `ui/settings/`、`data/settings/SettingsRepository.kt`、`service/backup/` |
 | M7 | `service/update/`、`ui/update/`、`ui/settings/`、`ui/component/WheelPicker.kt`、`domain/time/CalendarMath.kt`、`app/build.gradle.kts`、`AndroidManifest.xml`、`res/xml/file_paths.xml`、`update/manifest.json` |

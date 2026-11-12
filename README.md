@@ -1,15 +1,15 @@
-# ying-native
+# morrow-native
 
-「萤」的 Kotlin 重构工程（Jetpack Compose + Glasmio 0.1.2）。
+「朝夕」（Morrow）的 Kotlin 重构工程（Jetpack Compose + Glasmio 0.1.2）。
 
-重构总计划见上一级目录《ying-kotlin-refactor-plan.md》。本仓库遵循以下既定决策：
+重构总计划见上一级目录《ying-kotlin-refactor-plan.md》（文件名沿用旧称呼，未随本次更名调整）。本仓库遵循以下既定决策：
 
 | 决策 | 结论 |
 |---|---|
 | D1 最低系统 | Android 13（API 33），Glasmio 强制要求 |
 | D2 重构策略 | 不并行维护 Flutter 主线，全力专注重构 |
 | D3 Glasmio | 锁定 `io.github.neoruaa.glasmio:*:0.1.2`（Maven Central）；业务代码不得直接 import，仅经 `ui/glass/` 封装层调用 |
-| D4 图标 | 不使用 SF Symbols（Apple 字体许可），使用备用图标方案 |
+| D4 图标 | 自绘自适应图标「晨昏日轮」（矢量前景 + 渐变底 + Android 13 单色版）；不使用 SF Symbols（Apple 字体许可） |
 | D5 技术栈 | Compose + ViewModel + Room + DataStore + WorkManager |
 | D6 构建链 | JDK 21 · Android SDK 37（platform android-37.0 / build-tools 37.0.0）· Gradle 9.6.0 |
 
@@ -25,6 +25,9 @@
   然后 `gradle :app:assembleDebug`
 - Gradle wrapper 已随仓库提供；若本机无法访问 `services.gradle.org`，直接用本机安装的
   Gradle 9.6.0 执行即可（wrapper 只影响本地开发，CI 使用 `gradle/actions/setup-gradle` 拉取）
+- 发布签名：`gradle :app:assembleRelease`，密钥参数走 `MORROW_KEYSTORE*` 环境变量或
+  `~/.gradle/gradle.properties` 的 `morrow.*`；生成与验证步骤见 [`docs/SIGNING.md`](docs/SIGNING.md)。
+  **仓库里不存放任何 keystore 或密码。**
 
 ## Glasmio API 版本约定
 
@@ -41,7 +44,7 @@
 ## 包结构约定
 
 ```
-app/src/main/java/com/jiuxina/ying/
+app/src/main/java/com/morrowviento/morrow/
   ui/glass/    # Glasmio 封装层（唯一允许 import Glasmio 的目录）
   ui/          # Compose 页面（M2+ 逐步填充）
   data/        # Room + DataStore（M1）
@@ -60,7 +63,7 @@ app/src/main/java/com/jiuxina/ying/
 | 领域模型 | `CountdownEvent` / `EventReminder` / `CountDirection` / `RepeatType`，与 Flutter 版字段一一对应 |
 | 日历计算 | `CalendarMath`（LocalDate 差值，天然规避夏令时）、`RepeatRule`（每年重复，闰日回落 2/28） |
 | 持久化 | Room `events` 表（时间存本地时区毫秒，提醒列表存 JSON），schema 导出至 `app/schemas/` |
-| 设置 | DataStore `ying_settings`，**键名沿用 Flutter 原始键名**，迁移后无需二次映射 |
+| 设置 | DataStore `morrow_settings`，**键名沿用 Flutter 原始键名**，迁移后无需二次映射 |
 | 旧数据迁移 | 读 `FlutterSharedPreferences`（`flutter.` 前缀）→ 事件入 Room、其余键入 DataStore；幂等（`migration.legacy_v1_done`），单条损坏不阻断 |
 | 测试 | 22 项单元测试（日历/重复/提醒归一化/旧 JSON 解析/键值拆分/实体映射） |
 
@@ -69,4 +72,9 @@ app/src/main/java/com/jiuxina/ying/
 
 ## 包名说明
 
-`applicationId` 保持 `com.jiuxina.ying` 与 Flutter 版一致，确保正式发布时升级安装覆盖旧包。
+`applicationId` = `com.morrowviento.morrow`（Kotlin 包同名）。**这是 2026-11-12 品牌重塑后的新标识，与 Flutter 版
+`com.jiuxina.ying` 不再是同一个应用**：旧「萤」无法覆盖升级到「朝夕」，需要先导出备份再卸载、装新包后导入。
+
+代价换来的是命名彻底干净（代码、资源、数据文件里不再出现旧前缀）。签名密钥与升级注意事项见
+[`docs/SIGNING.md`](docs/SIGNING.md)；如果以后需要恢复「老用户无缝覆盖升级」，唯一做法是把 `applicationId`
+改回旧值并沿用旧签名密钥，这不是改个字符串就能完成的事。

@@ -1,17 +1,18 @@
-# HANDOFF — 萤 · Kotlin 重构
+# HANDOFF — 朝夕 · Kotlin 重构
 
 ## 任务背景
 
-把「萤」倒数日应用从 Flutter 重写为 Kotlin/Compose + Glasmio Liquid Glass（Android 13+），包名与 Flutter 版保持一致以便覆盖升级。
+把「朝夕」（Morrow）倒数日应用从 Flutter 重写为 Kotlin/Compose + Glasmio Liquid Glass（Android 13+）。2026-11-12 品牌重塑后 `applicationId` 为 `com.morrowviento.morrow`，**不再**沿用 Flutter 版的 `com.jiuxina.ying`，升级方式见 `docs/SIGNING.md`。
 
 ## 当前进度快照（2026-11-12 14:30，交接以此为准）
 
 | 项 | 状态 |
 |---|---|
 | 阶段 | **M7 应用内更新与发布**；M0–M6 代码完成，**M2a–M6 真机验收基本通过**（用户 2026-11-12 确认） |
-| 版本 / 分支 | `4.0.0-alpha1 (40)` / `main`；本地与 `origin/main` 同为 `a525f2a` |
-| 验证 | 228 项单测全绿；lint **0 errors / 11 warnings**（`abortOnError = true`）；debug APK 约 77 MB |
-| 交付 | 上级目录 `ying-4.0.0-alpha1-debug-year-range-m7.apk`；本机无 adb/模拟器，真机由用户在 OnePlus PJZ110 / Android 17 验收 |
+| 品牌 | 应用名「**朝夕**」；项目 / Gradle 根名 / 目录 / 包名后缀均为 `morrow`，`applicationId` = `com.morrowviento.morrow`；图标为自绘「晨昏日轮」自适应图标 |
+| 版本 / 分支 | `4.0.0-alpha1 (40)` / `main`；本地与 `origin/main` 同为 `a525f2a`（品牌重塑提交之后另记） |
+| 验证 | 228 项单测全绿；lint **0 errors / 9 warnings**（`abortOnError = true`）；debug APK 约 76 MB |
+| 交付 | 上级目录 `morrow-4.0.0-alpha1-debug-year-range-m7.apk`；本机无 adb/模拟器，真机由用户在 OnePlus PJZ110 / Android 17 验收 |
 | 工作区 | 仅 `docs/MANUAL-TEST.md` 有用户本地勾选的 40 项验收记录，**按用户要求暂不提交、不推送** |
 | 下一步 | 发布首个带 APK 资产的 GitHub Release → 真机走 N1–N9 → 全量回归与签名发版 |
 
@@ -23,8 +24,8 @@
 
 1. **M0 工程基建**：AGP 9.4.1 / Kotlin 2.4.21 / Gradle 9.6.0 / compileSdk 37 / minSdk 33 / JDK 21；Glasmio 0.1.2 双模块依赖；`ui/glass/` 封装层；无 NDK/CMake。
 2. **CI**：`.github/workflows/android-ci.yml`，`assembleDebug + testDebugUnitTest + lintDebug` 出 debug APK 工件。
-3. **M1 数据层**：Room `events`（schema 已导出）+ DataStore `ying_settings` + 幂等旧数据迁移 + 22 项单测全绿。
-4. **应用容器**：`YingApp` 手写依赖装配（DB / EventRepository / SettingsRepository），启动即跑迁移（失败不阻断）。
+3. **M1 数据层**：Room `events`（schema 已导出）+ DataStore `morrow_settings` + 幂等旧数据迁移 + 22 项单测全绿。
+4. **应用容器**：`MorrowApp` 手写依赖装配（DB / EventRepository / SettingsRepository），启动即跑迁移（失败不阻断）。
 5. **M2a 首页列表**：`EventViewModel` + `EventPresentation`（纯函数排序/进度）+ `HomeScreen` + `EventCardView`；玻璃封装层增文字色与圆形面板。
 6. **M2b 新建表单**：`EventFormState` + `WheelDateTimePicker`（五列滚轮）+ `EventEditSheet`（同页浮层）+ FAB 落库；41 项单测全绿。**未真机校准。**
 7. **T0 远程对齐**：根因是 `core.autocrlf=true` 导致 README 整文件换行符差异；加 `.gitattributes`（`eol=lf`）→ `reset --mixed origin/main` → 两次提交（`c02adc9` 行尾 / `548edad` M2a+M2b+docs）→ `push -u origin main`。本地与远程齐平于 `548edad`，CI 全绿。
@@ -33,17 +34,18 @@
 10. **M2c 详情页 + 6 秒撤销**：`UndoOperation`/`UndoCodec`/`UndoRepository`（立即落库 + 快照回填 + `expiresAt` 持久化 + 启动按剩余时间恢复）+ `EventDetailScreen` + `UndoBar` + `EventActions`；首页卡片可点开详情，标题右侧「⋯」菜单含清空已完成/清空全部（后者二次确认）。72 项单测全绿。**未真机验收。**
 11. **M2d 日历三视图**：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖：换算 / 月名日名 / 农历节日 / 除夕）+ `CalendarPresentation`（纯函数：42 格月网格、重复事件按当年周年落位、年视图 12 月汇总、按月分组）+ `CalendarScreen`（月/年/列表三视图、分段切换、`‹ ›` 翻页、回到今天）+ `CalendarNav`/`CalendarActions`；`EventViewModel` 增按天刷新的 `calendar` 状态流；首页标题栏新增日历入口（Canvas 图标），日历整页覆盖并与首页共用 backdrop，`BackHandler` 优先关日历。101 项单测全绿。**未真机验收。**
 12. **M4 提醒通知**：`ReminderPlan`（纯函数：锚点 = 全天 09:00 / 否则目标时刻；每条提醒 = 锚点 − 提前分钟；年度重复按当次周年；单事件最多 2 次落点 × 5 条 = 10 个闹钟上限，靠触发后立即重排自转）+ `AlarmReminderScheduler`（槽位模型：`requestCode` = 槽位下标、`Intent.data` 带事件 id；有精确权限走 `setExactAndAllowWhileIdle`，无则退化 `setAndAllowWhileIdle`）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟三 action 共用，`goAsync` + IO 读库）+ `ReminderBootReceiver`（开机、覆盖安装、时间/时区变更全量对账）+ `ReminderNotifier`（高优先级渠道，日期取当次落点）+ `ReminderPermissions` + `ui/reminder/` 诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动对账；通知点击经 `singleTop` + `StateFlow` 直达详情页。113 项单测全绿。**未真机验收——这是唯一必须真机才能验证的里程碑。**
-13. **M5 桌面小部件**：`WidgetSnapshotBuilder`（纯函数：未完成事件 → 小部件行，置顶优先 / 未来按临近升序 / 已过排队尾，徽章文案「今天 / N 天 / 已过 N」与首页一致）+ `WidgetStyle`/`WidgetStyleCodec`（预设 1/3/5 行 × 字号三档 × 配色四套 × 分类/日期/进度三开关，逐字段容错解码 + 旧键尽力映射）+ `WidgetConfigStore`（`widget.<id>.style` 单键 JSON，复用同一 DataStore）+ `WidgetRefresher`（唯一刷新入口：一次性查 Room → 拼 RemoteViews → setTextColor/setTextViewTextSize/setBackgroundResource 全套用）+ `YingWidgetProvider`/`YingDetailWidgetProvider` + `MidnightRefreshScheduler`/`WidgetMidnightReceiver`（本地零点刷一次再排下一次，有精确权限走 `setExactAndAllowWhileIdle` 否则降级）+ `WidgetConfigActivity`（玻璃风配置台，LazyColumn 承载，含实时预览与事件绑定）。142 项单测全绿（新增 29：快照 17 + 样式 12）。**未真机验收。**
+13. **M5 桌面小部件**：`WidgetSnapshotBuilder`（纯函数：未完成事件 → 小部件行，置顶优先 / 未来按临近升序 / 已过排队尾，徽章文案「今天 / N 天 / 已过 N」与首页一致）+ `WidgetStyle`/`WidgetStyleCodec`（预设 1/3/5 行 × 字号三档 × 配色四套 × 分类/日期/进度三开关，逐字段容错解码 + 旧键尽力映射）+ `WidgetConfigStore`（`widget.<id>.style` 单键 JSON，复用同一 DataStore）+ `WidgetRefresher`（唯一刷新入口：一次性查 Room → 拼 RemoteViews → setTextColor/setTextViewTextSize/setBackgroundResource 全套用）+ `MorrowWidgetProvider`/`MorrowDetailWidgetProvider` + `MidnightRefreshScheduler`/`WidgetMidnightReceiver`（本地零点刷一次再排下一次，有精确权限走 `setExactAndAllowWhileIdle` 否则降级）+ `WidgetConfigActivity`（玻璃风配置台，LazyColumn 承载，含实时预览与事件绑定）。142 项单测全绿（新增 29：快照 17 + 样式 12）。**未真机验收。**
 14. **M6 设置中心与备份**：`AppSettings`/`ThemeMode`（`isDark(systemDark)` 纯函数）+ `SettingsRepository.appSettings`（四条 Flow combine 成一个快照，另有 `snapshotSettings`/`applySettings` 供备份一次性读写）+ `GlassTheme(darkTheme, reduceTransparency, reduceMotion)`（`GlasmioTheme(isDark=)` + `GlassAppearance(reduceTransparency=)`，并暴露 `LocalGlassDark`/`LocalReduceMotion`）+ `data/backup/`：`BackupDocument`/`BackupCodec`（逐字段读、逐条事件解析、坏条目跳过计数、版本过高拒绝、时间兼收 ISO 与毫秒）+ `BackupMapper` + `BackupMerge` + `BackupRepository`（导出全量 / 导入 REPLACE|MERGE / 清空全部）+ `BackupFiles`（SAF 读写）+ `ui/settings/`：`SettingsScreen`（整页覆盖，外观/数据/提醒/关于四组，导入二次确认，一次性提示条）+ `SettingsViewModel`（导入后按 id 差集取消残留闹钟再整体重排、刷新小部件）；`WidgetConfigStore` 增 `widget.default_style` 兜底换机场景。167 项单测全绿（新增 25：编解码 17 + 合并与设置 8）。**未真机验收。**
 
 15. **真机验收修复链（2026-11-11 ~ 11-12）**：撤销条到期只清内存不删盘 + `pushedAtMillis` 10 分钟内 restore 给满 6 秒、restore 提前到 `MainActivity.onCreate`；新建默认时间改为「此刻」（秒截断到分钟）；分类改名后新旧并存的别名映射；日历翻页改瞬时切页（与箭头同路径）、整页 `pointerInput` 遮罩防穿透、`clickable` 放到 `padding` 前；测试通知补 `contentIntent`、两入口 `EXTRA_FROM_NOTIFICATION` 收浮层落首页、真实提醒按 `EXTRA_EVENT_ID` 开详情；提醒落点 12h 内走 `setAlarmClock`、远期走 exact，新增 `ScheduleTrace` 自证排期与诊断页「最近一次排期」。决策：**保持 12h 窗口不缩**，缩窗会削弱 ROM 省电策略下的准点免疫。
 16. **小部件二次打磨**：修正 `android:configure` 错指导致单事件无法选事件、默认样式串号（`KEY_DEFAULT_STYLE` 存/取都剥掉 `eventId`）；总览由静态 5 行改为 `ListView` + `RemoteViewsFactory` 集合视图（可滑动、行数随高度、点行直达详情）；刷新补 `notifyAppWidgetViewDataChanged` + adapter `data` URI 自增序号强制重绑；长按应用图标 → 先进配置台选样式/事件 → 再 `requestPinAppWidget`（`savePending`/`adoptPending` 认领）；设置页把多个同类实例合并成一行（`EXTRA_WIDGET_IDS` 整组保存刷新）。**ColorOS「服务卡片」是 OPPO 私有框架，标准 Android API 无法接入，已明确不做；pin 也不能指定桌面坐标。**
 17. **减弱透明与年份范围**：`Glasmio` 内建 `reduceTransparency` 会让 `usesBackdrop=false`，把玻璃降级成纯黑/纯白色块；改为始终传默认 `GlassAppearance()`，只在 `GlassPanel` 内侧叠 0.55 alpha 柔和色纱，彩色渐变背景在开关两种状态下完全一致。日期滚轮年份从 `thisYear-1..+20` 改为 `CalendarMath.SELECTABLE_YEARS` 的 1900–2100，与农历年表 / 日历翻页边界共用，并修掉首帧 `snapshotFlow` 把越界旧数据改写成边界年的问题。
 18. **M7 第一批（应用内更新）**：零新增依赖（`HttpURLConnection` + 现有 Gson）；`service/update/` 纯逻辑层 + 三路并发探测（**版本判定取版本号最大的一份**，测速只决定下载线路）+ Range 断点续传与 SHA-256 校验 + `PackageInstaller` 会话安装（系统仍会弹确认）/ FileProvider 兜底；设置 → 关于 → 检查更新，底部玻璃面板手动触发；`INTERNET` / `REQUEST_INSTALL_PACKAGES` / FileProvider、`lint.abortOnError=true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 模板与 CI JSON 校验。228 项单测全绿。**细节见 `docs/CHANGELOG.md` 同名条目。**
+19. **品牌重塑（2026-11-12）**：应用名「萤」→「**朝夕**」；Gradle 根名 `ying`→`morrow`，本地仓库目录 `ying-native`→`morrow-native`；`applicationId` / `namespace` / Kotlin 包 `com.jiuxina.ying`→`com.morrowviento.morrow`；`YingApp`/`YingDatabase`/`YingWidgetProvider`/`Theme.Ying` 等改为 `Morrow*`；内部标识同步为 `morrow.db`、`morrow_settings`、`morrow://` scheme、`com.morrowviento.morrow.action.*`、`MORROW_*` 签名环境变量，Room schema 目录随包名迁移。新增自适应图标（晨昏渐变底 + 日轮 / 地平线 / 倒影 + Android 13 单色版）——此前 `AndroidManifest` 里**根本没有** `android:icon`。签名改为自有密钥方案：`scripts/create-keystore.sh` + `docs/SIGNING.md`，支持环境变量与 `~/.gradle/gradle.properties` 双通道。**破坏性变更**：旧「萤」不能覆盖升级，需先导出备份、卸载、装新包后导入。
 
 ## 未完成清单（按顺序，可直接执行）
 
-1. **M7 发版配合（用户侧）**：仓库目前没有 GitHub Release，真机点「检查更新」会显示「已是最新版本」——这是预期而非故障。需发布一个带 APK 资产的 Release（命名建议 `ying-<versionCode>-<版本>-<abi>.apk`）并同步 `update/manifest.json`；正式签名密钥由用户持有，构建时用 `YING_KEYSTORE` / `YING_KEYSTORE_PASSWORD` / `YING_KEY_ALIAS` / `YING_KEY_PASSWORD` 注入，仓库不生成密钥。
+1. **M7 发版配合（用户侧）**：仓库目前没有 GitHub Release，真机点「检查更新」会显示「已是最新版本」——这是预期而非故障。需发布一个带 APK 资产的 Release（命名建议 `morrow-<versionCode>-<版本>-<abi>.apk`）并同步 `update/manifest.json`；正式签名密钥由用户持有，构建时用 `MORROW_KEYSTORE` / `MORROW_KEYSTORE_PASSWORD` / `MORROW_KEY_ALIAS` / `MORROW_KEY_PASSWORD` 注入（或写 `~/.gradle/gradle.properties` 的 `morrow.*`），仓库不生成密钥；生成与验证步骤见 **`docs/SIGNING.md`**。
 2. **M7 真机链路**：按 `docs/MANUAL-TEST.md` 的 N1–N9 走完「检查 → 下载 → 安装 → 升级」，含断网、无更新、镜像缓存落后、下载中断续传、安装确认弹窗、升级后数据与小部件无感迁移。
 3. **全量回归**：Android 13/14/15/16 覆盖，以及 `MANUAL-TEST.md` 里仍未勾选的细项（跨零点刷新、备份云盘读写、闹钟图标归属与远期提醒、撤销跨进程重启、低端机玻璃帧率）。
 4. **M0 遗留（可选）**：ktlint/detekt 静态检查接入 CI，不阻断当前代码。
@@ -60,7 +62,7 @@
 | D4 | 不用 SF Symbols | Apple 字体许可风险，改用 Material / 自绘矢量图标 |
 | D5 | Compose + ViewModel + Room + DataStore + WorkManager | 与 Glasmio 官方样例工程对齐，减少版本冲突 |
 | D6 | **不需要 NDK/CMake**（对原计划的修订） | Glasmio AAR 已内置四 ABI 预编译 `.so`，本工程无原生源码；省 3–5 分钟构建并少一个失败点 |
-| — | `applicationId` 保持 `com.jiuxina.ying`，`versionCode 40` | 让 Flutter 老用户能直接覆盖升级，数据留在同一沙盒 |
+| — | ~~`applicationId` 沿用 Flutter 版以便覆盖升级~~ **已废弃（2026-11-12 品牌重塑）**：`applicationId` = `com.morrowviento.morrow`，`versionCode 40` | 更名「朝夕」后不再与旧「萤」共存；代价是必须先导出备份、卸载旧包、装新包后导入。旧包名无法覆盖升级是有意取舍，不是遗漏；签名流程见 `docs/SIGNING.md` |
 | — | DataStore **键名沿用 Flutter 原始键**（见 `LegacySettingsKeys`） | 迁移后无需二次映射，M4/M5/M6 可直接按旧键读取 |
 | — | 时间存本地时区毫秒、提醒列表存 JSON | 避免 Room 的 `java.time` 适配器；提醒上限 5 条，独立建表不划算 |
 | — | 旧数据单调对齐 Dart 的 `fromJson` 兜底 | 缺 `category` 默认「生活」、未知枚举回落默认值、无 `reminders` 读旧字段 `reminderMinutes` |
@@ -99,12 +101,12 @@
 
 ## 关键文件路径与约定
 
-**仓库根**：`C:\Users\yunbo.wang\WorkBuddy\2026-11-09-15-57-01\ying-native`（上级目录放方案文档与 Glasmio 源码快照，不在仓库内）
+**仓库根**：`C:\Users\yunbo.wang\WorkBuddy\2026-11-09-15-57-01\morrow-native`（上级目录放方案文档与 Glasmio 源码快照，不在仓库内）
 
 ```
-app/src/main/java/com/jiuxina/ying/
+app/src/main/java/com/morrowviento/morrow/
   MainActivity.kt              # 入口：装配 EventViewModel + CategoryViewModel + ReminderViewModel + HomeScreen；通知点击经单例 intent 直达详情
-  YingApp.kt                   # 手写 DI 容器 + 启动迁移 + 提醒渠道与冷启动排期对账
+  MorrowApp.kt                   # 手写 DI 容器 + 启动迁移 + 提醒渠道与冷启动排期对账
   ui/glass/GlassTheme.kt       # 唯一允许 import Glasmio 的地方（GlassTheme/GlassBackdropHost/GlassPanel/GlassCirclePanel/glassTextPrimary/glassTextSecondary）
   ui/home/                     # HomeScreen（折叠标题/排序/分区/空态）+ EventCardView（徽章与进度环）
   ui/event/                    # HomeUiState + EventPresentation（纯函数层，可单测）+ EventViewModel
@@ -116,7 +118,7 @@ app/src/main/java/com/jiuxina/ying/
   data/backup/                 # BackupDocument/Codec/Mapper/Merge/Repository/Files（备份格式与 SAF 读写）
   data/settings/               # SettingsRepository + AppSettings/ThemeMode + LegacySettingsKeys
   data/EventRepository.kt      # 对外只暴露领域模型 + Flow
-  data/db/                     # EventEntity / EventDao / EventMapper / YingDatabase / CategoryUsage
+  data/db/                     # EventEntity / EventDao / EventMapper / MorrowDatabase / CategoryUsage
   data/legacy/                 # LegacyDataMigrator / LegacyEventParser / LegacyPrefsSplitter
   data/settings/               # SettingsRepository / LegacySettingsKeys
   data/category/               # CategoryRepository / CategoryRules / CategoryCodec
@@ -130,6 +132,8 @@ app/src/main/java/com/jiuxina/ying/
   ui/update/                   # M7：UpdateUiState / UpdateSheet（设置页底部更新面板）
 ```
 
+**图标与签名（不在上面的 Java 树里）**：`app/src/main/res/drawable/ic_launcher_{background,foreground,monochrome}.xml`、`app/src/main/res/mipmap-anydpi-{v26,v33}/ic_launcher{,_round}.xml`、`scripts/create-keystore.sh`、`docs/SIGNING.md`、`update/manifest.json`。
+
 **外部参考（务必按此为准）**
 - 上一级 `ying-kotlin-refactor-plan.md`：里程碑与工作量基线（D6 的 NDK 部分已作废）。
 - 上一级 `gs.kt`（glass 模块）、`gc.kt`（ui 模块）、`sample_v012.kt`：Glasmio **v0.1.2** 源码快照，查 API 用它们，不要查 main 分支。
@@ -137,6 +141,7 @@ app/src/main/java/com/jiuxina/ying/
 - `app/schemas/.../1.json`：Room 基线，改表必须升版本并写迁移。
 
 **约定**
+- 品牌：应用名「**朝夕**」，工程名 `morrow`。新增代码、资源、数据键**不要再引入 `ying` 前缀**；唯一保留旧名的是外部计划文档《ying-kotlin-refactor-plan.md》。
 - 业务代码禁止 import `io.github.neoruaa.glasmio.*`，一律走 `ui/glass/`。
 - 排序语义：`distance`（距今天数）/ `targetDate`（目标日期）/ `createdAt`，置顶恒在最前，已完成折叠。
 - **构建（唯一可行方式，2026-11-11 实测）**：`./gradlew` 会尝试重下 Gradle 并因 PKIX 证书校验失败（`~/.gradle/wrapper/dists/gradle-9.6.0-bin` 未被识别为完整分发）；shell 默认 `JAVA_HOME` 未设置且 `java` 是 1.8。必须显式指定工具链：
@@ -168,7 +173,7 @@ app/src/main/java/com/jiuxina/ying/
 16. **孤儿分类会被任意一次分类编辑「收编」**：`add/rename/delete` 都以「存储列表 ∪ 孤儿」的合并结果为基准并整体落盘，所以旧分类会被写进 `category_list_v1`。这是预期行为——否则重名校验会失效。
 17. **分类浮层沿用 `WhileSubscribed(5s)` 状态流**：冷启动瞬间 `categories` 为空列表，此时立刻点 + 打开表单，分类 chips 只会显示当前值；数据流毫秒级就会补齐。属已知瞬态，不影响落库。
 18. **`UndoBar` 的 z-order 是硬约束**：它必须留在 `HomeScreen` 最外层最后绘制。详情页占 0.88 高、表单占 0.94 高，一旦把撤销条放回它们之前，撤销窗口会在浮层下白白流逝。调整浮层顺序时先看这条。
-19. **撤销的跨进程恢复依赖启动时序**：`YingApp.onCreate` 在迁移之后调用 `undoRepository.restore()`。若把它挪到 `MainActivity` 里，首帧会先闪一次"没有撤销条"，随后才出现；视觉上是可感知的抖动。
+19. **撤销的跨进程恢复依赖启动时序**：`MorrowApp.onCreate` 在迁移之后调用 `undoRepository.restore()`。若把它挪到 `MainActivity` 里，首帧会先闪一次"没有撤销条"，随后才出现；视觉上是可感知的抖动。
 20. **带偏移量的时间戳按绝对时刻换算**：`UndoCodec` 对 `Z` / `+08:00` 用 `atZoneSameInstant` 落到本地时区。这与 `LegacyEventParser`（`OffsetDateTime.toLocalDateTime()` 丢偏移）**不一致**，但后者是旧数据兼容的既有实现，改动会改变旧事件日期解释，**不要顺手统一**。
 21. **撤销不是"编辑回滚"**：`save()` 有意不入队；若日后要给编辑加撤销，需要把 `UndoKind` 扩到编辑语义，并注意"撤销编辑"与"撤销删除"同时存在时的顶替关系。
 22. **农历年表覆盖的是「农历年」1900–2100，不是公历年**：公历上界一直延伸到 2101 年初（`2101-01-01` = 农历 2100 腊月初二，合法可算），真正的越界点是 2101 年春节之后。写测试别拿 `2101-01-01` 当越界样本。

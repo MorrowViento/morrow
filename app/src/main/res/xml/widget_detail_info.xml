@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?><!-- 单事件小部件：2×2，单个事件的大天数。 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:configure="com.jiuxina.ying.widget.DetailWidgetConfigActivity"
+    android:configure="com.morrowviento.morrow.widget.DetailWidgetConfigActivity"
     android:description="@string/widget_detail_desc"
     android:initialLayout="@layout/widget_detail"
     android:minWidth="110dp"

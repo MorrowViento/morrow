@@ -6,20 +6,47 @@ plugins {
 }
 
 // M7：可选的更新镜像前缀与正式签名，全部由外部注入，仓库里不放任何密钥。
-// gradle.properties 里写 ying.updateMirrors=https://mirror-a/;https://mirror-b/ 即可启用镜像。
-val updateMirrors: String = (project.findProperty("ying.updateMirrors") as? String).orEmpty()
+// gradle.properties 里写 morrow.updateMirrors=https://mirror-a/;https://mirror-b/ 即可启用镜像。
+val updateMirrors: String = (project.findProperty("morrow.updateMirrors") as? String).orEmpty()
 val abiSplitEnabled: Boolean =
-    (project.findProperty("ying.abiSplit") as? String)?.toBooleanStrictOrNull() ?: false
-val releaseKeystore: String = System.getenv("YING_KEYSTORE")
-    ?: (project.findProperty("ying.keystore") as? String).orEmpty()
+    (project.findProperty("morrow.abiSplit") as? String)?.toBooleanStrictOrNull() ?: false
+
+/**
+ * 签名参数：环境变量优先，其次用户级 `~/.gradle/gradle.properties`。
+ * 仓库与项目目录里永远不放密钥；CI 用 Secrets 注入环境变量，本地推荐属性文件。
+ */
+fun secret(envName: String, propertyName: String): String =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: (project.findProperty(propertyName) as? String).orEmpty()
+
+val releaseKeystore: String = secret("MORROW_KEYSTORE", "morrow.keystore")
+val releaseStorePassword: String = secret("MORROW_KEYSTORE_PASSWORD", "morrow.storePassword")
+val releaseKeyAlias: String = secret("MORROW_KEY_ALIAS", "morrow.keyAlias")
+val releaseKeyPassword: String = secret("MORROW_KEY_PASSWORD", "morrow.keyPassword")
+
+// keystore 路径允许写 `~/...`；Gradle 不会替你展开波浪号。
+val releaseKeystoreFile: File? = releaseKeystore
+    .takeIf { it.isNotBlank() }
+    ?.let { File(it.replaceFirst("~", System.getProperty("user.home"))) }
+
+if (releaseKeystoreFile != null) {
+    check(releaseStorePassword.isNotBlank() && releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()) {
+        "已指定 morrow.keystore，但缺少密码或别名。请设置 MORROW_KEYSTORE_PASSWORD / " +
+            "MORROW_KEY_ALIAS / MORROW_KEY_PASSWORD，或写入 ~/.gradle/gradle.properties " +
+            "的 morrow.storePassword / morrow.keyAlias / morrow.keyPassword。详见 docs/SIGNING.md"
+    }
+    check(releaseKeystoreFile.exists()) {
+        "找不到 keystore：${releaseKeystoreFile.absolutePath}（检查 morrow.keystore / MORROW_KEYSTORE）"
+    }
+}
 
 android {
-    namespace = "com.jiuxina.ying"
+    namespace = "com.morrowviento.morrow"
     compileSdk = 37
 
     defaultConfig {
         // 与 Flutter 版保持一致，确保升级安装覆盖旧包
-        applicationId = "com.jiuxina.ying"
+        applicationId = "com.morrowviento.morrow"
         // 决策 D1：Glasmio 强制 Android 13（API 33）+
         minSdk = 33
         targetSdk = 37
@@ -37,12 +64,12 @@ android {
     }
 
     signingConfigs {
-        if (releaseKeystore.isNotBlank()) {
+        releaseKeystoreFile?.let { keystore ->
             create("release") {
-                storeFile = file(releaseKeystore)
-                storePassword = System.getenv("YING_KEYSTORE_PASSWORD").orEmpty()
-                keyAlias = System.getenv("YING_KEY_ALIAS").orEmpty()
-                keyPassword = System.getenv("YING_KEY_PASSWORD").orEmpty()
+                storeFile = keystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
@@ -52,13 +79,13 @@ android {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // 没有注入 keystore 时保持未签名的 release，本地/CI 的 debug 构建完全不受影响
-            if (releaseKeystore.isNotBlank()) {
+            if (releaseKeystoreFile != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
     }
 
-    // 分 ABI 打包只在显式开启时生效（-Pying.abiSplit=true）。
+    // 分 ABI 打包只在显式开启时生效（-Pmorrow.abiSplit=true）。
     // 默认关闭是为了让日常 assembleDebug 只产出一个 APK；真机安装与交付都按单包走。
     splits {
         abi {

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ying"
+rootProject.name = "morrow"
 include(":app")

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  长按「萤」图标弹出的静态快捷方式。
+  长按「朝夕」图标弹出的静态快捷方式。
 
   为什么要有它：Android 没有「应用自定义长按小部件菜单」的接口，「长按小部件 → 编辑」
   由桌面决定给不给（ColorOS 一类只给「移除 / 应用信息」）。但「长按应用图标」的菜单
@@ -22,9 +22,9 @@
         android:shortcutLongLabel="@string/shortcut_widget_overview_long"
         android:shortcutShortLabel="@string/shortcut_widget_overview_short">
         <intent
-            android:action="com.jiuxina.ying.action.ADD_OVERVIEW_WIDGET"
-            android:targetClass="com.jiuxina.ying.widget.WidgetConfigActivity"
-            android:targetPackage="com.jiuxina.ying" />
+            android:action="com.morrowviento.morrow.action.ADD_OVERVIEW_WIDGET"
+            android:targetClass="com.morrowviento.morrow.widget.WidgetConfigActivity"
+            android:targetPackage="com.morrowviento.morrow" />
     </shortcut>
 
     <shortcut
@@ -34,8 +34,8 @@
         android:shortcutLongLabel="@string/shortcut_widget_detail_long"
         android:shortcutShortLabel="@string/shortcut_widget_detail_short">
         <intent
-            android:action="com.jiuxina.ying.action.ADD_DETAIL_WIDGET"
-            android:targetClass="com.jiuxina.ying.widget.DetailWidgetConfigActivity"
-            android:targetPackage="com.jiuxina.ying" />
+            android:action="com.morrowviento.morrow.action.ADD_DETAIL_WIDGET"
+            android:targetClass="com.morrowviento.morrow.widget.DetailWidgetConfigActivity"
+            android:targetPackage="com.morrowviento.morrow" />
     </shortcut>
 </shortcuts>
