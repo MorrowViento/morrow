@@ -23,4 +23,12 @@
     <string name="widget_config_title">小部件设置</string>
     <string name="widget_config_done">完成</string>
     <string name="widget_config_cancel">取消</string>
+
+    <!-- 长按桌面图标弹出的快捷方式（静态 shortcut） -->
+    <string name="shortcut_widget_overview_short">总览小部件</string>
+    <string name="shortcut_widget_overview_long">添加「萤 · 总览」到桌面</string>
+    <string name="shortcut_widget_detail_short">单事件小部件</string>
+    <string name="shortcut_widget_detail_long">添加「萤 · 单事件」到桌面</string>
+    <string name="shortcut_widget_disabled">当前版本已移除该快捷方式</string>
+    <string name="widget_pin_unsupported">当前桌面不支持从这里添加小部件，请长按桌面空白处 → 小部件</string>
 </resources>

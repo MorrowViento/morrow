@@ -53,6 +53,7 @@ import com.jiuxina.ying.ui.glass.LocalReduceMotion
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
 import com.jiuxina.ying.widget.WidgetEntries
+import com.jiuxina.ying.widget.WidgetPinActivity
 import kotlinx.coroutines.delay
 
 /**
@@ -187,15 +188,23 @@ fun SettingsScreen(
 
                 item(key = "widgets") {
                     SettingsGroup("桌面小部件") {
-                        if (state.widgets.isEmpty()) {
-                            ActionRow(
-                                title = "还没有放置小部件",
-                                summary = "长按桌面空白处 → 小部件 → 选「萤」",
-                                onClick = null,
-                            )
-                        } else {
-                            state.widgets.forEachIndexed { index, widget ->
-                                if (index > 0) Divider()
+                        // 两条添加入口与长按图标里的快捷方式走同一条 requestPinAppWidget 链路
+                        ActionRow(
+                            title = "添加总览小部件",
+                            summary = "系统会弹出「添加到主屏幕」确认，确认后直接落在桌面",
+                            value = "添加",
+                            onClick = { WidgetPinActivity.start(context, isDetail = false) },
+                        )
+                        Divider()
+                        ActionRow(
+                            title = "添加单事件小部件",
+                            summary = "添加后在桌面点它一下，选择要盯住的那个日子",
+                            value = "添加",
+                            onClick = { WidgetPinActivity.start(context, isDetail = true) },
+                        )
+                        if (state.widgets.isNotEmpty()) {
+                            state.widgets.forEach { widget ->
+                                Divider()
                                 ActionRow(
                                     title = if (widget.isDetail) {
                                         "单事件 · ${widget.eventTitle ?: "未选择事件"}"
@@ -207,14 +216,14 @@ fun SettingsScreen(
                                     onClick = { WidgetEntries.openConfig(context, widget) },
                                 )
                             }
-                            Divider()
-                            // 厂商桌面不一定给「编辑」，把这条兜底路写明白，否则用户以为改不了
-                            ActionRow(
-                                title = "长按桌面没有「编辑」？",
-                                summary = "用上面这几行进入配置台，效果与长按编辑完全一致",
-                                onClick = null,
-                            )
                         }
+                        Divider()
+                        // 厂商桌面不一定给「编辑」，把这条兜底路写明白，否则用户以为改不了
+                        ActionRow(
+                            title = "长按桌面没有「编辑」？",
+                            summary = "用上面这几行进入配置台，效果与长按编辑完全一致",
+                            onClick = null,
+                        )
                     }
                 }
 

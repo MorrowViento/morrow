@@ -39,6 +39,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- 长按图标弹出的「添加小部件」：静态快捷方式必须挂在有 LAUNCHER 的 activity 上 -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- 闹钟触发 / 通知按钮动作。exported=false：只接受本应用 PendingIntent 的投递 -->
@@ -102,6 +106,18 @@
             android:excludeFromRecents="true"
             android:exported="true"
             android:theme="@style/Theme.Ying" />
+
+        <!--
+          长按图标 / 设置页里的「添加小部件」。不渲染界面，交给系统弹确认框。
+          exported=true：静态快捷方式的 intent 由桌面进程投递，必须可从外部启动；
+          它只做 requestPinAppWidget，没有可被滥用的副作用。
+        -->
+        <activity
+            android:name=".widget.WidgetPinActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
 
         <!-- 跨天刷新闹钟。exported=false：只接受本应用 PendingIntent 的投递 -->
         <receiver
