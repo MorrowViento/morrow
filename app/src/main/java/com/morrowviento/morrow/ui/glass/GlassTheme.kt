@@ -17,6 +17,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
@@ -131,7 +132,8 @@ fun GlassTheme(
 fun GlassBackdrop(modifier: Modifier = Modifier) {
     val colors = GlasmioTheme.colors
     val base = colors.groupedBackground
-    val glow = colors.elevatedBackground
+    // 光只能是「底色 → 卡片色」之间的一半：等于卡片色的话，顶部那张卡会和背景糊在一起
+    val glow = lerp(base, colors.elevatedBackground, 0.6f)
     Box(
         modifier
             .fillMaxSize()
