@@ -28,6 +28,9 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
     private val appContext = context.applicationContext
     private val alarms = appContext.getSystemService(AlarmManager::class.java)
 
+    /** 记下最近一次排期走的是哪条通道，诊断页要读它解释「图标为什么没出现」。 */
+    private val trace = ScheduleTraceStore(appContext)
+
     override fun sync(event: CountdownEvent) {
         val plan = ReminderPlan.upcoming(event, System.currentTimeMillis())
         plan.forEachIndexed { slot, item -> arm(event.id, slot, item) }
@@ -103,29 +106,38 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
      * 降级必须留日志：真机上「提前 10 分钟实际晚 4 分钟」就是这条路径的表现。
      */
     private fun setAt(atMillis: Long, pi: PendingIntent, origin: String) {
-        val withinHorizon = withinAlarmClockHorizon(System.currentTimeMillis(), atMillis)
+        val now = System.currentTimeMillis()
+        val withinHorizon = withinAlarmClockHorizon(now, atMillis)
         if (withinHorizon) {
             val armed = runCatching {
                 alarms.setAlarmClock(AlarmManager.AlarmClockInfo(atMillis, showAppIntent()), pi)
             }
-            if (armed.isSuccess) return
+            if (armed.isSuccess) {
+                trace.record(SchedulePath.ALARM_CLOCK, atMillis, now)
+                return
+            }
             Log.w(TAG, "setAlarmClock 被拒，退回精确闹钟：$origin", armed.exceptionOrNull())
         }
 
         try {
             if (alarms.canScheduleExactAlarms()) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi)
+                trace.record(SchedulePath.EXACT, atMillis, now)
             } else {
                 Log.w(
                     TAG,
                     "无精确闹钟权限，降级为不精确闹钟（实际触发可能延后数分钟）：$origin at=$atMillis",
                 )
                 alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi)
+                trace.record(SchedulePath.INEXACT, atMillis, now)
             }
         } catch (e: SecurityException) {
             // 权限在授权后被用户撤销时可能走到这里
             Log.w(TAG, "精确闹钟被拒，退化为不精确闹钟：$origin", e)
-            runCatching { alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi) }
+            runCatching {
+                alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pi)
+                trace.record(SchedulePath.INEXACT, atMillis, now)
+            }
         }
     }
 
@@ -173,6 +185,11 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
          *
          * 它会在状态栏挂闹钟图标，而远期提醒并不需要分钟级精度（差一分钟没人感知），
          * 却要为它挂好几天图标。窗口内的落点由冷启动自愈 / 提醒触发后重排自动升级。
+         *
+         * 评估过「把窗口缩到 2 小时以减少图标」，结论是**不动**：收益只是少挂几小时图标
+         * （用户本来也只在待触发期间才看得到，触发即消失），代价却是升级路径变窄——
+         * 用户得恰好在触发前 2 小时内打开过应用才会升级。真机上「提醒晚一分钟」的根因
+         * 就是没走到这条通道，不该为了视觉再让一次。
          */
         const val ALARM_CLOCK_HORIZON_MILLIS = 12 * 60 * 60 * 1000L
 

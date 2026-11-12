@@ -4,6 +4,7 @@ import com.jiuxina.ying.data.backup.BackupDocument
 import com.jiuxina.ying.data.backup.ImportMode
 import com.jiuxina.ying.data.backup.ImportReport
 import com.jiuxina.ying.data.settings.AppSettings
+import com.jiuxina.ying.widget.PlacedWidget
 
 /** 解析成功、等待用户选择「覆盖 / 合并」的备份。 */
 data class PendingImport(
@@ -29,6 +30,13 @@ data class SettingsUiState(
     val notificationAllowed: Boolean = true,
     val exactAlarmAllowed: Boolean = true,
     val appVersion: String = "",
+    /**
+     * 桌面上已放置的萤小部件。
+     *
+     * 放在设置页而不是只依赖「长按 → 编辑」，是因为后者由桌面决定给不给；
+     * 这里列出来，用户总有一条能进配置台的路。
+     */
+    val widgets: List<PlacedWidget> = emptyList(),
     /** 导出/导入进行中：按钮置灰，避免重复触发两次写同一个文件。 */
     val busy: Boolean = false,
     val pendingImport: PendingImport? = null,

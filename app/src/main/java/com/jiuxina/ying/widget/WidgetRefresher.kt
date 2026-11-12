@@ -282,9 +282,14 @@ class WidgetRefresher(
         )
     }
 
-    /** 单事件小部件点空白处（未绑定时也点它）= 重新配置。 */
+    /**
+     * 单事件小部件点空白处（未绑定时也点它）= 重新配置。
+     *
+     * 必须指向 `DetailWidgetConfigActivity`：总览的配置台没有「绑定事件」区，
+     * 指错了就会出现「单事件小部件怎么也选不了事件」（M5 起一直是这个 bug）。
+     */
     private fun configIntent(widgetId: Int): PendingIntent {
-        val intent = Intent(appContext, WidgetConfigActivity::class.java).apply {
+        val intent = Intent(appContext, DetailWidgetConfigActivity::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             data = "ying://widget/config/$widgetId".toUri()
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP

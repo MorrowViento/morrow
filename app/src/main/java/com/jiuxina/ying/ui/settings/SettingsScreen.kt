@@ -52,6 +52,7 @@ import com.jiuxina.ying.ui.glass.GlassPanel
 import com.jiuxina.ying.ui.glass.LocalReduceMotion
 import com.jiuxina.ying.ui.glass.glassTextPrimary
 import com.jiuxina.ying.ui.glass.glassTextSecondary
+import com.jiuxina.ying.widget.WidgetEntries
 import kotlinx.coroutines.delay
 
 /**
@@ -181,6 +182,39 @@ fun SettingsScreen(
                             value = if (state.exactAlarmAllowed) null else "去允许",
                             onClick = actions.openExactAlarmSettings,
                         )
+                    }
+                }
+
+                item(key = "widgets") {
+                    SettingsGroup("桌面小部件") {
+                        if (state.widgets.isEmpty()) {
+                            ActionRow(
+                                title = "还没有放置小部件",
+                                summary = "长按桌面空白处 → 小部件 → 选「萤」",
+                                onClick = null,
+                            )
+                        } else {
+                            state.widgets.forEachIndexed { index, widget ->
+                                if (index > 0) Divider()
+                                ActionRow(
+                                    title = if (widget.isDetail) {
+                                        "单事件 · ${widget.eventTitle ?: "未选择事件"}"
+                                    } else {
+                                        "总览"
+                                    },
+                                    summary = if (widget.isDetail) "修改样式，或换绑另一个事件" else "修改样式与显示行数",
+                                    value = "编辑",
+                                    onClick = { WidgetEntries.openConfig(context, widget) },
+                                )
+                            }
+                            Divider()
+                            // 厂商桌面不一定给「编辑」，把这条兜底路写明白，否则用户以为改不了
+                            ActionRow(
+                                title = "长按桌面没有「编辑」？",
+                                summary = "用上面这几行进入配置台，效果与长按编辑完全一致",
+                                onClick = null,
+                            )
+                        }
                     }
                 }
 

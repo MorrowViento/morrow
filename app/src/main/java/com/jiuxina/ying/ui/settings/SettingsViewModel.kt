@@ -17,6 +17,9 @@ import com.jiuxina.ying.data.settings.SettingsRepository
 import com.jiuxina.ying.data.settings.ThemeMode
 import com.jiuxina.ying.data.widget.WidgetRefreshTrigger
 import com.jiuxina.ying.domain.model.CountdownEvent
+import com.jiuxina.ying.widget.PlacedWidget
+import com.jiuxina.ying.widget.WidgetConfigStore
+import com.jiuxina.ying.widget.WidgetEntries
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -56,10 +59,15 @@ class SettingsViewModel(
         transient.copy(settings = stored)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
+    init {
+        refreshWidgets()
+    }
+
     /**
      * 从系统设置页返回后刷新权限状态。
      *
      * 权限是**在系统界面改的**，本进程收不到任何回调；只能靠页面重新可见时主动读一次。
+     * 小部件列表同理：用户可能刚在桌面加了一个，回来要能立刻看到。
      */
     fun refreshPermissions() {
         local.update {
@@ -67,6 +75,34 @@ class SettingsViewModel(
                 notificationAllowed = permissions.notificationsAllowed(),
                 exactAlarmAllowed = permissions.exactAlarmsAllowed(),
             )
+        }
+        refreshWidgets()
+    }
+
+    /**
+     * 重读桌面上的小部件实例。
+     *
+     * 单事件小部件要显示它绑了哪个事件：配置里存的是事件 id，标题得回事件表查，
+     * 所以这一步是异步的。查不到（事件已删 / 还没绑）就留空，UI 显示「未选择事件」。
+     */
+    fun refreshWidgets() {
+        viewModelScope.launch {
+            val placed = runCatching {
+                val overview = WidgetEntries.ids(appContext, isDetail = false)
+                    .map { PlacedWidget(it, isDetail = false) }
+                val allEvents = events.loadAll()
+                val store = WidgetConfigStore(settings)
+                val detail = WidgetEntries.ids(appContext, isDetail = true).map { id ->
+                    val bound = store.load(id).eventId
+                    PlacedWidget(
+                        id = id,
+                        isDetail = true,
+                        eventTitle = allEvents.firstOrNull { it.id == bound }?.title,
+                    )
+                }
+                overview + detail
+            }.getOrDefault(emptyList())
+            local.update { it.copy(widgets = placed) }
         }
     }
 

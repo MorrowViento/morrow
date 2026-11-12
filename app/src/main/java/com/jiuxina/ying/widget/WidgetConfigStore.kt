@@ -29,21 +29,25 @@ class WidgetConfigStore(private val settings: SettingsRepository) {
      * 回落链：**上一次保存的默认样式 → 旧版全局样式 → 出厂默认**。
      * 中间那一档是关键：换机 / 重装后系统分配的 widgetId 必然变了，按 id 一条都对不上，
      * 只靠旧版全局键的话，用户在新设备上每加一个小部件都要重设一遍。
+     *
+     * **必须剥掉 `eventId`**：它是「这份配置绑了哪个事件」，天然属于某一个小部件实例。
+     * 跟着默认样式传下去，新加的单事件小部件会一上来就绑到上一个小部件的事件上，
+     * 用户看到的是「我还没选，它自己挑了别人」。
      */
     suspend fun defaultStyle(): WidgetStyle {
         settings.stringOnce(KEY_DEFAULT_STYLE)?.let { raw ->
-            WidgetStyleCodec.decode(raw)?.let { return it }
+            WidgetStyleCodec.decode(raw)?.let { return it.copy(eventId = null) }
         }
-        return legacyDefaults()
+        return legacyDefaults().copy(eventId = null)
     }
 
     suspend fun save(widgetId: Int, style: WidgetStyle) {
-        val json = WidgetStyleCodec.encode(style)
         settings.putStrings(
             mapOf(
-                key(widgetId) to json,
-                // 同时作为「默认样式」：备份只按 id 存，换机后 id 对不上时靠它兜底
-                KEY_DEFAULT_STYLE to json,
+                key(widgetId) to WidgetStyleCodec.encode(style),
+                // 同时作为「默认样式」：备份只按 id 存，换机后 id 对不上时靠它兜底。
+                // 落盘时剥掉 eventId——默认样式会被别的小部件实例读走，带上绑定就会串事件
+                KEY_DEFAULT_STYLE to WidgetStyleCodec.encode(style.copy(eventId = null)),
             ),
         )
     }

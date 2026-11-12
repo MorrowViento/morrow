@@ -100,8 +100,11 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                             events = app.eventRepository.loadAll()
                                 .sortedWith(compareBy({ it.isCompleted }, { it.targetDate }))
                             val loaded = store.load(appWidgetId)
-                            style = if (isDetail && loaded.eventId == null) {
-                                loaded.copy(eventId = events.firstOrNull()?.id)
+                            style = if (isDetail) {
+                                // 已绑的事件可能已经被删掉：那样"已选"标记会挂在一条不存在的行上，
+                                // 又没有哪一行能被再次选中，面板等于失效，所以统一回落到最近事件
+                                val bound = loaded.eventId?.takeIf { id -> events.any { it.id == id } }
+                                loaded.copy(eventId = bound ?: events.firstOrNull()?.id)
                             } else {
                                 loaded
                             }

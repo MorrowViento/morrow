@@ -78,6 +78,14 @@ class ReminderPermissions(context: Context) {
         return SystemAlarm(owner = owner, triggerAtMillis = info.triggerTime)
     }
 
+    /**
+     * 最近一次排期走的是哪条通道。
+     *
+     * 与 [nextSystemAlarm] 互补：前者解释「现在有没有图标」，这一条解释「为什么有 / 没有」。
+     * 落点在 12 小时之外的排期根本不会登记成系统闹钟，用户却只能看到「没有图标」这个结果。
+     */
+    fun lastSchedule(): ScheduleTrace? = ScheduleTraceStore(appContext).last()
+
     fun openNotificationSettings() {
         launch(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

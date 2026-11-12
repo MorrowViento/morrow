@@ -1,5 +1,6 @@
 package com.jiuxina.ying.ui.reminder
 
+import com.jiuxina.ying.data.reminder.ScheduleTrace
 import com.jiuxina.ying.data.reminder.SystemAlarm
 
 /** 排期列表的一行。 */
@@ -33,6 +34,14 @@ data class ReminderUiState(
      * 判断它由谁排、什么时候消失，这里直接给出答案。
      */
     val systemAlarm: SystemAlarm = SystemAlarm(),
+    /**
+     * 最近一次排期用的系统通道（与落点）。
+     *
+     * 状态栏图标只是结果，用户真正想知道的是原因：「为什么这次没有图标」的答案就是
+     * 「最近一次排期没走 setAlarmClock」。没有它，诊断页只能证明现在没有闹钟，
+     * 证明不了排期本身是好的。
+     */
+    val lastSchedule: ScheduleTrace? = null,
     val rows: List<ReminderRow> = emptyList(),
     /** 排期中的提醒总数（可能大于 [rows] 展示条数）。 */
     val alarmCount: Int = 0,

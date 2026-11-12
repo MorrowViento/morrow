@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.jiuxina.ying.data.reminder.AlarmReminderScheduler
+import com.jiuxina.ying.data.reminder.SchedulePath
+import com.jiuxina.ying.data.reminder.ScheduleTrace
 import com.jiuxina.ying.data.reminder.SystemAlarm
 import com.jiuxina.ying.data.reminder.SystemAlarmOwner
 import com.jiuxina.ying.ui.component.ChoiceChip
@@ -127,6 +130,7 @@ fun ReminderSheet(
                     )
 
                     SystemAlarmNote(state.systemAlarm)
+                    state.lastSchedule?.let { ScheduleNote(it) }
 
                     Spacer(Modifier.height(14.dp))
                     SectionTitle("排期中的提醒 · ${state.alarmCount} 条 / ${state.eventCount} 个事件")
@@ -194,6 +198,38 @@ private fun SystemAlarmNote(alarm: SystemAlarm) {
 private fun formatTrigger(millis: Long): String =
     LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("M 月 d 日 HH:mm"))
+
+/**
+ * 「最近一次排期」这句话的存在意义：图标只是结果，原因在通道。
+ *
+ * 两条通道都不会在状态栏留痕，用户看到的只有「有图标 / 没图标」。把排期当时的落点、
+ * 用了哪条 API 写出来，才能区分「按设计就没图标」与「该有却没有」。
+ */
+@Composable
+private fun ScheduleNote(trace: ScheduleTrace) {
+    val horizon = AlarmReminderScheduler.ALARM_CLOCK_HORIZON_MILLIS
+    val withinHorizon = trace.triggerAtMillis - trace.recordedAtMillis <= horizon
+    val trigger = formatTrigger(trace.triggerAtMillis)
+    val text = when (trace.path) {
+        SchedulePath.ALARM_CLOCK ->
+            "最近一次排期按系统闹钟登记（$trigger）：这就是状态栏出现图标的原因，触发后消失"
+        SchedulePath.EXACT ->
+            if (withinHorizon) {
+                "最近一次排期落在精确闹钟（$trigger）：时间在窗口内，但系统拒绝了闹钟登记，" +
+                    "所以不会显示图标；提醒仍会准点"
+            } else {
+                "最近一次排期落在精确闹钟（$trigger）：落点在 12 小时之外，按设计不挂图标，" +
+                    "进入窗口后的下次排期会自动升级"
+            }
+        SchedulePath.INEXACT ->
+            "最近一次排期只拿到不精确闹钟（$trigger）：可能晚几分钟，去开启精确闹钟"
+    }
+    Text(
+        text = text,
+        style = TextStyle(fontSize = 11.sp, color = glassTextSecondary().copy(alpha = 0.85f)),
+        modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp),
+    )
+}
 
 @Composable
 private fun PermissionRow(
