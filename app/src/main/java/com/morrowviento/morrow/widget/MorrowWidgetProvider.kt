@@ -67,6 +67,18 @@ class MorrowDetailWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    /** 改尺寸后背景位图要按新尺寸重画，否则圆角会被 fitXY 拉变形。 */
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle,
+    ) {
+        WidgetRefreshRunner.run(this, context) { app ->
+            app.widgetRefresher.refreshIds(intArrayOf(appWidgetId), isDetail = true)
+        }
+    }
+
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         clearConfig(this, context, appWidgetIds)
     }

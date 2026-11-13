@@ -18,6 +18,7 @@ import com.morrowviento.morrow.data.settings.SettingsRepository
 import com.morrowviento.morrow.data.widget.WidgetRefreshTrigger
 import com.morrowviento.morrow.data.widget.WidgetSnapshotBuilder
 import com.morrowviento.morrow.domain.model.CountdownEvent
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -75,16 +76,29 @@ class WidgetRefresher(
         val today = LocalDate.now()
         val now = LocalDateTime.now()
         val systemDark = isSystemDark()
+        // 配色方案从小部件之外来：设置 → 外观 → 配色方案。
+        // 小部件与 App 必须同源，否则会出现「应用里换成青竹、桌面还是海蓝」。
+        val palette = settings.appSettings.first().accent
+        val density = appContext.resources.displayMetrics.density
+        // 同一次刷新里多个小部件常常同尺寸同配色，位图只画一次。
+        val bitmaps = HashMap<Int, android.graphics.Bitmap>()
         // 只有总览需要「没配置就用默认样式」，单事件小部件必须有自己的 eventId
         val styleById = if (isDetail) emptyMap() else store.loadAll()
         val fallback = if (isDetail) null else store.defaultStyle()
 
         ids.forEach { widgetId ->
             val style = if (isDetail) store.load(widgetId) else (styleById[widgetId] ?: fallback ?: WidgetStyle())
+            val colors = style.colors(systemDark, palette)
+            val (widthPx, heightPx) = widgetSizePx(widgetId, density)
+            val key = widthPx * 31 + heightPx * 17 + palette.ordinal * 7 +
+                (if (colors.dark) 1 else 0) * 3 + (if (colors.vivid) 1 else 0)
+            val background = bitmaps.getOrPut(key) {
+                WidgetAppearance.render(widthPx, heightPx, density, palette, colors.dark, colors.vivid)
+            }
             val views = if (isDetail) {
-                buildDetail(widgetId, style, all, today, now, systemDark)
+                buildDetail(widgetId, style, colors, background, all, today, now)
             } else {
-                buildOverview(widgetId, style, all, today, now, systemDark)
+                buildOverview(widgetId, style, colors, background, all, today, now)
             }
             manager.updateAppWidget(widgetId, views)
             if (!isDetail) {
@@ -101,19 +115,16 @@ class WidgetRefresher(
     private fun buildOverview(
         widgetId: Int,
         style: WidgetStyle,
+        colors: WidgetColors,
+        background: android.graphics.Bitmap,
         events: List<CountdownEvent>,
         today: LocalDate,
         now: LocalDateTime,
-        systemDark: Boolean,
     ): RemoteViews {
         val views = RemoteViews(appContext.packageName, R.layout.widget_overview)
-        val colors = style.colors(
-            systemDark = systemDark,
-            backgroundDark = R.drawable.widget_bg_dark,
-            backgroundLight = R.drawable.widget_bg_light,
-            backgroundAccent = R.drawable.widget_bg_accent,
-        )
-        views.setInt(R.id.widget_root, "setBackgroundResource", colors.backgroundRes)
+        // 背景是一张按当前配色画好的位图（见 WidgetAppearance），不是静态 drawable——
+        // 配色是用户可选的，XML 里写不了动态色。
+        views.setImageViewBitmap(R.id.widget_bg, background)
         views.setOnClickPendingIntent(R.id.widget_header, openAppIntent())
 
         // 行数不再由预设决定，也不再截断到 5：集合视图按卡片高度排版，内容超出可上下滑动
@@ -149,19 +160,14 @@ class WidgetRefresher(
     private fun buildDetail(
         widgetId: Int,
         style: WidgetStyle,
+        colors: WidgetColors,
+        background: android.graphics.Bitmap,
         events: List<CountdownEvent>,
         today: LocalDate,
         now: LocalDateTime,
-        systemDark: Boolean,
     ): RemoteViews {
         val views = RemoteViews(appContext.packageName, R.layout.widget_detail)
-        val colors = style.colors(
-            systemDark = systemDark,
-            backgroundDark = R.drawable.widget_bg_dark,
-            backgroundLight = R.drawable.widget_bg_light,
-            backgroundAccent = R.drawable.widget_bg_accent,
-        )
-        views.setInt(R.id.detail_root, "setBackgroundResource", colors.backgroundRes)
+        views.setImageViewBitmap(R.id.detail_bg, background)
         views.setOnClickPendingIntent(R.id.detail_root, configIntent(widgetId))
 
         views.setTextColor(R.id.detail_title, colors.textPrimary)
@@ -286,6 +292,21 @@ class WidgetRefresher(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
+
+    /**
+     * 小部件在桌面上的当前尺寸（px），用来画背景位图。
+     *
+     * `OPTION_APPWIDGET_MIN_WIDTH/HEIGHT` 的单位是 dp，且把宿主的网格留白也算在内，
+     * 所以位图会比可见区域略大一圈——`fitXY` 缩回去只会让圆角稍微圆一点，不会变形。
+     * 上限卡在 1800px：再大的位图在桌面缩放时也没有收益，只是多占内存。
+     */
+    private fun widgetSizePx(widgetId: Int, density: Float): Pair<Int, Int> {
+        val options = manager.getAppWidgetOptions(widgetId)
+        val widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300)
+        val heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 150)
+        return (widthDp * density).toInt().coerceIn(160, 1800) to
+            (heightDp * density).toInt().coerceIn(120, 1800)
     }
 
     private fun isSystemDark(): Boolean =

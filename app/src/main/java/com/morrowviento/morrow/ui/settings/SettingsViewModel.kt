@@ -116,7 +116,17 @@ class SettingsViewModel(
 
     // ---- 外观 ----
 
-    fun setTheme(mode: ThemeMode) = persist { settings.setThemeMode(mode) }
+    /**
+     * 切明暗：写盘后刷新小部件。
+     *
+     * 小部件「跟随系统」时按系统的深浅画背景，这里改了应用内主题反而不该动它；
+     * 但「主题色」档与明暗是同一套配色，跟着刷一次不会有副作用，
+     * 反而能保证「改完主题回桌面，小部件和 App 是同一套颜色」。
+     */
+    fun setTheme(mode: ThemeMode) = persist {
+        settings.setThemeMode(mode)
+        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+    }
 
     /** 切换玻璃厚度档位：直接写该档位的连续值（分段控件没有拖动预览这回事）。 */
     fun setGlassFrostLevel(level: GlassFrostLevel) = persist { settings.setGlassFrost(level.frost) }
@@ -125,8 +135,17 @@ class SettingsViewModel(
 
     fun setReduceMotion(enabled: Boolean) = persist { settings.setReduceMotion(enabled) }
 
-    /** 换主题色：一处写入，`appSettings` 一变，整棵树（含底栏与所有浮层）跟着重建。 */
-    fun setAccent(color: AccentColor) = persist { settings.setAccentColor(color) }
+    /**
+     * 换配色：一处写入，`appSettings` 一变，整棵树（含底栏与所有浮层）跟着重建。
+     *
+     * 桌面上的小部件**不会**因为我们改了 DataStore 就自己重绘——它只认
+     * `AppWidgetManager` 推过去的 RemoteViews。不主动刷一次，用户改完配色回到桌面
+     * 还是旧颜色，看起来就像「设置没生效」。
+     */
+    fun setAccent(color: AccentColor) = persist {
+        settings.setAccentColor(color)
+        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+    }
 
     // ---- 导出 / 导入 ----
 

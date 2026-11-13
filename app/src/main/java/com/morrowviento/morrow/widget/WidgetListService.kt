@@ -12,8 +12,10 @@ import androidx.core.net.toUri
 import com.morrowviento.morrow.MainActivity
 import com.morrowviento.morrow.R
 import com.morrowviento.morrow.MorrowApp
+import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.widget.WidgetRow
 import com.morrowviento.morrow.data.widget.WidgetSnapshotBuilder
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -43,11 +45,15 @@ private class WidgetListFactory(
     private var rows: List<WidgetRow> = emptyList()
     private var style: WidgetStyle = WidgetStyle()
 
+    /** 应用内的配色方案；行文字与进度条跟着它走，和刷新器用的是同一份。 */
+    private var palette: AccentColor = AccentColor.DEFAULT
+
     /** 读库只在 onDataSetChanged 里做一次，getViewAt 只做排版。 */
     override fun onDataSetChanged() {
         val app = context.applicationContext as? MorrowApp ?: return
         runBlocking {
             runCatching {
+                palette = app.settingsRepository.appSettings.first().accent
                 style = WidgetConfigStore(app.settingsRepository).load(widgetId)
                 val events = app.eventRepository.loadAll()
                 rows = WidgetSnapshotBuilder.overview(
@@ -80,12 +86,7 @@ private class WidgetListFactory(
         val views = RemoteViews(context.packageName, R.layout.widget_row)
         val dark = context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        val colors = style.colors(
-            systemDark = dark,
-            backgroundDark = 0,
-            backgroundLight = 0,
-            backgroundAccent = 0,
-        )
+        val colors = style.colors(systemDark = dark, accent = palette)
 
         views.setTextViewText(R.id.widget_row_title, row.title)
         views.setTextColor(R.id.widget_row_title, colors.textPrimary)

@@ -1,5 +1,6 @@
 package com.morrowviento.morrow.widget
 
+import com.morrowviento.morrow.data.settings.AccentColor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -8,15 +9,11 @@ import org.junit.Test
 
 class WidgetStyleTest {
 
-    // 用假资源 id 断言"选了哪套底"，不依赖真实 R.drawable
-    private val bgDark = 101
-    private val bgLight = 102
-    private val bgAccent = 103
-
     private fun colors(
         style: WidgetStyle,
         systemDark: Boolean = false,
-    ) = style.colors(systemDark, bgDark, bgLight, bgAccent)
+        accent: AccentColor = AccentColor.DEFAULT,
+    ) = style.colors(systemDark, accent)
 
     // ---- 预设 ----
 
@@ -56,25 +53,33 @@ class WidgetStyleTest {
     // ---- 配色 ----
 
     @Test
-    fun `跟随系统时按系统深浅在两套底之间切`() {
+    fun `跟随系统时按系统深浅切明暗`() {
         val style = WidgetStyle(palette = WidgetPalette.SYSTEM)
-        assertEquals(bgDark, colors(style, systemDark = true).backgroundRes)
-        assertEquals(bgLight, colors(style, systemDark = false).backgroundRes)
+        assertTrue(colors(style, systemDark = true).dark)
+        assertFalse(colors(style, systemDark = false).dark)
         assertEquals(WidgetStyle.WHITE, colors(style, systemDark = true).textPrimary)
         assertEquals(WidgetStyle.INK, colors(style, systemDark = false).textPrimary)
+        // 跟随系统不等于「主题色」档，底色仍是中性玻璃
+        assertFalse(colors(style, systemDark = true).vivid)
     }
 
     @Test
     fun `固定深色与固定浅色不受系统影响`() {
-        assertEquals(bgDark, colors(WidgetStyle(palette = WidgetPalette.DARK), systemDark = false).backgroundRes)
-        assertEquals(bgLight, colors(WidgetStyle(palette = WidgetPalette.LIGHT), systemDark = true).backgroundRes)
+        assertTrue(colors(WidgetStyle(palette = WidgetPalette.DARK), systemDark = false).dark)
+        assertFalse(colors(WidgetStyle(palette = WidgetPalette.LIGHT), systemDark = true).dark)
     }
 
     @Test
-    fun `品牌色用渐变底且文字为白`() {
-        val c = colors(WidgetStyle(palette = WidgetPalette.ACCENT), systemDark = false)
-        assertEquals(bgAccent, c.backgroundRes)
-        assertEquals(WidgetStyle.WHITE, c.textPrimary)
+    fun `主题色档跟随系统明暗并用当前配色的强调色`() {
+        val style = WidgetStyle(palette = WidgetPalette.ACCENT)
+        assertTrue(colors(style, systemDark = true).vivid)
+        assertFalse(colors(style, systemDark = false).dark)
+
+        // 强调色必须是用户选的那一套，而不是写死的蓝
+        val jade = colors(style, systemDark = false, accent = AccentColor.JADE)
+        assertEquals(AccentColor.JADE.light.toInt(), jade.accent)
+        val rose = colors(style, systemDark = true, accent = AccentColor.ROSE)
+        assertEquals(AccentColor.ROSE.dark.toInt(), rose.accent)
     }
 
     // ---- 编解码 ----

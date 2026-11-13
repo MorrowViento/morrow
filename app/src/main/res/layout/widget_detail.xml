@@ -1,81 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?><!--
   单事件小部件：只显示一个事件的大天数。
   颜色/字号/显隐同样由 WidgetRefresher 运行时套用。
+
+  背景同样是一层铺满的 ImageView（原因见 widget_overview.xml）：配色与质感
+  跟着应用内的配色方案走，运行时画成位图塞进来。
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/detail_root"
     android:layout_width="match_parent"
-    android:background="@drawable/widget_bg_dark"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="14dp">
+    android:layout_height="match_parent">
 
-    <TextView
-        style="@style/WidgetText"
-        android:id="@+id/detail_title"
+    <ImageView
+        android:id="@+id/detail_bg"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:text="@string/widget_loading"
-        android:textSize="15sp" />
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
 
     <LinearLayout
-        android:id="@+id/detail_badge_group"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:gravity="bottom"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="14dp">
 
         <TextView
             style="@style/WidgetText"
-            android:id="@+id/detail_badge"
+            android:id="@+id/detail_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/widget_loading"
+            android:textSize="15sp" />
+
+        <LinearLayout
+            android:id="@+id/detail_badge_group"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="32sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="6dp"
+            android:baselineAligned="false"
+            android:gravity="bottom"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/WidgetText"
+                android:id="@+id/detail_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="32sp"
+                android:textStyle="bold" />
+
+            <TextView
+                style="@style/WidgetText.Dim"
+                android:id="@+id/detail_unit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginBottom="6dp"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <TextView
             style="@style/WidgetText.Dim"
-            android:id="@+id/detail_unit"
-            android:layout_width="wrap_content"
+            android:id="@+id/detail_meta"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginBottom="6dp"
-            android:textSize="14sp" />
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textSize="12sp" />
+
+        <ProgressBar
+            android:id="@+id/detail_progress"
+            style="@android:style/Widget.Material.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="10dp"
+            android:indeterminate="false"
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone" />
+
+        <!-- 未绑定 / 已删除事件时的引导文案 -->
+        <TextView
+            style="@style/WidgetText.Dim"
+            android:id="@+id/detail_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/widget_detail_unbound"
+            android:textSize="12sp"
+            android:visibility="gone" />
     </LinearLayout>
-
-    <TextView
-        style="@style/WidgetText.Dim"
-        android:id="@+id/detail_meta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textSize="12sp" />
-
-    <ProgressBar
-        android:id="@+id/detail_progress"
-        style="@android:style/Widget.Material.ProgressBar.Horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="3dp"
-        android:layout_marginTop="10dp"
-        android:indeterminate="false"
-        android:max="100"
-        android:progress="0"
-        android:visibility="gone" />
-
-    <!-- 未绑定 / 已删除事件时的引导文案 -->
-    <TextView
-        style="@style/WidgetText.Dim"
-        android:id="@+id/detail_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/widget_detail_unbound"
-        android:textSize="12sp"
-        android:visibility="gone" />
-</LinearLayout>
+</FrameLayout>

@@ -2,6 +2,7 @@ package com.morrowviento.morrow.widget
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.morrowviento.morrow.data.settings.AccentColor
 
 /**
  * 小部件样式：预设 + 字号 + 配色 + 元素显隐。
@@ -40,25 +41,28 @@ enum class WidgetFontScale(
 /**
  * 配色。
  *
- * [SYSTEM] 不是一种颜色，而是"按系统深浅色在 [WIDGET_BG_DARK] / [WIDGET_BG_LIGHT] 之间切"，
- * 由 [WidgetStyle.colors] 在刷新时判断——RemoteViews 读不到 `values-night`，
- * 所以明暗必须在代码里定，不能靠资源限定符。
+ * [SYSTEM] 不是一种颜色，而是"按系统深浅色在深 / 浅两套之间切"——RemoteViews 读不到
+ * `values-night`，所以明暗必须在代码里定，不能靠资源限定符。
+ *
+ * 四档现在都**跟随应用内的配色方案**（见 `AccentColor`）：色斑、强调色、文字色全部
+ * 同源，小部件不会与 App 各说各话。差别只在「底色要不要被强调色主导」。
  */
 enum class WidgetPalette(val label: String) {
     SYSTEM("跟随系统"),
     DARK("深色"),
     LIGHT("浅色"),
-    ACCENT("品牌色"),
+    ACCENT("主题色"),
 }
 
-/** 一次刷新要套到 RemoteViews 上的具体颜色与底色资源。 */
+/** 一次刷新要套到 RemoteViews 上的具体颜色；背景位图由 [WidgetAppearance] 另画。 */
 data class WidgetColors(
-    /** 圆角底 drawable 的资源 id（由调用方把 R.drawable.xxx 传进来，故用 Int）。 */
-    val backgroundRes: Int,
     val textPrimary: Int,
     val textSecondary: Int,
     /** 进度条着色用。 */
     val accent: Int,
+    val dark: Boolean,
+    /** true = 「主题色」档：底色以强调色为主，而不是中性玻璃。 */
+    val vivid: Boolean,
 )
 
 data class WidgetStyle(
@@ -86,37 +90,21 @@ data class WidgetStyle(
      * 解析出实际颜色。
      *
      * @param systemDark 系统当前是否深色（`Configuration.UI_MODE_NIGHT_YES`）
-     * @param backgroundDark 深色底资源 id
-     * @param backgroundLight 浅色底资源 id
-     * @param backgroundAccent 品牌渐变底资源 id
+     * @param accent 应用内的配色方案（设置 → 外观 → 配色方案）
      */
-    fun colors(
-        systemDark: Boolean,
-        backgroundDark: Int,
-        backgroundLight: Int,
-        backgroundAccent: Int,
-    ): WidgetColors {
+    fun colors(systemDark: Boolean, accent: AccentColor): WidgetColors {
         val dark = when (palette) {
-            WidgetPalette.SYSTEM -> systemDark
+            WidgetPalette.SYSTEM, WidgetPalette.ACCENT -> systemDark
             WidgetPalette.DARK -> true
             WidgetPalette.LIGHT -> false
-            WidgetPalette.ACCENT -> true // 品牌渐变按深色处理：白字
         }
-        return if (dark) {
-            WidgetColors(
-                backgroundRes = if (palette == WidgetPalette.ACCENT) backgroundAccent else backgroundDark,
-                textPrimary = WHITE,
-                textSecondary = WHITE_62,
-                accent = WHITE_85,
-            )
-        } else {
-            WidgetColors(
-                backgroundRes = backgroundLight,
-                textPrimary = INK,
-                textSecondary = INK_60,
-                accent = INK_80,
-            )
-        }
+        return WidgetColors(
+            textPrimary = WidgetAppearance.textPrimary(dark),
+            textSecondary = WidgetAppearance.textSecondary(dark),
+            accent = WidgetAppearance.accentOf(accent, dark),
+            dark = dark,
+            vivid = palette == WidgetPalette.ACCENT,
+        )
     }
 
     companion object {

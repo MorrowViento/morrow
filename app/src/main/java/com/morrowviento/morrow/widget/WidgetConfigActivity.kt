@@ -40,12 +40,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.R
@@ -58,6 +63,7 @@ import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTheme
+import com.morrowviento.morrow.ui.glass.LocalAccentPalette
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import kotlinx.coroutines.launch
@@ -381,20 +387,36 @@ private fun ConfigContent(
     }
 }
 
-/** 实时预览：把当前字号/配色/显隐按真实小部件的样子画一遍。 */
+/**
+ * 实时预览：把当前字号/配色/显隐按真实小部件的样子画一遍。
+ *
+ * 背景不再用手写的渐变近似，而是**直接调 [WidgetAppearance.render]**——桌面拿到的
+ * 就是这张位图，所以预览与真机像素级一致，不会出现「这里好看、桌面变样」。
+ */
 @Composable
 private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
     val systemDark = isSystemInDarkTheme()
     val dark = when (style.palette) {
-        WidgetPalette.SYSTEM -> systemDark
-        WidgetPalette.DARK, WidgetPalette.ACCENT -> true
+        WidgetPalette.SYSTEM, WidgetPalette.ACCENT -> systemDark
+        WidgetPalette.DARK -> true
         WidgetPalette.LIGHT -> false
     }
-    val background = when {
-        style.palette == WidgetPalette.ACCENT ->
-            Brush.linearGradient(listOf(Color(0xFF3B6FE0), Color(0xFFE84B8A)))
-        dark -> Brush.linearGradient(listOf(Color(0xFF1B1533), Color(0xFF2B1030)))
-        else -> Brush.linearGradient(listOf(Color(0xFFF2EEFA), Color(0xFFFFFFFF)))
+    val vivid = style.palette == WidgetPalette.ACCENT
+    val accent = LocalAccentPalette.current
+    val density = LocalDensity.current.density
+    // 预览高度按预设给：真机高度由桌面决定，这里只要比例对得上就够
+    val previewHeight = when {
+        isDetail -> 118.dp
+        style.preset == WidgetPreset.MINIMAL -> 78.dp
+        style.preset == WidgetPreset.DETAILED -> 190.dp
+        else -> 134.dp
+    }
+    // 宽度按屏幕估算（配置页左右各留一圈内边距）；位图会被 fitXY 缩到实际宽度
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val background = remember(accent, dark, vivid, density, previewHeight, screenWidthDp) {
+        val w = ((screenWidthDp - 88) * density).toInt().coerceAtLeast(160)
+        val h = (previewHeight.value * density).toInt().coerceAtLeast(120)
+        WidgetAppearance.render(w, h, density, accent, dark, vivid).asImageBitmap()
     }
     val primary = if (dark) Color.White else Color(WidgetStyle.INK)
     val secondary = if (dark) Color.White.copy(alpha = 0.62f) else Color(WidgetStyle.INK_60)
@@ -402,8 +424,14 @@ private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .height(previewHeight)
             .clip(RoundedCornerShape(22.dp))
-            .background(background)
+            .drawBehind {
+                drawImage(
+                    background,
+                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                )
+            }
             .padding(16.dp),
     ) {
         if (!isDetail) {
