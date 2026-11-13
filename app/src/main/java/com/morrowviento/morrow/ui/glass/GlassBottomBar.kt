@@ -42,11 +42,14 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -55,20 +58,26 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.capsule.ContinuousRoundedRectangle
 import io.github.neoruaa.glasmio.glass.DampedDragAnimation
+import io.github.neoruaa.glasmio.glass.LiquidContactCapsule
 import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
 import io.github.neoruaa.glasmio.glass.NativeControlLensStyle
+import io.github.neoruaa.glasmio.glass.NavigationGlassUnionShape
 import io.github.neoruaa.glasmio.glass.nativeControlLens
 import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import io.github.neoruaa.glasmio.glass.render.drawPlainBackdrop
 import kotlinx.coroutines.launch
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * 底栏的三个位置。
@@ -82,26 +91,34 @@ enum class GlassTab(val label: String) {
     SEARCH("搜索"),
 }
 
-/** 胶囊高度。示例栏是扁的，胶囊略小于右侧圆球直径。 */
-private val BarHeight = 52.dp
+/**
+ * 胶囊高度：对齐 Glasmio 的 `NavigationBarSurfaceHeight = 62.dp`。
+ *
+ * 示例图一里胶囊约 61dp，比上一版 52dp 高一圈；选中块 48dp、上下各留 7dp，
+ * 和库的 `ExpandedNavigationItemHeight = 54dp` / 62dp 是同一套比例。
+ */
+private val BarHeight = 62.dp
 
-/** 右侧「＋」圆球直径：常态单独悬浮的一整块玻璃。 */
-private val BallDiameter = 56.dp
+/** 右侧「＋」圆球直径：示例里独立圆按钮与胶囊几乎等高，只上下各凸 1dp。 */
+private val BallDiameter = 64.dp
 
 /** 点击抬起的玻璃珠直径：比胶囊上下各凸 4dp。 */
-private val LensDiameter = 60.dp
+private val LensDiameter = 70.dp
 
-/** 底栏槽高：三者取最大，珠子上下都不被裁。 */
-private val SlotHeight = 60.dp
+/** 底栏槽高：取三者最大，珠子上下都不被裁。 */
+private val SlotHeight = 70.dp
 
 /**
- * 常态胶囊右端到圆球左端的缝（Glasmio 示例里 Separate Navigation Item = ON 的间距）。
+ * 常态胶囊右端到圆球左端的缝（Separate Navigation Item = ON 的间距）。
  *
- * 关键：**两片必须是两个独立的玻璃控件**。上一版把胶囊和圆球塞进同一个
- * `GlassSurface` 的两条轮廓里，库的原生材质（`NativeGlassCompletion`）取的是
- * 整个 shape 的 bounds 而不是逐条轮廓的 field，于是把两片之间的缝也画成玻璃，
- * 真机上又变回一根长胶囊，＋ 看着仍像嵌在栏末端。现在胶囊一块、圆球一块，
- * 各自有独立的边缘高光与投影，中间这条 12dp 的缝是真正的底色。
+ * 整条栏是**一块玻璃**（一个 `GlassSurface`），但形状交给
+ * `NavigationGlassUnionShape`：胶囊和圆球是两个独立的圆角 primitive，光学场由
+ * 库的 compound shader 逐块求值，12dp 缝里两块场互不相连；轮廓由 [BarOutline]
+ * 画成两条独立闭合线，各自带完整的边缘高光与投影。
+ *
+ * 上一版用普通 `Shape` 塞两条轮廓，库拿不到逐块 field，退回按 bounds 求场，
+ * 缝被填成玻璃——看起来仍是一整条。再上一版拆成两个 `GlassSurface` 虽然分开了，
+ * 但两块 Clear 在接触处叠起来会糊，也做不出示例那种「同一块玻璃长出的颈部」。
  */
 private val BarGap = 12.dp
 
@@ -119,23 +136,19 @@ private val BallDragRight = 8.dp
 private val BallPressGrowth = 6.dp
 
 /**
- * 常态暗色选中范围：**内缩一圈的圆角方块**（示例图 1）。
+ * 常态暗色选中范围：**内缩一圈的圆角块**（示例图一）。
  *
- * 高度 38dp 对 52dp 栏高，上下各留 7dp；宽度是一格减去左右各 10dp。
- * 之前用 60dp 的圆，比栏还高，看着就是「跟栏平齐的一整格色块」，
- * 而且和点击抬起的玻璃珠同形，常态/按下分不出层次。
- *
- * 圆角 18dp ≈ 38dp 高的一半：和 26dp 半径的胶囊是同一族圆角，
- * 内缩一圈后看起来像「把胶囊等比例缩小了一号」，而不是一个方盒子贴在胶囊里。
- * 14dp 时四个角明显比栏体方，和胶囊打架。
+ * 高度 48dp 对 62dp 栏高，上下各留 7dp；宽度是一格减去左右各 10dp。
+ * 圆角 23dp（≈ 高的一半）：和 31dp 半径的胶囊是同一族连续圆角，
+ * 内缩一圈后像「把胶囊等比例缩小了一号」，不是贴在胶囊里的方盒子。
  */
-private val IndicatorHeight = 38.dp
+private val IndicatorHeight = 48.dp
 private val IndicatorInsetX = 10.dp
-private val IndicatorCorner = 18.dp
+private val IndicatorCorner = 23.dp
 
-/** 融合态的腰部半高（从 6dp 的细颈长到 20dp）。 */
-private val WaistMinHalf = 6.dp
-private val WaistMaxHalf = 20.dp
+/** 融合态的腰部半高（从 8dp 的细颈长到 26dp）。 */
+private val WaistMinHalf = 8.dp
+private val WaistMaxHalf = 26.dp
 
 /**
  * 腰部从细颈长到满粗所跨越的间隙变化量。
@@ -145,49 +158,97 @@ private val WaistMaxHalf = 20.dp
  */
 private val JoinSpan = 9.dp
 
-/** 液态颈部两端伸进两片玻璃的量：被玻璃盖住，屏幕上不会多出一条接缝。 */
-private val NeckOverlap = 6.dp
+/**
+ * `NavigationGlassUnionShape` 的平滑半径：只影响两个 primitive 的光学场怎么并起来，
+ * 不参与裁剪。
+ *
+ * 取 8dp 是为了和 [ContactGap] 对齐：对称缝里 smooth min 的连接条件是
+ * `gap <= smoothness / 2`，8dp 正好在 4dp 缝处接上，和 [BarOutline] 开始长颈部的
+ * 时刻一致——否则会出现「轮廓已经有细颈、材质还是空的」这种空心亮点。
+ * 常态 12dp 缝时中点的场仍有 4dp 在形状外，因此两片是真正断开的。
+ */
+private val UnionSmoothness = 8.dp
 
-/** 底栏厚度缩放：52dp 高的横条用满 16dp 高斯会把背后抹成一块实色板。 */
+/** 底栏厚度缩放：62dp 高的横条用满 16dp 高斯会把背后抹成一块实色板。 */
 private const val BarFrostScale = 0.55f
 
+private const val DEG = Math.PI.toFloat() / 180f
+
 /**
- * 两片独立玻璃之间的「液态颈部」（只在按住 ＋ 往左拖、两片快贴上时画）。
+ * 底栏轮廓：**一块玻璃，两种状态**。
  *
- * 这是 Glasmio 示例里 Separate Navigation Item 的第二个特征：常态两片彻底分开，
- * 靠近时中间长出一截会变粗的 S 形连接。这里画在两块玻璃**下面**，两端分别伸进
- * 胶囊右缘和圆球左缘，被各自的玻璃盖住，屏幕上只露出缝里的一小截，
- * 因此不会给两片独立玻璃留下第三条接缝，也不需要再造一块 `GlassSurface`
- * （第三块 Clear 叠在另外两片上会把透明度糊掉）。
+ * 与 `NavigationGlassUnionShape` 的 compound 光学场配套使用——它负责折射 / 模糊 /
+ * 材质，这里负责裁剪与边缘高光，两边描述的是同一个几何：
  *
- * 腰部半高从 6dp 长到 20dp，所以吸附是连续长出来的，不是突然跳变。
+ * - `gap >= contactPx`：胶囊圆角矩形 + 圆球椭圆，两条互不相交的闭合轮廓。
+ *   光学场由两个 primitive 分别求值，缝里既没有玻璃也没有高光，因此是真正的
+ *   两片独立悬浮，而不是「一整条被画上一条暗线」。
+ * - `gap < contactPx`：一条连续轮廓——胶囊顶边经两段三次贝塞尔收成 S 形细腰，
+ *   接圆球 225° 点、外弧扫 270°、下缘镜像、左端 180° 封口。腰半高随接近程度
+ *   从 8dp 长到 26dp，所以吸附是连续长出来的。
+ *
+ * 之前那版在两块玻璃之间另画一层白色 S 形薄膜，描边会围出一圈方框；现在的颈部
+ * 就是玻璃本身的轮廓，边缘高光沿着它一路走过去，与示例的液态吸附一致。
  */
-private fun DrawScope.drawLiquidNeck(
-    startX: Float,
-    endX: Float,
-    centerY: Float,
-    endHalf: Float,
-    waistHalf: Float,
-    join: Float,
-) {
-    val span = (endX - startX).coerceAtLeast(1f)
-    val mid = (startX + endX) / 2f
-    val c = span * 0.42f
-    val path = Path().apply {
-        moveTo(startX, centerY - endHalf)
-        cubicTo(startX + c, centerY - endHalf, mid - c, centerY - waistHalf, mid, centerY - waistHalf)
-        cubicTo(mid + c, centerY - waistHalf, endX - c, centerY - endHalf, endX, centerY - endHalf)
-        lineTo(endX, centerY + endHalf)
-        cubicTo(endX - c, centerY + endHalf, mid + c, centerY + waistHalf, mid, centerY + waistHalf)
-        cubicTo(mid - c, centerY + waistHalf, startX + c, centerY + endHalf, startX, centerY + endHalf)
-        close()
+private class BarOutline(
+    private val capsule: Rect,
+    private val ball: Rect,
+    private val contactPx: Float,
+    private val joinSpanPx: Float,
+    private val waistMinPx: Float,
+    private val waistMaxPx: Float,
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val path = Path()
+        val gap = ball.left - capsule.right
+        if (gap >= contactPx) {
+            path.addRoundRect(
+                RoundRect(capsule, CornerRadius(capsule.height / 2f, capsule.height / 2f)),
+            )
+            path.addOval(ball)
+            return Outline.Generic(path)
+        }
+
+        val t = ((contactPx - gap) / joinSpanPx).coerceIn(0f, 1f)
+        val ease = t * t * (3f - 2f * t)
+        val waistHalf = waistMinPx + (waistMaxPx - waistMinPx) * ease
+        val cy = (capsule.center.y + ball.center.y) / 2f
+        val r1 = capsule.height / 2f
+        val r2 = ball.height / 2f
+        val ballCx = ball.center.x
+        val ballCy = ball.center.y
+
+        // 从右端圆角的切点开始收腰，直边保留到最后一段，融合处才像被拉出来的凸起。
+        val neckStart = capsule.right - r1 * 0.9f
+        val waistX = (capsule.right + ball.left) / 2f
+        val a = (waistX - neckStart) * 0.55f
+        val upperJoin = Offset(
+            ballCx + r2 * cos(225f * DEG),
+            ballCy + r2 * sin(225f * DEG),
+        )
+        val lowerJoin = Offset(
+            ballCx + r2 * cos(135f * DEG),
+            ballCy + r2 * sin(135f * DEG),
+        )
+        val b = ((upperJoin.x - waistX) * 0.55f).coerceAtLeast(2f)
+        val k = b * 0.75f
+
+        path.moveTo(r1, capsule.top)
+        path.lineTo(neckStart, capsule.top)
+        path.cubicTo(neckStart + a, capsule.top, waistX - a, cy - waistHalf, waistX, cy - waistHalf)
+        path.cubicTo(waistX + b, cy - waistHalf, upperJoin.x - k, upperJoin.y + k, upperJoin.x, upperJoin.y)
+        path.arcToRad(Rect(ball.left, ball.top, ball.right, ball.bottom), 225f * DEG, 270f * DEG, false)
+        path.cubicTo(lowerJoin.x - k, lowerJoin.y - k, waistX + b, cy + waistHalf, waistX, cy + waistHalf)
+        path.cubicTo(waistX - a, cy + waistHalf, neckStart + a, capsule.bottom, neckStart, capsule.bottom)
+        path.lineTo(r1, capsule.bottom)
+        path.arcToRad(Rect(0f, capsule.top, r1 * 2f, capsule.bottom), 90f * DEG, 180f * DEG, false)
+        path.close()
+        return Outline.Generic(path)
     }
-    drawPath(path, Color.White.copy(alpha = 0.16f * join))
-    drawPath(
-        path,
-        Color.White.copy(alpha = 0.34f * join),
-        style = Stroke(width = 1.dp.toPx()),
-    )
 }
 
 /**
@@ -196,10 +257,12 @@ private fun DrawScope.drawLiquidNeck(
  * ## 从 Glasmio 源码移植的三套机制
  *
  * 1. **Separate Navigation Item**：示例设置里打开这个开关后，最右一项会从胶囊里
- *    拆出来变成一颗独立圆按钮，胶囊相应缩短、中间留出一条能看见底色的缝。
- *    这里对应的是「三格短胶囊 + 独立 ＋ 圆球」**两个独立的 `GlassSurface`**——
- *    不能像上一版那样塞进同一块玻璃的两条轮廓：库的原生材质按 shape 的 bounds
- *    求光学场，会把缝也填成玻璃，＋ 看着仍像画在长胶囊末端。
+ *    拆出来变成一颗独立圆按钮，胶囊相应缩短、中间留出一条能看见底色的缝；
+ *    按住圆钮往左拖，两块玻璃之间会长出圆润的颈部连成一体。
+ *    这里用「一块 `GlassSurface` + `NavigationGlassUnionShape`」实现：胶囊与圆球是
+ *    两个独立的圆角 primitive，库的 compound shader 逐块求光学场（12dp 缝里互不
+ *    相连），轮廓交给 [BarOutline]（常态两条独立闭合线、吸附时一条 S 形并集）。
+ *    普通 `Shape` 不行——库拿不到逐块 field，会退回按 bounds 求场，把缝填成玻璃。
  * 2. **可拖动的选中指示器**（[DampedDragAnimation]）：库 `GlasmioNavigationBar` /
  *    `GlasmioTabBar` 用的是同一个类。`value` 是浮点 tab 位置（拖动中连续跟手），
  *    `pressProgress` 管抬起，`scaleX/scaleY` 是 UIKit 的 78/56 放大，三组弹簧管
@@ -214,8 +277,12 @@ private fun DrawScope.drawLiquidNeck(
  * 常态选中是「暗色内缩圆角方块」（库在不用 backdrop 时给的是 `Black 10%`），
  * 抬起时淡出、由原生 lens 接手并把图标文字折进去。
  *
- * 按住 ＋ 往左拖，两片之间会由 [drawLiquidNeck] 长出 S 形收腰颈部（示例的液态
- * 吸附），松手带弹簧弹回分离态。三格图标自己画（库的 `SfSymbol` 没有日历和加号）。
+ * 按住 ＋ 往左拖，[BarOutline] 的 S 形颈部与 compound 光学场一起把两块玻璃并成
+ * 一整块（示例的液态吸附），松手带弹簧弹回分离态。三格图标自己画（库的 `SfSymbol`
+ * 没有日历和加号）。
+ *
+ * 高度对齐库的 `NavigationBarSurfaceHeight = 62.dp`：胶囊 62dp、独立圆球 64dp、
+ * 选中块 48dp（上下各留 7dp、23dp 连续圆角）。
  */
 @Composable
 fun GlassBottomNavigation(
@@ -309,7 +376,7 @@ fun GlassBottomNavigation(
         val gapPx = with(density) { BarGap.toPx() }
         val contactPx = with(density) { ContactGap.toPx() }
         val joinSpanPx = with(density) { JoinSpan.toPx() }
-        val neckOverlapPx = with(density) { NeckOverlap.toPx() }
+        val unionSmoothnessPx = with(density) { UnionSmoothness.toPx() }
         val waistMinPx = with(density) { WaistMinHalf.toPx() }
         val waistMaxPx = with(density) { WaistMaxHalf.toPx() }
         val insetPx = with(density) { IndicatorInsetX.toPx() }
@@ -326,64 +393,65 @@ fun GlassBottomNavigation(
         val indicatorWidth = with(density) { indicatorPx.toDp() }
         val indicatorInsetPx = (cell - indicatorPx) / 2f
 
-        // 量化成 5 档：避免按压动画每帧都让两块玻璃重新求材质配方。
+        // 量化成 5 档：避免按压动画每帧都让材质重新解析一遍配方。
         val growth = growthPx * ((ballPress * 4).roundToInt() / 4f)
         val grownBallPx = ballPx + growth
         // 圆球左边（px）：常态 = 胶囊右端 + 12dp 缝；按下长大会左右各涨一半。
         val ballLeft = pillPx + gapPx + ballDrag.value - growth / 2f
-        val gap = ballLeft - pillPx
-        // 只有真的往左拖到缝 < 4dp，两片才开始长出液态颈部；0 → 1 连续变粗。
-        val join = ((contactPx - gap) / joinSpanPx).coerceIn(0f, 1f)
-        val ease = join * join * (3f - 2f * join)
-        val waistHalf = waistMinPx + (waistMaxPx - waistMinPx) * ease
         val ballScale = grownBallPx / ballPx
 
-        // 1) 拖动吸附：两片玻璃之间那截 S 形收腰（画在玻璃下面，两端被盖住）
-        if (join > 0.001f) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .drawBehind {
-                        drawLiquidNeck(
-                            startX = pillPx - neckOverlapPx,
-                            endX = ballLeft + grownBallPx * 0.35f,
-                            centerY = slotPx / 2f,
-                            endHalf = minOf(barPx, grownBallPx) * 0.38f,
-                            waistHalf = waistHalf,
-                            join = join,
-                        )
-                    },
+        // 两个 primitive 的几何（px）。轮廓 [BarOutline] 与光学场
+        // `NavigationGlassUnionShape` 共用同一组矩形，所以「缝里有没有玻璃」
+        // 在两套表示里始终一致：常态断开、吸附时平滑连成一块。
+        val capsuleRect = Rect(0f, (slotPx - barPx) / 2f, pillPx, (slotPx + barPx) / 2f)
+        val ballRect = Rect(
+            ballLeft,
+            (slotPx - grownBallPx) / 2f,
+            ballLeft + grownBallPx,
+            (slotPx + grownBallPx) / 2f,
+        )
+        val barShape: Shape = remember(
+            capsuleRect,
+            ballRect,
+            contactPx,
+            joinSpanPx,
+            waistMinPx,
+            waistMaxPx,
+            unionSmoothnessPx,
+            barPx,
+            pillPx,
+            grownBallPx,
+        ) {
+            NavigationGlassUnionShape(
+                outline = BarOutline(
+                    capsule = capsuleRect,
+                    ball = ballRect,
+                    contactPx = contactPx,
+                    joinSpanPx = joinSpanPx,
+                    waistMinPx = waistMinPx,
+                    waistMaxPx = waistMaxPx,
+                ),
+                capsules = listOf(
+                    LiquidContactCapsule(Size(pillPx, barPx), capsuleRect),
+                    LiquidContactCapsule(Size(grownBallPx, grownBallPx), ballRect),
+                ),
+                smoothness = unionSmoothnessPx,
+                // 光学按主控件（胶囊）标定，不把拆出去的圆球算进尺寸。
+                minimumDimension = barPx,
             )
         }
 
-        // 2) 短胶囊：Separate Navigation Item 打开后的「主栏」，独立一整块玻璃。
-        //    宽度不含 ＋，右端是完整的半圆，和圆球之间露出 12dp 的底色。
+        // 1) 整条栏只有一块玻璃：常态两个 primitive 各自独立，靠近时光学场平滑并成
+        //    一个带 S 形颈部的整体。轮廓由 BarOutline 给出，边缘高光沿着颈部连续走，
+        //    所以吸附时不会再出现「两块之间贴一块方框」。
         GlassPanel(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .width(pillWidth)
-                .height(BarHeight),
-            cornerRadius = BarHeight / 2f,
+            modifier = Modifier.fillMaxSize(),
+            shape = barShape,
             frostScale = BarFrostScale,
             backdrop = backdrop,
         ) {}
 
-        // 3) 独立圆球：第二块玻璃，和胶囊共用采样层，但有自己的边缘高光与投影。
-        //    这是「＋ 真的独立出来」的关键——不是同一个 Shape 里的第二条轮廓。
-        GlassCirclePanel(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(BallDiameter)
-                .offset { IntOffset((ballDrag.value - growth / 2f).roundToInt(), 0) }
-                .graphicsLayer {
-                    scaleX = ballScale
-                    scaleY = ballScale
-                },
-            frostScale = BarFrostScale,
-            backdrop = backdrop,
-        ) {}
-
-        // 4) 栏内图标文字的录制副本（不可见），供第 7 步的原生透镜折射
+        // 2) 栏内图标文字的录制副本（不可见），供第 5 步的原生透镜折射
         Row(
             Modifier
                 .align(Alignment.CenterStart)
@@ -400,9 +468,9 @@ fun GlassBottomNavigation(
             }
         }
 
-        // 5) 常态暗色选中范围：内缩一圈的圆角块，随 value 滑动。
-        //    用和胶囊同一个 ContinuousRoundedRectangle（连续圆角），18dp / 38dp 的比例
-        //    与胶囊的 26dp / 52dp 一致，看上去就是「把底栏等比例缩小了一号」；
+        // 3) 常态暗色选中范围：内缩一圈的圆角块，随 value 滑动。
+        //    用和胶囊同一个 ContinuousRoundedRectangle（连续圆角），23dp / 48dp 的比例
+        //    与胶囊的 31dp / 62dp 一致，看上去就是「把底栏等比例缩小了一号」；
         //    普通 RoundedCorner 的角会明显更方，和胶囊打架。
         Box(
             Modifier
@@ -421,7 +489,7 @@ fun GlassBottomNavigation(
                 ),
         )
 
-        // 6) 三格：拖动手势由库的 DampedDragAnimation 统一接管（含点击定位）
+        // 4) 三格：拖动手势由库的 DampedDragAnimation 统一接管（含点击定位）
         Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -438,7 +506,7 @@ fun GlassBottomNavigation(
             }
         }
 
-        // 7) 抬起的玻璃珠：原生控制透镜。liftedContent = 图标文字录制层，
+        // 5) 抬起的玻璃珠：原生控制透镜。liftedContent = 图标文字录制层，
         //    所以珠子里面能看见被折弯放大的 house / 日历 / 搜索，而不是一块空白盘。
         if (lifted) {
             Box(
@@ -466,7 +534,7 @@ fun GlassBottomNavigation(
             )
         }
 
-        // 8) 单独悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建。
+        // 6) 单独悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建。
         //    和圆球玻璃用同一个 scale / offset，字形才不会在按压放大时错位。
         Box(
             Modifier
@@ -514,7 +582,7 @@ fun GlassBottomNavigation(
                 .semantics { contentDescription = createLabel },
             contentAlignment = Alignment.Center,
         ) {
-            PlusGlyph(darkInk, glyphSize = 23.dp)
+            PlusGlyph(darkInk, glyphSize = 26.dp)
         }
     }
 }
@@ -536,8 +604,8 @@ private fun RowScope.TabCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        TabGlyph(tab = tab, color = ink, glyphSize = 21.dp, selected = selected)
-        Spacer(Modifier.height(3.dp))
+        TabGlyph(tab = tab, color = ink, glyphSize = 23.dp, selected = selected)
+        Spacer(Modifier.height(4.dp))
         Text(
             text = tab.label,
             maxLines = 1,
@@ -556,7 +624,7 @@ private fun TabGlyph(tab: GlassTab, color: Color, glyphSize: Dp, selected: Boole
     Canvas(Modifier.size(glyphSize)) {
         val w = size.width
         val h = size.height
-        val stroke = (if (selected) 2.3f else 2.0f).dp.toPx()
+        val stroke = (if (selected) 2.4f else 2.1f).dp.toPx()
         when (tab) {
             GlassTab.HOME -> {
                 drawLine(color, Offset(w * 0.50f, h * 0.13f), Offset(w * 0.91f, h * 0.47f), stroke, StrokeCap.Round)

@@ -451,7 +451,7 @@ fun HomeScreen(
                             UndoBar(
                                 undo = shown,
                                 onUndo = eventActions.undo,
-                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 106.dp),
                             )
                         }
                     }
@@ -561,10 +561,10 @@ private fun EventList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        // 底部留白刚好让最后一条完整露出（底栏槽顶在 70dp），
+        // 底部留白刚好让最后一条完整露出（底栏槽 70dp + 10dp 边距 = 槽顶在 80dp），
         // 又让滚动中的卡片能从底栏背后穿过去——不穿过去，玻璃就没有东西可折，
         // 看起来就是一块实色板
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 84.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 94.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "active-header") {
