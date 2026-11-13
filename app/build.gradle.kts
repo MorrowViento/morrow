@@ -51,8 +51,8 @@ android {
         minSdk = 33
         targetSdk = 37
         // 版本号只增不减：应用内更新靠 versionCode 判定，发版前必须上调
-        versionCode = 59
-        versionName = "4.0.0-alpha20"
+        versionCode = 60
+        versionName = "4.0.0-alpha21"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // 镜像前缀写进 BuildConfig，避免把第三方代理域名硬编码进代码（这类域名寿命短）。

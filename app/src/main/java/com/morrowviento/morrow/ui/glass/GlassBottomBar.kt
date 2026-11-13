@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -26,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,7 +65,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
 import io.github.neoruaa.glasmio.glass.DampedDragAnimation
 import io.github.neoruaa.glasmio.glass.LiquidContactCapsule
@@ -75,6 +74,7 @@ import io.github.neoruaa.glasmio.glass.NavigationGlassUnionShape
 import io.github.neoruaa.glasmio.glass.liquidContactShape
 import io.github.neoruaa.glasmio.glass.nativeControlLens
 import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberCombinedBackdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import io.github.neoruaa.glasmio.glass.render.drawPlainBackdrop
 import kotlinx.coroutines.launch
@@ -95,8 +95,13 @@ enum class GlassTab(val label: String) {
 /** 胶囊高度：Glasmio `NavigationBarSurfaceHeight`。 */
 private val BarHeight = 62.dp
 
-/** 右侧独立圆球直径：比胶囊略小 2dp，融合时胶囊才是「主体」。 */
-private val BallDiameter = 60.dp
+/**
+ * 右侧独立圆球直径。
+ *
+ * 比胶囊（62dp）**小 4dp**：示例里那颗独立按钮是一颗「挂在旁边的珠子」，
+ * 不是和栏等高的墩子。等大时两颗圆角会互相争主次，看着像栏被截断了一节。
+ */
+private val BallDiameter = 58.dp
 
 /**
  * 底栏槽高。
@@ -113,7 +118,7 @@ private val BarGap = 12.dp
  * 两片玻璃开始「黏上」的间隙：Glasmio `BottomControlContact` 的 `contactDistance`。
  *
  * 直接作为 `liquidContactShape` 的 contactDistance 传进去，所以轮廓什么时候长出颈部、
- * 光学场什么时候连成一片，用的是同一个阈值——不会出现「轮廓有颈、材质还是空的」。
+ * 光学场什么时候连成一片，用的是同一个阈值。
  */
 private val ContactDistance = 4.dp
 
@@ -138,22 +143,24 @@ private val BallDragRight = 8.dp
 private val BallPressGrowth = 3.dp
 
 /**
- * 常态暗色选中范围：内缩一圈的圆角块。
+ * 常态暗色选中范围：内缩一圈的胶囊。
  *
- * 高度 48dp 对 62dp 栏高，上下各留 7dp；圆角 23dp（≈ 高的一半）——
- * 和 31dp 半径的胶囊是同一族连续圆角，看起来像「把胶囊等比例缩小了一号」。
+ * 高度 46dp 对 62dp 栏高，上下各留 8dp；圆角直接取高度的一半（23dp），
+ * 也就是一条**等比例的短胶囊**——和 31dp 半径的外框是同族曲线。
+ *
+ * 上一版用 `ContinuousRoundedRectangle(23dp)` 画 78×48 的块：连续圆角的平滑段
+ * 在「圆角 ≈ 半高」时会向外鼓，看起来是一个被压扁的椭圆，用户反馈的「歪了」就是它。
+ * 这里改用标准圆弧的胶囊，几何上左右上下完全对称，不会再变形。
  */
-private val IndicatorHeight = 48.dp
-private val IndicatorInsetX = 10.dp
-private val IndicatorCorner = 23.dp
+private val IndicatorHeight = 46.dp
+private val IndicatorInsetX = 8.dp
 
 /**
  * 抬起透镜的高度：Glasmio `ExpandedNavigationItemHeight = 54.dp`。
  *
- * 和暗色块 48dp 不同——透镜是**整格宽**的一块胶囊，抬起时由
+ * 和暗色块 46dp 不同——透镜是**整格宽**的一块胶囊，抬起时由
  * [nativeControlLensGeometry] 在宽高上各加 16dp，所以会向上、向下各凸出 8dp，
- * 越过 62dp 的胶囊边界，和示例图三那样「鼓出来一坨」。
- * 之前用 70dp 的正圆，永远只是贴在栏上的一个圆盘，鼓不出来。
+ * 越过 62dp 的胶囊边界，和示例那样「鼓出来一坨」。
  */
 private val LensHeight = 54.dp
 
@@ -164,9 +171,15 @@ private val LensGrowth = 16.dp
  * 透镜里那层「放大后的图标文字」的放大倍数。
  *
  * 库在 `GlasmioNavigationBar` 里给录制源单独套了 1.16 倍（`lensSourceTabContentScale`），
- * 所以按下时珠子里的 house / 日历看着会比图标本身大一圈，像被镜片顶起来。
+ * 所以按下时珠子里的图标看着会比图标本身大一圈，像被镜片顶起来。
  */
 private const val LensSourceScale = 0.16f
+
+/** 暗色选中块的底色占比：库在无 backdrop 时给的是 `Black 10%`。 */
+private const val IndicatorAlpha = 0.10f
+
+/** 底栏厚度缩放：62dp 高的横条用满 16dp 高斯会把背后抹成一块实色板。 */
+private const val BarFrostScale = 0.55f
 
 /**
  * 库的 `liquidContactShape` 在求轮廓时会用到 `androidx.graphics.path` 的 native 实现
@@ -217,9 +230,6 @@ private class PlainCapsulesShape(
     }
 }
 
-/** 底栏厚度缩放：62dp 高的横条用满 16dp 高斯会把背后抹成一块实色板。 */
-private const val BarFrostScale = 0.55f
-
 /**
  * 库 `GlassControls.kt` 里的 `nativeControlLensGeometry`（0.1.3 中是 internal，无法直接调）。
  *
@@ -257,35 +267,28 @@ private fun Modifier.nativeControlLensGeometry(
 /**
  * 常驻底栏（首页 / 日历共用一条，切页面时它不重建、不换内容）。
  *
- * ## 这次的改动：几何与光学都交回库
+ * ## 三条渲染层，各管一件事
  *
- * 上一版自己写了 [BarOutline] 画两条轮廓 + S 形颈部，再配 `NavigationGlassUnionShape`
- * 的 compound 场。问题在于**轮廓和光学场是两套几何**：拖到快贴上时轮廓已经画了颈，
- * 场却还按 smooth-min 的阈值判断，于是"半融合"；把圆球拖到胶囊上时轮廓退化，
- * 只剩光学场按 bounds 求值，屏幕上就留下一个圆圈的边——也就是"原地一圈"。
+ * 1. **显现层**（[barLayer] 录制）：玻璃 + 暗色选中块。这一层被录制下来，专供按下透镜
+ *    采样——透镜要能「折到胶囊」，采样源里就必须**有胶囊本身**。上一版只采壁纸 + 页面
+ *    内容，于是按下的珠子是一块干净的空圆盘，用户反馈的「没有对胶囊折射」就是它。
+ * 2. **抬起层**（[liftedLayer] 录制，alpha 0）：暗色块 + 放大 1.16 倍的图标文字，
+ *    交给 `nativeControlLens(liftedContent = ...)`，由 GPU 折进透镜。显现层里的暗色块
+ *    在按下时淡出，所以透镜内外不会各有一份（重影）。
+ * 3. **透镜层**：整格宽 × 54dp，抬起时宽高各 +16dp（上下各鼓 8dp）。**只在按压时绘制**。
+ *    上一版常驻绘制：`liftProgress = 0` 的透镜仍会把采样到的画面原样铺一遍，
+ *    正好把底下那块暗色选中块盖成一个月牙——「暗色轮廓歪了」就是这么来的。
  *
- * 现在轮廓直接用库的 `liquidContactShape(first, second, contactDistance,
- * includeDisconnected = true)`：
+ * ## ＋ 为什么在常态是独立玻璃
  *
- * - 常态：`contactCapsulePath` 走 `union()`，两条互不相交的闭合轮廓，各自完整；
- * - 靠近到 `contactDistance`（4dp）以内：长出一条按曲线曲率求切的颈部，腰宽连续变化；
- * - 圆球压到胶囊上（containment）：库判定「没有相对的边」，直接返回并集，所以
- *   叠在一起时轮廓就是真正的合并，不会留内部圆环。
+ * 融合（拖动吸附）需要**一块**玻璃的并集轮廓，否则中间会出现第三条接缝或方框；
+ * 但常态把胶囊和圆球塞进同一块 `GlassSurface`，库的光学场按整块 bounds 标定，
+ * 圆球那一小片会连到整条栏的折射上，看着就不再是「一颗独立按钮」。
  *
- * 光学场仍然用 `NavigationGlassUnionShape`，但 `outline` 换成同一个 `LiquidContactShape`，
- * 于是裁剪与场描述的是同一块几何。
- *
- * ## 按下透镜（图三）
- *
- * 逐条对齐 `GlasmioNavigationBar` 的指示器：
- *
- * - 尺寸 = **整格宽 × 54dp**（不是圆）；
- * - [nativeControlLensGeometry] 在抬起时宽高各 +16dp → 上下各鼓出 8dp；
- * - `drawPlainBackdrop` + `nativeControlLens(TabBarIndicator, liftProgress, liftedContent)`
- *   把图标文字折进透镜；
- * - 录制源里的图标额外放大 1.16 倍（`LensSourceScale`），按下时珠子里是放大的图标；
- * - 可见行里被选中的那一格**淡出**（和库的 `hideSelectedItem` 同一个意思），
- *   否则透镜下面还压着一份原图，会出现重影。
+ * 所以按状态切换：**不接触时两块独立玻璃**（各自的光心、各自的投影与边缘高光，
+ * 珠子才真的浮着），**拖到 4dp 内时换成一块** `NavigationGlassUnionShape`
+ * （轮廓来自库的 `liquidContactShape`，颈部连续生长，压上去直接成并集）。
+ * 切换点就在两片刚贴上的一瞬间，视觉上几乎不可察。
  *
  * 三格图标仍然自绘：库的 `SfSymbol` 只有 House / Search，没有日历和加号。
  */
@@ -304,7 +307,7 @@ fun GlassBottomNavigation(
     val scope = rememberCoroutineScope()
     val darkInk = glassTextPrimary()
     val isDark = LocalGlassDark.current
-    val lensBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
+    val pageBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
     val selectedIndex = tabs.indexOf(selected).coerceAtLeast(0)
 
     // 三格 Row 的每格宽度（px）：拖动回调里要按它把位移换算成 tab 位置。
@@ -348,11 +351,19 @@ fun GlassBottomNavigation(
             drag.animateToValue(selectedIndex.toFloat(), animatePress = false)
         }
     }
+    val press = drag.pressProgressState
 
-    // 栏内图标文字的录制层：nativeControlLens 把这一层折进抬起的透镜。
-    // 与库一样用 alpha(0f) 的副本，只有 backdrop 的 capture graphicsLayer 里
-    // 才真正 drawContent，屏幕上不会多画一份。
-    val labelsBackdrop = rememberLayerBackdrop()
+    /**
+     * 栏自身的录制层（玻璃 + 暗色选中块）。
+     *
+     * 透镜的采样源必须是「页面 + 栏本身」：`rememberCombinedBackdrop` 先铺页面
+     * （壁纸 + 列表内容），再把栏这一层叠上去。这样珠子折到的是**栏**，不是一个空洞。
+     */
+    val barLayer = rememberLayerBackdrop()
+    val lensSource = rememberCombinedBackdrop(pageBackdrop, barLayer)
+
+    /** 抬起时折进透镜的内容：暗色块 + 放大后的图标文字。 */
+    val liftedLayer = rememberLayerBackdrop()
 
     // 圆球拖动位移（px）。用 Animatable：松手能带弹簧回弹到 0。
     val ballDrag = remember { Animatable(0f) }
@@ -399,7 +410,10 @@ fun GlassBottomNavigation(
         val grownBallPx = ballPx + growth
         // 圆球左边（px）：常态 = 胶囊右端 + 12dp 缝；按下长大会左右各涨一半。
         val ballLeft = pillPx + gapPx + ballDrag.value - growth / 2f
+        val gap = ballLeft - pillPx
         val ballScale = grownBallPx / ballPx
+        // 拖到 4dp 内：换成一块玻璃的并集轮廓，颈部由库按间距连续生长。
+        val joined = gap < contactPx
 
         // 两个 capsule primitive 的几何（px），单位是底栏槽的坐标空间。
         val capsuleRect = Rect(0f, (slotPx - barPx) / 2f, pillPx, (slotPx + barPx) / 2f)
@@ -409,86 +423,114 @@ fun GlassBottomNavigation(
             ballLeft + grownBallPx,
             (slotPx + grownBallPx) / 2f,
         )
-        val capsuleFirst = LiquidContactCapsule(Size(pillPx, barPx), capsuleRect)
-        val capsuleSecond = LiquidContactCapsule(Size(grownBallPx, grownBallPx), ballRect)
 
-        // 轮廓：**库自己的**液态接触形状。两片分开时是两条独立闭合轮廓，
-        // 靠近时由同一个函数长出颈部，压在胶囊上时退化成并集——不再是自绘的 S 曲线。
-        val contactShape: Shape = remember(capsuleFirst, capsuleSecond, contactPx) {
-            ResilientContactShape(
-                primary = liquidContactShape(
-                    first = capsuleFirst,
-                    second = capsuleSecond,
-                    contactDistance = contactPx,
-                    // 常态（未接触）也要返回形状：两块玻璃各自完整，而不是整条栏消失。
-                    includeDisconnected = true,
-                ) ?: Capsule(),
-                fallback = PlainCapsulesShape(listOf(capsuleFirst, capsuleSecond)),
-            )
-        }
-
-        val barShape: Shape = remember(contactShape, capsuleFirst, capsuleSecond, smoothnessPx, barPx) {
-            NavigationGlassUnionShape(
-                outline = contactShape,
-                capsules = listOf(capsuleFirst, capsuleSecond),
-                smoothness = smoothnessPx,
-                // 光学按主控件（胶囊）标定，不把拆出去的圆球算进尺寸。
-                minimumDimension = barPx,
-            )
-        }
-
-        // 1) 玻璃：整条栏仍然只有一块 GlassSurface。
-        //    轮廓与光学场共用同一组 capsule 与同一个 smoothness，所以「两片独立 /
-        //    长颈融合 / 叠加合并」三种状态在裁剪和折射上是同一个答案。
-        GlassPanel(
-            modifier = Modifier.fillMaxSize(),
-            shape = barShape,
-            frostScale = BarFrostScale,
-            backdrop = backdrop,
-        ) {}
-
-        // 2) 栏内图标文字的录制副本（不可见），供第 5 步的原生透镜折射。
-        //    图标额外放大 LensSourceScale 倍：透镜里看到的是被镜片顶起来的图标。
-        Row(
+        // 0) 抬起层：**不可见**的一份录制，只给透镜当 liftedContent。
+        //    内容是「这一格被顶起来」的样子：暗色块 + 放大 1.16 倍的图标文字。
+        Box(
             Modifier
                 .align(Alignment.CenterStart)
                 .width(pillWidth)
                 .height(BarHeight)
                 .alpha(0f)
-                .layerBackdrop(labelsBackdrop)
+                .layerBackdrop(liftedLayer)
                 .drawWithContent {
-                    if (drawContext.graphicsLayer === labelsBackdrop.graphicsLayer) drawContent()
+                    if (drawContext.graphicsLayer === liftedLayer.graphicsLayer) drawContent()
                 },
         ) {
-            tabs.forEach { tab ->
-                TabCell(
-                    tab = tab,
-                    selected = tab == selected,
-                    modifier = Modifier.weight(1f),
-                    sourceScale = { 1f + LensSourceScale * drag.pressProgress },
-                )
+            SelectionBlock(
+                width = indicatorWidth,
+                height = IndicatorHeight,
+                color = darkInk.copy(alpha = IndicatorAlpha),
+                translationX = { cellPx.floatValue * drag.value + indicatorInsetPx },
+                alpha = { 1f },
+            )
+            Row(Modifier.fillMaxSize()) {
+                tabs.forEach { tab ->
+                    TabCell(
+                        tab = tab,
+                        selected = tab == selected,
+                        modifier = Modifier.weight(1f),
+                        sourceScale = { 1f + LensSourceScale * press.value },
+                    )
+                }
             }
         }
 
-        // 3) 常态暗色选中范围：内缩一圈的圆角块，随 value 滑动，抬起时淡出
-        //    让位给透镜。用和胶囊同一个 ContinuousRoundedRectangle（连续圆角），
-        //    23dp / 48dp 的比例与胶囊的 31dp / 62dp 一致。
+        // 1) 显现层：玻璃 + 暗色选中块，整层录进 barLayer 供透镜采样。
         Box(
             Modifier
-                .align(Alignment.CenterStart)
-                .width(indicatorWidth)
-                .height(IndicatorHeight)
-                .graphicsLayer {
-                    translationX = cellPx.floatValue * drag.value + indicatorInsetPx
-                    alpha = 1f - drag.pressProgress
+                .matchParentSize()
+                .layerBackdrop(barLayer, reuseContent = true),
+        ) {
+            if (joined) {
+                // 吸附：一块玻璃、一条连续轮廓（库的 liquidContactShape + compound 场）。
+                val capsuleFirst = LiquidContactCapsule(Size(pillPx, barPx), capsuleRect)
+                val capsuleSecond = LiquidContactCapsule(Size(grownBallPx, grownBallPx), ballRect)
+                val contactShape: Shape = remember(capsuleFirst, capsuleSecond, contactPx) {
+                    ResilientContactShape(
+                        primary = liquidContactShape(
+                            first = capsuleFirst,
+                            second = capsuleSecond,
+                            contactDistance = contactPx,
+                            includeDisconnected = true,
+                        ) ?: Capsule(),
+                        fallback = PlainCapsulesShape(listOf(capsuleFirst, capsuleSecond)),
+                    )
                 }
-                .background(
-                    color = darkInk.copy(alpha = 0.10f),
-                    shape = remember { ContinuousRoundedRectangle(IndicatorCorner) },
-                ),
-        )
+                val barShape: Shape = remember(
+                    contactShape, capsuleFirst, capsuleSecond, smoothnessPx, barPx,
+                ) {
+                    NavigationGlassUnionShape(
+                        outline = contactShape,
+                        capsules = listOf(capsuleFirst, capsuleSecond),
+                        smoothness = smoothnessPx,
+                        // 光学按主控件（胶囊）标定，不把拆出去的圆球算进尺寸。
+                        minimumDimension = barPx,
+                    )
+                }
+                GlassPanel(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = barShape,
+                    frostScale = BarFrostScale,
+                    backdrop = backdrop,
+                ) {}
+            } else {
+                // 分离态：两块**各自独立**的玻璃。圆球有自己的光心、自己的投影与
+                // 边缘高光，所以是一颗浮起来的按钮，而不是长胶囊末端的一截。
+                GlassPanel(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .width(pillWidth)
+                        .height(BarHeight),
+                    capsule = true,
+                    frostScale = BarFrostScale,
+                    backdrop = backdrop,
+                ) {}
+                GlassCirclePanel(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(BallDiameter)
+                        .offset { IntOffset((ballDrag.value - growth / 2f).roundToInt(), 0) }
+                        .graphicsLayer {
+                            scaleX = ballScale
+                            scaleY = ballScale
+                        },
+                    frostScale = BarFrostScale,
+                    backdrop = backdrop,
+                ) {}
+            }
 
-        // 4) 三格：拖动手势由库的 DampedDragAnimation 统一接管（含点击定位）。
+            // 暗色选中块：常态显示；按下时淡出，让位给透镜（透镜里另有一份被折起来的）。
+            SelectionBlock(
+                width = indicatorWidth,
+                height = IndicatorHeight,
+                color = darkInk.copy(alpha = IndicatorAlpha),
+                translationX = { cellPx.floatValue * drag.value + indicatorInsetPx },
+                alpha = { 1f - press.value },
+            )
+        }
+
+        // 2) 三格：拖动手势由库的 DampedDragAnimation 统一接管（含点击定位）。
         Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -505,54 +547,54 @@ fun GlassBottomNavigation(
                     // 被选中的那格在按下时淡出：透镜里已经有一份放大后的图标，
                     // 底下再压一份原图就成了重影（库的做法是 hideSelectedItem）。
                     contentAlpha = {
-                        if (cellSelected) 1f - drag.pressProgress else 1f
+                        if (cellSelected) 1f - press.value else 1f
                     },
                 )
             }
         }
 
-        // 5) 抬起的透镜：整格宽的胶囊 + 原生控制透镜。
-        //
-        //    占位始终是 `cell × 54dp`，抬起时由 nativeControlLensGeometry 把**画出来的**
-        //    尺寸各加 16dp（上下各凸 8dp），所以镜片会鼓出胶囊，而不是贴在栏上的圆盘。
-        //    库的写法是「外层管位置、内层管测量与绘制」，这里照抄这个结构：
-        //    外层只负责跟手位移，内层负责变大与透镜效果。
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .offset {
-                    IntOffset(
-                        (cell * drag.value).roundToInt(),
-                        lensTopPx.roundToInt(),
-                    )
-                }
-                .width(with(density) { cell.toDp() })
-                .height(LensHeight),
-        ) {
+        // 3) 按下透镜：整格宽的胶囊 + 原生控制透镜。**只在按压时**绘制。
+        val lensVisible by remember(press) {
+            derivedStateOf { press.value > 0.01f }
+        }
+        if (lensVisible) {
             Box(
                 Modifier
-                    .fillMaxSize()
-                    .nativeControlLensGeometry(
-                        style = NativeControlLensStyle.TabBarIndicator,
-                        horizontalProgress = { drag.pressProgress },
-                    )
-                    .drawPlainBackdrop(
-                        backdrop = lensBackdrop,
-                        shape = { Capsule() },
-                        effects = {
-                            nativeControlLens(
-                                style = NativeControlLensStyle.TabBarIndicator,
-                                liftProgress = drag.pressProgress,
-                                isDark = isDark,
-                                liftedContent = labelsBackdrop,
-                            )
-                        },
-                    ),
-            )
+                    .align(Alignment.CenterStart)
+                    .offset {
+                        IntOffset(
+                            (cell * drag.value).roundToInt(),
+                            lensTopPx.roundToInt(),
+                        )
+                    }
+                    .width(with(density) { cell.toDp() })
+                    .height(LensHeight),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .nativeControlLensGeometry(
+                            style = NativeControlLensStyle.TabBarIndicator,
+                            horizontalProgress = { press.value },
+                        )
+                        .drawPlainBackdrop(
+                            // 采样「页面 + 栏」：折到的是胶囊与选中块，不是一块空洞。
+                            backdrop = lensSource,
+                            shape = { Capsule() },
+                            effects = {
+                                nativeControlLens(
+                                    style = NativeControlLensStyle.TabBarIndicator,
+                                    liftProgress = press.value,
+                                    isDark = isDark,
+                                    liftedContent = liftedLayer,
+                                )
+                            },
+                        ),
+                )
+            }
         }
 
-        // 6) 单独悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建。
-        //    和圆球玻璃用同一个 scale / offset，字形才不会在按压放大时错位。
+        // 4) 独立悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建。
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
@@ -610,9 +652,41 @@ fun GlassBottomNavigation(
                 .semantics { contentDescription = createLabel },
             contentAlignment = Alignment.Center,
         ) {
-            PlusGlyph(darkInk, glyphSize = 26.dp)
+            PlusGlyph(darkInk, glyphSize = 24.dp)
         }
     }
+}
+
+/**
+ * 暗色选中块：内缩一圈、圆角等于半高的短胶囊。
+ *
+ * 位移与淡出都在 `graphicsLayer` 里读状态，只失效绘制阶段——拖动时不会重组整条底栏。
+ */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.SelectionBlock(
+    width: Dp,
+    height: Dp,
+    color: Color,
+    translationX: () -> Float,
+    alpha: () -> Float,
+) {
+    Box(
+        Modifier
+            .align(Alignment.CenterStart)
+            .width(width)
+            .height(height)
+            .graphicsLayer {
+                this.translationX = translationX()
+                this.alpha = alpha()
+            }
+            .drawBehind {
+                // 标准圆弧的胶囊：圆角取半高，四周完全对称。
+                drawRoundRect(
+                    color = color,
+                    cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                )
+            },
+    )
 }
 
 /**
@@ -717,7 +791,7 @@ private fun TabGlyph(tab: GlassTab, color: Color, glyphSize: Dp, selected: Boole
 @Composable
 private fun PlusGlyph(color: Color, glyphSize: Dp) {
     Canvas(Modifier.size(glyphSize)) {
-        val stroke = 2.1.dp.toPx()
+        val stroke = 2.2.dp.toPx()
         val c = size.width / 2f
         drawLine(color, Offset(c, size.height * 0.1f), Offset(c, size.height * 0.9f), stroke, StrokeCap.Round)
         drawLine(color, Offset(size.width * 0.1f, c), Offset(size.width * 0.9f, c), stroke, StrokeCap.Round)
