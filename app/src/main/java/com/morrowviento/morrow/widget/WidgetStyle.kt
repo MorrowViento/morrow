@@ -3,6 +3,7 @@ package com.morrowviento.morrow.widget
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AccentPalette
 
 /**
  * 小部件样式：预设 + 字号 + 配色 + 元素显隐。
@@ -60,6 +61,8 @@ data class WidgetColors(
     val textSecondary: Int,
     /** 进度条着色用。 */
     val accent: Int,
+    /** 行间分隔线。 */
+    val separator: Int,
     val dark: Boolean,
     /** true = 「主题色」档：底色以强调色为主，而不是中性玻璃。 */
     val vivid: Boolean,
@@ -90,9 +93,9 @@ data class WidgetStyle(
      * 解析出实际颜色。
      *
      * @param systemDark 系统当前是否深色（`Configuration.UI_MODE_NIGHT_YES`）
-     * @param accent 应用内的配色方案（设置 → 外观 → 配色方案）
+     * @param accent 应用内**实际生效**的配色（设置 → 外观 → 配色方案，或从背景图取色）
      */
-    fun colors(systemDark: Boolean, accent: AccentColor): WidgetColors {
+    fun colors(systemDark: Boolean, accent: AccentPalette): WidgetColors {
         val dark = when (palette) {
             WidgetPalette.SYSTEM, WidgetPalette.ACCENT -> systemDark
             WidgetPalette.DARK -> true
@@ -102,6 +105,7 @@ data class WidgetStyle(
             textPrimary = WidgetAppearance.textPrimary(dark),
             textSecondary = WidgetAppearance.textSecondary(dark),
             accent = WidgetAppearance.accentOf(accent, dark),
+            separator = WidgetAppearance.separator(dark),
             dark = dark,
             vivid = palette == WidgetPalette.ACCENT,
         )

@@ -160,6 +160,24 @@ enum class AccentColor(
     /** 壁纸四团色斑（已按明暗选好）。 */
     fun blobs(isDark: Boolean): LongArray = if (isDark) blobsDark else blobsLight
 
+    /**
+     * 摊平成 [AccentPalette]，供玻璃层、卡片与设置页消费。
+     *
+     * `by lazy` 缓存：这个属性会被 `GlassTheme`、`GlassBackdrop`、小部件刷新反复读，
+     * 每读一次就新建一个带两个 `LongArray` 的对象，光 GC 就够看；而且 `GlassTheme`
+     * 用它做 `key(...)`，实例不稳定还会让整棵主题子树误判为「换了配色」。
+     */
+    val palette: AccentPalette by lazy {
+        AccentPalette(
+            id = prefValue,
+            label = label,
+            light = light,
+            dark = dark,
+            blobsLight = blobsLight,
+            blobsDark = blobsDark,
+        )
+    }
+
     companion object {
         /** 认不出的值（旧备份、被手工改过的偏好）一律回落默认蓝。 */
         fun fromPref(raw: String?): AccentColor =
@@ -179,8 +197,15 @@ enum class AccentColor(
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val sortMode: SortMode = SortMode.DISTANCE,
-    /** 主题色（强调色），全应用统一读它。 */
+    /**
+     * 用户手选的主题色（七套预设之一）。
+     *
+     * 界面与玻璃层读的**不是它**，而是 [resolvedAccent]：开了「从背景图取色」时，
+     * 实际生效的配色由图片主色推导，这个字段只记录「关掉取色后回到哪一套」。
+     */
     val accent: AccentColor = AccentColor.DEFAULT,
+    /** 页面底色来源（丝缎 / 自定义图片）与取色设置。 */
+    val backdrop: BackdropSettings = BackdropSettings(),
     /**
      * 玻璃厚度，0~1 连续值。
      *
@@ -200,6 +225,17 @@ data class AppSettings(
     /** 减弱动效：关闭页面切换的淡入淡出与卡片位移，只保留即时切换。 */
     val reduceMotion: Boolean = false,
 ) {
+    /**
+     * 实际生效的配色：手选的那套，或由背景图主色推导出来的那套。
+     *
+     * 用 `by lazy` 缓存：这个属性每次组合都会被 `GlassTheme`、`GlassBackdrop` 读，
+     * 而 `AppSettings` 是不可变快照，一个实例只需算一次。取色档推导出来的
+     * [AccentPalette] 返回值相等（见它的 equals），因此不会让主题子树每帧重建。
+     */
+    val resolvedAccent: AccentPalette by lazy {
+        if (backdrop.tintActive) AccentPalette.fromSeed(backdrop.tintSeed) else accent.palette
+    }
+
     /** 实际渲染是否深色：跟随系统时由 [systemDark] 决定。 */
     fun isDark(systemDark: Boolean): Boolean = when (themeMode) {
         ThemeMode.SYSTEM -> systemDark

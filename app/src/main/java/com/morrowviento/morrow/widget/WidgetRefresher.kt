@@ -76,9 +76,9 @@ class WidgetRefresher(
         val today = LocalDate.now()
         val now = LocalDateTime.now()
         val systemDark = isSystemDark()
-        // 配色方案从小部件之外来：设置 → 外观 → 配色方案。
+        // 配色方案从小部件之外来：设置 → 外观 → 配色方案（或背景图取色）。
         // 小部件与 App 必须同源，否则会出现「应用里换成青竹、桌面还是海蓝」。
-        val palette = settings.appSettings.first().accent
+        val palette = settings.appSettings.first().resolvedAccent
         val density = appContext.resources.displayMetrics.density
         // 同一次刷新里多个小部件常常同尺寸同配色，位图只画一次。
         val bitmaps = HashMap<Int, android.graphics.Bitmap>()
@@ -90,7 +90,7 @@ class WidgetRefresher(
             val style = if (isDetail) store.load(widgetId) else (styleById[widgetId] ?: fallback ?: WidgetStyle())
             val colors = style.colors(systemDark, palette)
             val (widthPx, heightPx) = widgetSizePx(widgetId, density)
-            val key = widthPx * 31 + heightPx * 17 + palette.ordinal * 7 +
+            val key = widthPx * 31 + heightPx * 17 + palette.hashCode() * 7 +
                 (if (colors.dark) 1 else 0) * 3 + (if (colors.vivid) 1 else 0)
             val background = bitmaps.getOrPut(key) {
                 WidgetAppearance.render(widthPx, heightPx, density, palette, colors.dark, colors.vivid)

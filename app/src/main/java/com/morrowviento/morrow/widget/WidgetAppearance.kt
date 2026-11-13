@@ -9,7 +9,7 @@ import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
-import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AccentPalette
 
 /**
  * 小部件的「液态玻璃」外观。
@@ -61,7 +61,7 @@ internal object WidgetAppearance {
         widthPx: Int,
         heightPx: Int,
         density: Float,
-        accent: AccentColor,
+        accent: AccentPalette,
         dark: Boolean,
         vivid: Boolean,
     ): Bitmap {
@@ -76,15 +76,18 @@ internal object WidgetAppearance {
         canvas.save()
         canvas.clipPath(clip)
 
-        // 1) 底色。上一版压得太深（深色 #1A1A20、主题色档压到只剩 38% 强调色），
-        //    在桌面上看着像一块黑色板子——玻璃本身是「浅而透」的，底色一黑，
-        //    上面的色斑与高光就全浮不出来。这里整体抬亮一档。
+        // 1) 底色。
+        //
+        // 4.1.0 又整体提亮了一档：上一版深色底 #2A2A34 在桌面上仍读作「一块深灰板」，
+        // 而玻璃本身是**浅而透**的——底色一黑，铺在上面的色斑与高光就浮不出来。
+        // 现在深色底抬到 #3E3E4A（约 24% 亮度），主题色档也不再往黑里压那么狠
+        // （0.40 → 0.24），否则鲜艳的配色在桌面上反而更像黑卡。
         val accentArgb = accent.argb(dark).toInt()
         val base = when {
-            vivid && dark -> blend(accentArgb, BLACK, 0.40f)
-            vivid -> blend(accentArgb, WHITE, 0.74f)
-            dark -> rgb(42, 42, 52)
-            else -> rgb(250, 250, 253)
+            vivid && dark -> blend(blend(accentArgb, WHITE, 0.12f), BLACK, 0.24f)
+            vivid -> blend(accentArgb, WHITE, 0.78f)
+            dark -> rgb(62, 62, 74)
+            else -> rgb(252, 252, 254)
         }
         canvas.drawColor(base)
 
@@ -93,12 +96,14 @@ internal object WidgetAppearance {
         //    暗色斑铺在暗底上等于没有颜色。
         val blobs = accent.blobs(dark)
         val blobRadius = maxOf(w, h) * 0.70f
-        val blobAlpha = if (dark) 205 else 215
+        val blobAlpha = if (dark) 215 else 210
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         BlobCenters.forEachIndexed { index, (fx, fy) ->
             val raw = blobs[index].toInt()
-            val lifted = if (dark) blend(raw, WHITE, 0.24f) else raw
-            val tint = if (vivid) blend(accentArgb, lifted, 0.40f) else lifted
+            // 深色下提亮的比例从 0.24 提高到 0.34：底色抬亮之后，色斑也得跟着亮，
+            // 否则两者亮度接近，四团色就「糊」成一片没有层次的灰。
+            val lifted = if (dark) blend(raw, WHITE, 0.34f) else raw
+            val tint = if (vivid) blend(accentArgb, lifted, 0.36f) else lifted
             paint.shader = RadialGradient(
                 w * fx,
                 h * fy,
@@ -113,8 +118,8 @@ internal object WidgetAppearance {
 
         // 3) 斜向光带：一条亮面接一条暗面，位置与应用内那条折痕一致（斜 18°，
         //    屏幕上大约落在 46% 高度处）。小部件矮，所以直接用对角渐变近似。
-        val sheen = if (dark) 0.17f else 0.46f
-        val shade = if (dark) 0.16f else 0.10f
+        val sheen = if (dark) 0.20f else 0.46f
+        val shade = if (dark) 0.12f else 0.10f
         paint.shader = LinearGradient(
             0f, 0f, w.toFloat(), h.toFloat(),
             intArrayOf(
@@ -134,10 +139,13 @@ internal object WidgetAppearance {
         //    这两条是「玻璃有厚度」最省事也最有效的表达：上沿把环境光收进来，
         //    下沿压一点暗，中间就鼓起来了。只画一条 1.5dp 的发丝线是不够的——
         //    远看那只是一个白边，读不出体积。
+        //
+        //    底部的暗再收一档（70 → 44）：小部件上「下半张明显比上半张黑」是
+        //    「颜色太深」的第二个来源，它比底色本身更刺眼。
         val topGlow = h * 0.34f
         paint.shader = LinearGradient(
             0f, 0f, 0f, topGlow,
-            withAlpha(WHITE, if (dark) 50 else 100),
+            withAlpha(WHITE, if (dark) 64 else 104),
             withAlpha(WHITE, 0),
             Shader.TileMode.CLAMP,
         )
@@ -147,7 +155,7 @@ internal object WidgetAppearance {
         val bottomShade = h * 0.24f
         paint.shader = LinearGradient(
             0f, h.toFloat(), 0f, h - bottomShade,
-            withAlpha(BLACK, if (dark) 70 else 26),
+            withAlpha(BLACK, if (dark) 44 else 20),
             withAlpha(BLACK, 0),
             Shader.TileMode.CLAMP,
         )
@@ -206,8 +214,18 @@ internal object WidgetAppearance {
 
     fun textSecondary(dark: Boolean): Int = if (dark) withAlpha(WHITE, 158) else withAlpha(INK_SOFT, 153)
 
+    /**
+     * 行与行之间的分隔线。
+     *
+     * 小部件的每一行原本只靠 7dp 的留白分开，两张卡片紧挨着、行距又小的时候，
+     * 眼睛会把「一条事件的标题 + 天数」和下一行的天数读成一片（真机反馈：
+     * 「几条事件之间分割不明晰」）。一条 0.6dp、12%/10% 的细线最省地方也最有效：
+     * 它不参与配色，只在玻璃内侧划出一道边界。
+     */
+    fun separator(dark: Boolean): Int = if (dark) withAlpha(WHITE, 30) else withAlpha(BLACK, 26)
+
     /** 进度条着色：直接用强调色，与小部件上的天数徽章同一个来源。 */
-    fun accentOf(accent: AccentColor, dark: Boolean): Int = accent.argb(dark).toInt()
+    fun accentOf(accent: AccentPalette, dark: Boolean): Int = accent.argb(dark).toInt()
 
     // ---------------------------------------------------------------- 工具
     //

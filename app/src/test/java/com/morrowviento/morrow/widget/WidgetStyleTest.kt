@@ -1,6 +1,7 @@
 package com.morrowviento.morrow.widget
 
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AccentPalette
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -12,7 +13,7 @@ class WidgetStyleTest {
     private fun colors(
         style: WidgetStyle,
         systemDark: Boolean = false,
-        accent: AccentColor = AccentColor.DEFAULT,
+        accent: AccentPalette = AccentColor.DEFAULT.palette,
     ) = style.colors(systemDark, accent)
 
     // ---- 预设 ----
@@ -76,9 +77,9 @@ class WidgetStyleTest {
         assertFalse(colors(style, systemDark = false).dark)
 
         // 强调色必须是用户选的那一套，而不是写死的蓝
-        val jade = colors(style, systemDark = false, accent = AccentColor.JADE)
+        val jade = colors(style, systemDark = false, accent = AccentColor.JADE.palette)
         assertEquals(AccentColor.JADE.light.toInt(), jade.accent)
-        val rose = colors(style, systemDark = true, accent = AccentColor.ROSE)
+        val rose = colors(style, systemDark = true, accent = AccentColor.ROSE.palette)
         assertEquals(AccentColor.ROSE.dark.toInt(), rose.accent)
     }
 

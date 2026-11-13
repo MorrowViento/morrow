@@ -4,74 +4,94 @@
   从「5 组写死的行」改成 ListView 的一项：RemoteViews 的静态视图不能滚动，
   只有集合视图（ListView）能由桌面接管上下滑动。这一项由 WidgetListFactory 逐条填充，
   颜色与字号同样在运行时套。
+
+  4.1.0 起底部多了一条分隔线（widget_row_divider）：行距只有 7dp 的时候，两行
+  「标题 + 大号天数」会连成一片，远看分不清有几条事件。分隔线的颜色由
+  WidgetColors.separator 在刷新时写入（setInt + setBackgroundColor）。
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_row_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:baselineAligned="false"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:paddingTop="7dp"
-    android:paddingBottom="7dp">
+    android:orientation="vertical">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
-        <TextView
-            style="@style/WidgetText"
-            android:id="@+id/widget_row_title"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textSize="15sp" />
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-        <TextView
-            style="@style/WidgetText.Dim"
-            android:id="@+id/widget_row_meta"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textSize="11sp" />
+            <TextView
+                style="@style/WidgetText"
+                android:id="@+id/widget_row_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textSize="15sp" />
 
-        <ProgressBar
-            android:id="@+id/widget_row_progress"
-            style="@android:style/Widget.Material.ProgressBar.Horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="3dp"
-            android:layout_marginTop="4dp"
-            android:indeterminate="false"
-            android:max="100"
-            android:progress="0"
-            android:visibility="gone" />
-    </LinearLayout>
+            <TextView
+                style="@style/WidgetText.Dim"
+                android:id="@+id/widget_row_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textSize="11sp" />
 
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:gravity="center_horizontal"
-        android:orientation="vertical">
+            <ProgressBar
+                android:id="@+id/widget_row_progress"
+                style="@android:style/Widget.Material.ProgressBar.Horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_marginTop="4dp"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:visibility="gone" />
+        </LinearLayout>
 
-        <TextView
-            style="@style/WidgetText"
-            android:id="@+id/widget_row_badge"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="26sp"
-            android:textStyle="bold" />
+            android:layout_marginStart="12dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
 
-        <TextView
-            style="@style/WidgetText.Dim"
-            android:id="@+id/widget_row_unit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="11sp" />
+            <TextView
+                style="@style/WidgetText"
+                android:id="@+id/widget_row_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="26sp"
+                android:textStyle="bold" />
+
+            <TextView
+                style="@style/WidgetText.Dim"
+                android:id="@+id/widget_row_unit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp" />
+        </LinearLayout>
     </LinearLayout>
+
+    <!-- 分隔线用 ImageView 而不是 <View>：RemoteViews 只认一份固定的允许清单
+         （FrameLayout / LinearLayout / TextView / ImageView / ProgressBar / ListView …），
+         裸 View 会被 lint 判成 RemoteViewLayout 错误，运行期也可能不渲染。 -->
+    <ImageView
+        android:id="@+id/widget_row_divider"
+        android:layout_width="match_parent"
+        android:layout_height="0.6dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
 </LinearLayout>

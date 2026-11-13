@@ -52,6 +52,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val accentColor: Flow<AccentColor> =
         store.data.map { AccentColor.fromPref(it.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)) }
 
+    /** 页面底色：模式 / 图片文件名 / 自动取色开关与种子色。 */
+    val backdrop: Flow<BackdropSettings> = store.data.map { it.backdropOrDefault() }
+
     val onboardingCompleted: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.ONBOARDING_COMPLETED) ?: false }
 
     suspend fun setOnboardingCompleted() {
@@ -60,7 +63,13 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     // ---- M6：设置中心（四项合成一个快照，见 AppSettings 的注释）----
 
-    val appSettings: Flow<AppSettings> = combine(
+    /**
+     * 核心设置的快照（不含背景）。
+     *
+     * 分两步合成是因为 `combine` 的重载最多到 5 个 Flow，而这里已经有 6 项；
+     * 先把这 5 项合成一份，再和 [backdrop] 合并一次，读起来也比塞进 vararg 清楚。
+     */
+    private val coreSettings: Flow<AppSettings> = combine(
         themeMode,
         sortMode,
         glassFrost,
@@ -77,6 +86,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             reduceMotion = motion,
         )
     }
+
+    val appSettings: Flow<AppSettings> =
+        combine(coreSettings, backdrop) { core, backdropSettings ->
+            core.copy(backdrop = backdropSettings)
+        }
 
     suspend fun setThemeMode(mode: ThemeMode) =
         putString(LegacySettingsKeys.THEME_MODE, mode.prefValue)
@@ -111,6 +125,30 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         putString(LegacySettingsKeys.ACCENT_COLOR, color.prefValue)
 
     /**
+     * 一次写完四项背景设置。
+     *
+     * 必须挤进同一次 `edit`：分成四次写会让 `backdrop` 这条 Flow 连发四轮，
+     * 每轮都要重绘整页壁纸位图，选图时肉眼可见地闪三下。
+     */
+    suspend fun setBackdrop(value: BackdropSettings) {
+        store.edit { prefs ->
+            prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_MODE)] = value.mode.prefValue
+            val image = value.image
+            if (image.isNullOrBlank()) {
+                prefs.remove(stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE))
+            } else {
+                prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE)] = image
+            }
+            prefs[booleanPreferencesKey(LegacySettingsKeys.BACKDROP_AUTO_TINT)] = value.autoTint
+            if (value.tintSeed == 0L) {
+                prefs.remove(longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED))
+            } else {
+                prefs[longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED)] = value.tintSeed
+            }
+        }
+    }
+
+    /**
      * 一次性读出整组设置。
      *
      * 供备份导出与设置中心首帧使用：这两处只要「现在的值」，
@@ -123,6 +161,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             themeMode = ThemeMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.THEME_MODE)),
             sortMode = SortMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE)),
             accent = AccentColor.fromPref(prefs.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)),
+            backdrop = prefs.backdropOrDefault(),
             glassFrost = frost,
             reduceTransparency = frost >= 0.85f,
             reduceMotion = prefs.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
@@ -145,6 +184,19 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             }
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = frost >= 0.85f
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] = value.reduceMotion
+            prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_MODE)] = value.backdrop.mode.prefValue
+            val backdropImage = value.backdrop.image
+            if (backdropImage.isNullOrBlank()) {
+                prefs.remove(stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE))
+            } else {
+                prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE)] = backdropImage
+            }
+            prefs[booleanPreferencesKey(LegacySettingsKeys.BACKDROP_AUTO_TINT)] = value.backdrop.autoTint
+            if (value.backdrop.tintSeed == 0L) {
+                prefs.remove(longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED))
+            } else {
+                prefs[longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED)] = value.backdrop.tintSeed
+            }
         }
     }
 
@@ -275,6 +327,28 @@ private fun Preferences.floatOrNull(name: String): Float? = when (val value = va
     is String -> value.trim().toFloatOrNull()
     else -> null
 }
+
+/** 类型宽容的长整型读取（背景取色的种子色是按 Long 存的）。 */
+private fun Preferences.longOrNull(name: String): Long? = when (val value = valueByName(name)) {
+    null -> null
+    is Long -> value
+    is Number -> value.toLong()
+    is String -> value.trim().toLongOrNull()
+    else -> null
+}
+
+/**
+ * 背景设置的四项。
+ *
+ * 缺任意一项都用默认值补齐而不是整组作废：这四项在语义上是独立的，
+ * 用户从旧版本升上来时四项都缺失 → 丝缎壁纸；只丢了图片名 → 回落到丝缎但保留取色种子。
+ */
+private fun Preferences.backdropOrDefault(): BackdropSettings = BackdropSettings(
+    mode = BackdropMode.fromPref(stringOrNull(LegacySettingsKeys.BACKDROP_MODE)),
+    image = stringOrNull(LegacySettingsKeys.BACKDROP_IMAGE)?.takeIf { it.isNotBlank() },
+    autoTint = booleanOrNull(LegacySettingsKeys.BACKDROP_AUTO_TINT) ?: false,
+    tintSeed = longOrNull(LegacySettingsKeys.BACKDROP_TINT_SEED) ?: 0L,
+)
 
 /**
  * 玻璃厚度的三级回落：新键（0~1）→ 旧四档字符串 → 更旧的无障碍布尔 → 默认值。

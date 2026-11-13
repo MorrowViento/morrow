@@ -27,30 +27,67 @@ import androidx.compose.ui.unit.LayoutDirection
  * **再采样一次**做模糊，等于同一批像素被算了两遍。列表滚动、页面切换、底栏拖动时
  * 这些填充全部压在填充率上，是那阵「有点卡」的主要来源之一。
  *
- * 现在：进组合后第一次绘制时渲染一张位图，之后 `drawImage` 一次搞定。观感逐像素不变
- * （渲染用的是同一份 `CanvasDrawScope` 代码），填充率开销从「6 层 shader」降到「1 次贴图」。
+ * 现在：渲染一次，之后 `drawImage` 一次搞定。观感逐像素不变（渲染用的是同一份
+ * `CanvasDrawScope` 代码），填充率开销从「6 层 shader」降到「1 次贴图」。
  *
- * ## 为什么是「单槽缓存」而不是给每个调用方各自 remember
+ * ## 为什么渲染必须挪到后台线程（4.1.0）
  *
- * 首页、日历页、设置页、小部件配置页各有一个 `GlassBackdrop`，但它们**同一时刻只有
- * 一个在屏幕上**，尺寸与配色也几乎总是同一个。用一张进程级单槽缓存，四个实例共享同一张
- * 位图：切页不重建、内存里也只常驻一份（1080×2400 约 10 MB）。key 不匹配时才重画。
+ * 上一版是「在绘制阶段同步渲染」。第一次进页面时它只发生一次，看不出来；但**切换明暗 /
+ * 换配色**会让 key 变，于是正好在最需要流畅的那一帧里，主线程上多出 2.6 M 像素 × 6 层
+ * 渐变的工作量——一次换主题就卡三四帧，用户感受是「点一下深色，界面先僵一下再变」。
+ *
+ * 现在由 [GlassBackdrop] 在 `LaunchedEffect` 里用 `Dispatchers.Default` 调 [render]，
+ * 主线程只负责贴图。等待期间显示上一次那张（颜色差一档，几十毫秒），不会闪白也不会僵住。
+ *
+ * ## 为什么是「多槽缓存」
+ *
+ * 首页、日历页、设置页、小部件配置页各有一个 `GlassBackdrop`，但同一时刻只有一个在屏幕上。
+ * 用进程级缓存按 key 命中：切页不重建；浅色 / 深色来回切时两套位图都留着，**第二次切换
+ * 完全不需要渲染**——而「切明暗卡顿」正是用户最常重复的那个动作。
  *
  * 这里刻意**不降分辨率**：整幅图里唯一的细节是那条发丝级高光，而「玻璃厚度差异」正是
  * 靠它被看得清 / 被糊掉来体现的（见 `GlassBackdrop` 的注释）。半分辨率会把它直接抹掉。
  */
 internal object GlassWallpaper {
 
-    /** 上一次渲染的 key；[cacheImage] 与之配对。0 表示还没画过。 */
-    private var cacheKey = 0L
-    private var cacheImage: ImageBitmap? = null
+    /**
+     * 缓存的槽位数。
+     *
+     * 4 张 1080×2400 的 ARGB 位图约 40 MB——在低端机上偏多，但它们只在真的被用过之后
+     * 才占位（一台手机通常只经历「浅色 / 深色」两套 × 最多几套配色），而且可以随时被
+     * 淘汰。给 3 槽足以覆盖「来回切明暗」这个最常用路径。
+     */
+    private const val CACHE_SLOTS = 3
+
+    /** 按访问顺序淘汰的位图缓存；key 见 [keyOf]。 */
+    private val cache = object : LinkedHashMap<Long, ImageBitmap>(CACHE_SLOTS, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, ImageBitmap>?): Boolean =
+            size > CACHE_SLOTS
+    }
+
+    /** 最近一次渲染出来的那张：换主题等待新图时先拿它顶上，避免闪一下空白。 */
+    @Volatile
+    private var lastRendered: ImageBitmap? = null
 
     /**
-     * 取（必要时重画）当前尺寸与配色下的壁纸位图。
+     * 命中缓存则直接返回，否则 null。
      *
-     * @param blobs 四团色斑的 ARGB（`0xAARRGGBB`），顺序：暖 / 冷 / 天青 / 深。
+     * 组合期调它（不能在这里渲染）：命中时首帧就有图，不用等一次异步。
      */
-    fun image(
+    fun cached(widthPx: Int, heightPx: Int, base: Color, dark: Boolean, blobs: LongArray): ImageBitmap? {
+        val key = keyOf(widthPx, heightPx, base, dark, blobs)
+        synchronized(cache) { return cache[key] }
+    }
+
+    /** 上一张渲染结果（任何 key）。 */
+    fun placeholder(): ImageBitmap? = lastRendered
+
+    /**
+     * 渲染（必要时）。**可以在任意线程调用**：`ImageBitmap` 在 Android 上就是一张
+     * 软件位图，`CanvasDrawScope` 只是往它的 `android.graphics.Canvas` 上画，
+     * 没有线程亲和性。
+     */
+    fun render(
         widthPx: Int,
         heightPx: Int,
         base: Color,
@@ -60,16 +97,18 @@ internal object GlassWallpaper {
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
         val key = keyOf(w, h, base, dark, blobs)
-        cacheImage?.let { if (key == cacheKey) return it }
-        val rendered = render(w, h, base, dark, blobs)
-        cacheKey = key
-        cacheImage = rendered
+        synchronized(cache) { cache[key]?.let { return it } }
+        val rendered = draw(w, h, base, dark, blobs)
+        synchronized(cache) {
+            cache[key] = rendered
+            lastRendered = rendered
+        }
         return rendered
     }
 
     // ---------------------------------------------------------------- 绘制
 
-    private fun render(
+    private fun draw(
         w: Int,
         h: Int,
         base: Color,
@@ -162,7 +201,7 @@ internal object GlassWallpaper {
      * 缓存 key。
      *
      * 尺寸 + 明暗 + 底色 + 四团色斑就是这幅图的全部输入。混进 64 位里足够区分
-     * （理论上会撞，但撞了只是「显示上一次的配色」——而配色只有七套 × 两态，
+     * （理论上会撞，但撞了只是「显示上一次的配色」——而配色只有七套 × 两态 + 取色档，
      * 实际输入组合只有十几种，撞不上）。
      */
     private fun keyOf(w: Int, h: Int, base: Color, dark: Boolean, blobs: LongArray): Long {

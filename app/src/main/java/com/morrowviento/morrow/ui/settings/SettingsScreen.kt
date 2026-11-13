@@ -1,10 +1,13 @@
 package com.morrowviento.morrow.ui.settings
 
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -30,7 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,9 +47,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -52,9 +59,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.morrowviento.morrow.data.backdrop.BackdropImage
 import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AccentPalette
+import com.morrowviento.morrow.data.settings.BackdropMode
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.glass.GlassAlert
@@ -74,7 +84,9 @@ import com.morrowviento.morrow.ui.glass.glassTextTertiary
 import com.morrowviento.morrow.ui.update.UpdateActions
 import com.morrowviento.morrow.ui.update.UpdateSheet
 import com.morrowviento.morrow.widget.WidgetEntries
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.PI
 
 /**
@@ -113,6 +125,20 @@ fun SettingsScreen(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(actions.loadImport) }
+
+    // 系统相册选择器（Android 13+ 是 Photo Picker）：**不需要任何存储权限**，
+    // 也不要求用户理解「读取相册」这种吓人的授权文案。返回的 uri 是临时授权，
+    // 所以下面 importBackdrop 第一件事就是把它复制进私有目录。
+    val backdropLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let(actions.importBackdrop) }
+    val pickBackdrop: () -> Unit = {
+        runCatching {
+            backdropLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+            )
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         GlassBackdrop()
@@ -191,24 +217,104 @@ fun SettingsScreen(
                                 )
                             }
                             Divider()
+                            val backdrop = state.settings.backdrop
+                            val resolved = state.settings.resolvedAccent
                             SettingBlock(
                                 label = "配色方案",
-                                hint = "背景、卡片、底栏、按钮一起换色，不只换图标",
+                                hint = if (backdrop.tintActive) {
+                                    "正在跟随背景图取色：换一张图，整套颜色跟着变"
+                                } else {
+                                    "背景、卡片、底栏、按钮一起换色，不只换图标"
+                                },
                             ) {
                                 AccentSwatches(
-                                    selected = state.settings.accent,
+                                    selected = resolved,
+                                    autoSelected = backdrop.tintActive,
+                                    autoPreview = if (backdrop.tintSeed != 0L) {
+                                        AccentPalette.fromSeed(backdrop.tintSeed)
+                                    } else {
+                                        null
+                                    },
                                     isDark = LocalGlassDark.current,
                                     onSelected = actions.setAccent,
+                                    onAutoSelected = { actions.setAutoAccent(true) },
                                 )
                                 Spacer(Modifier.height(9.dp))
                                 Text(
                                     // 让「点了会变什么」写清楚：这一项以前只作用于按钮图标，
                                     // 用户点完发现整页没变，会以为没生效。
-                                    text = state.settings.accent.label,
+                                    text = if (backdrop.tintActive) "取色 · ${resolved.label}（来自背景图）" else resolved.label,
                                     style = TextStyle(
                                         fontSize = 12.sp,
                                         color = glassTextSecondary(),
                                     ),
+                                )
+                            }
+                            Divider()
+                            SettingBlock(
+                                label = "背景",
+                                hint = when {
+                                    backdrop.effectiveMode == BackdropMode.IMAGE ->
+                                        "整页换成你选的照片；卡片、底栏、弹层会实时把它糊开、折弯"
+                                    else -> "内置丝缎壁纸，颜色跟着上面的配色方案走"
+                                },
+                            ) {
+                                GlassSegmentedControl(
+                                    items = BackdropItems,
+                                    selected = backdrop.effectiveMode,
+                                    onSelected = { mode ->
+                                        // 选「图片」但还没选过图：直接拉起相册，少一次「点了没反应」
+                                        if (mode == BackdropMode.IMAGE && !backdrop.hasImage) {
+                                            pickBackdrop()
+                                        } else {
+                                            actions.setBackdropMode(mode)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    height = 34.dp,
+                                )
+                                if (backdrop.hasImage) {
+                                    Spacer(Modifier.height(10.dp))
+                                    BackdropThumbnail(fileName = backdrop.image)
+                                }
+                            }
+                            Divider()
+                            ActionRow(
+                                title = if (backdrop.hasImage) "更换背景图片" else "选择背景图片",
+                                summary = "从相册选一张，会复制进应用私有目录；不需要相册权限",
+                                value = if (backdrop.hasImage) "更换" else "选择",
+                                onClick = pickBackdrop,
+                            )
+                            Divider()
+                            SettingBlock(
+                                label = "从图片取色",
+                                hint = when {
+                                    !backdrop.hasImage -> "选一张背景图之后，可以用它的主色生成整套主题色"
+                                    backdrop.tintActive -> "当前主题色由这张图的主色生成"
+                                    else -> "打开后主题色改为图片主色，卡片与底栏一起变"
+                                },
+                            ) {
+                                GlassSegmentedControl(
+                                    items = AutoTintItems,
+                                    selected = backdrop.autoTint && backdrop.hasImage,
+                                    onSelected = { enabled ->
+                                        if (backdrop.hasImage) {
+                                            actions.setAutoAccent(enabled)
+                                        } else {
+                                            pickBackdrop()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    height = 34.dp,
+                                )
+                            }
+                            if (backdrop.hasImage) {
+                                Divider()
+                                ActionRow(
+                                    title = "移除背景图片",
+                                    summary = "回到丝缎壁纸，取色也一起关掉",
+                                    danger = true,
+                                    onClick = actions.clearBackdrop,
                                 )
                             }
                             Divider()
@@ -491,11 +597,14 @@ private fun SettingBlock(
 }
 
 /**
- * 配色方案色板。
+ * 配色方案色板：七套预设 + 一档「从背景图取色」。
  *
  * 每个圆点是这套配色的**缩影**：中心是强调色，边缘往它自己的壁纸色斑上过渡。
  * 上一版是纯实心色点，只能看出「按钮会变蓝还是变紫」，看不出整页会变成什么样；
  * 加上壁纸色之后，七套方案的冷暖差异一眼能分出来。
+ *
+ * 第八颗（取色）在没选图时画成虚线圈：它此刻不可用，但**位置要占住**——
+ * 用户的预期是「这里还有一个来源」，而不是让人先去发现有没有图。
  *
  * 选中的那圈加一道描边——不用「打勾」：色板上一眼要读的是**颜色本身**，
  * 勾号会把中间那块色盖掉一小半。
@@ -505,47 +614,126 @@ private fun SettingBlock(
  */
 @Composable
 private fun AccentSwatches(
-    selected: AccentColor,
+    selected: AccentPalette,
+    autoSelected: Boolean,
+    autoPreview: AccentPalette?,
     isDark: Boolean,
     onSelected: (AccentColor) -> Unit,
+    onAutoSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val ring = glassTextPrimary()
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AccentColor.entries.forEach { color ->
-            val accent = Color(color.argb(isDark))
-            // 用「冷」那团色斑做边缘：它在每套方案里都是最接近背景基调的一块
-            val rim = Color(color.blobs(isDark)[1])
-            val active = color == selected
-            Canvas(
-                Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .clickable { onSelected(color) },
-            ) {
-                val stroke = 1.6.dp.toPx()
-                if (active) {
-                    // 描边贴着边缘画，圆点本身不动——换色时整排不会跳
-                    drawCircle(
-                        color = ring.copy(alpha = 0.80f),
-                        radius = size.minDimension / 2f - stroke / 2f,
-                        style = Stroke(width = stroke),
-                    )
-                }
-                val center = Offset(size.width / 2f, size.height / 2f)
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(accent, accent, rim),
-                        center = center,
-                        radius = size.minDimension * 0.34f,
-                    ),
-                    radius = size.minDimension * 0.34f,
-                )
-            }
+            val palette = color.palette
+            SwatchDot(
+                // 用「冷」那团色斑做边缘：它在每套方案里都是最接近背景基调的一块
+                center = Color(palette.argb(isDark)),
+                rim = Color(palette.blobs(isDark)[1]),
+                active = !autoSelected && selected.id == color.prefValue,
+                onClick = { onSelected(color) },
+            )
+        }
+        SwatchDot(
+            center = autoPreview?.let { Color(it.argb(isDark)) }
+                ?: glassTextSecondary().copy(alpha = 0.30f),
+            rim = autoPreview?.let { Color(it.blobs(isDark)[1]) } ?: Color.Transparent,
+            active = autoSelected,
+            // 没有图 = 这档暂时不可用：画成虚线圈，点它会给一句「先选一张图」的提示
+            dashed = autoPreview == null,
+            onClick = onAutoSelected,
+        )
+    }
+}
+
+/** 单个色点：径向渐变圆 + 选中描边（虚线表示「暂不可用」）。 */
+@Composable
+private fun SwatchDot(
+    center: Color,
+    rim: Color,
+    active: Boolean,
+    dashed: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val ring = glassTextPrimary()
+    Canvas(
+        Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+    ) {
+        val stroke = 1.6.dp.toPx()
+        val radius = size.minDimension / 2f
+        if (active) {
+            // 描边贴着边缘画，圆点本身不动——换色时整排不会跳
+            drawCircle(
+                color = ring.copy(alpha = 0.80f),
+                radius = radius - stroke / 2f,
+                style = Stroke(width = stroke),
+            )
+        }
+        val middle = Offset(size.width / 2f, size.height / 2f)
+        if (dashed) {
+            drawCircle(
+                color = center,
+                radius = radius - stroke,
+                center = middle,
+                style = Stroke(
+                    width = stroke,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.5.dp.toPx())),
+                ),
+            )
+        } else {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(center, center, rim),
+                    center = middle,
+                    radius = radius * 0.68f,
+                ),
+                radius = radius * 0.68f,
+            )
+        }
+    }
+}
+
+/**
+ * 背景图缩略条。
+ *
+ * 用一整条而不是一个小方块：用户要判断的是「这张图当整页底色好不好看」，
+ * 一片 44×44 的缩略图看不出构图与明暗。112dp 的高度够读出主体与冷暖。
+ *
+ * 解码复用 [BackdropImage] 的进程内缓存，与 `GlassBackdrop` 共用同一张位图，
+ * 不会多解一份。
+ */
+@Composable
+private fun BackdropThumbnail(fileName: String?) {
+    val context = LocalContext.current
+    var bitmap by remember(fileName) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(fileName) {
+        bitmap = if (fileName == null) {
+            null
+        } else {
+            withContext(Dispatchers.IO) { BackdropImage.load(context, fileName) }
+        }
+    }
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(112.dp)
+            .clip(shape)
+            .background(glassColors().elevatedBackground.copy(alpha = 0.45f)),
+    ) {
+        bitmap?.let { image ->
+            Image(
+                bitmap = image.asImageBitmap(),
+                contentDescription = "当前背景图",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -822,6 +1010,8 @@ private fun ConfirmClearDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
 private val ThemeItems: List<Pair<ThemeMode, String>> = ThemeMode.entries.map { it to it.label }
 private val FrostItems: List<Pair<GlassFrostLevel, String>> = GlassFrostLevel.entries.map { it to it.label }
 private val MotionItems: List<Pair<Boolean, String>> = listOf(false to "完整", true to "减弱")
+private val BackdropItems: List<Pair<BackdropMode, String>> = BackdropMode.entries.map { it to it.label }
+private val AutoTintItems: List<Pair<Boolean, String>> = listOf(false to "关", true to "开")
 
 /** 开源许可清单：常量，不必在每次打开弹层时重建一遍列表。 */
 private val LicenseEntries: List<Pair<String, String>> = listOf(

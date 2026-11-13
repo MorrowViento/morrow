@@ -31,6 +31,18 @@ object LegacySettingsKeys {
      */
     const val ACCENT_COLOR = "accent_color"
 
+    /**
+     * 页面底色（4.1.0 新增）。
+     *
+     * `backdrop_mode` 是 `satin` / `image`；`backdrop_image` 只存文件名，图片本体在
+     * `filesDir/backdrop/`；`backdrop_tint_seed` 是图片主色的 ARGB（Long）。
+     * 都是新键，旧版没有，缺失时回落丝缎壁纸 —— 老用户升级后的观感不变。
+     */
+    const val BACKDROP_MODE = "backdrop_mode"
+    const val BACKDROP_IMAGE = "backdrop_image"
+    const val BACKDROP_AUTO_TINT = "backdrop_auto_tint"
+    const val BACKDROP_TINT_SEED = "backdrop_tint_seed"
+
     const val AUTO_CHECK_UPDATE = "auto_check_update"
     const val AVATAR_PATH = "avatar_path"
     const val ONBOARDING_COMPLETED = "onboarding_completed_v1"

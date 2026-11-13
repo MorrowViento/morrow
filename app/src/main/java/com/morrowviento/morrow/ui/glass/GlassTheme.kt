@@ -8,23 +8,38 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
+import com.morrowviento.morrow.data.backdrop.BackdropImage
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AccentPalette
+import com.morrowviento.morrow.data.settings.BackdropMode
+import com.morrowviento.morrow.data.settings.BackdropSettings
 import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
+
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.core.LocalGlassDimensions
@@ -41,6 +56,8 @@ import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.rememberCombinedBackdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import io.github.neoruaa.glasmio.glass.trackBackdropPosition
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
@@ -87,8 +104,19 @@ val LocalGlassFrost = staticCompositionLocalOf { GLASS_FROST_DEFAULT }
  * 与强调色分开暴露：强调色只是一个 ARGB（[glassAccent]），而整套配色还带着壁纸的
  * 四团色斑。页面底色（[GlassBackdrop]）必须读这里，否则会出现「图标换了色、
  * 整页还是原来的象牙白」——那正是「主题色只改了按钮图标」的观感来源。
+ *
+ * 类型是 [AccentPalette] 而不是 `AccentColor`：4.1.0 起多了一档「从背景图取色」，
+ * 颜色要到运行时才知道，枚举装不下（见 `AccentPalette` 的注释）。
  */
-val LocalAccentPalette = staticCompositionLocalOf { AccentColor.DEFAULT }
+val LocalAccentPalette = staticCompositionLocalOf { AccentColor.DEFAULT.palette }
+
+/**
+ * 当前背景设置（丝缎 / 自定义图片）。
+ *
+ * 单独一个 CompositionLocal 而不塞进 [LocalAccentPalette]：背景与配色是两件事，
+ * 它们可以各自变化（换图不改配色、换配色不改图），分开才不会互相带出无谓的重建。
+ */
+val LocalBackdropSettings = staticCompositionLocalOf { BackdropSettings() }
 
 /**
  * 厚度 → 模糊半径（0.5dp → 25.5dp）。
@@ -158,7 +186,7 @@ fun GlassTheme(
     reduceTransparency: Boolean = false,
     reduceMotion: Boolean = false,
     frost: Float = GLASS_FROST_DEFAULT,
-    accent: AccentColor = AccentColor.DEFAULT,
+    accent: AccentPalette = AccentColor.DEFAULT.palette,
     content: @Composable () -> Unit,
 ) {
     // 浅色 / 深色两套值：同一个色相在深底上要提亮一档才够清楚
@@ -229,40 +257,117 @@ fun GlassTheme(
  * 绘制走 `drawWithCache` + **预渲染**：整幅图按屏幕尺寸与配色只画一次（见
  * `GlassWallpaper`），之后每帧只是一次 `drawImage`。壁纸是静态的，没有任何理由
  * 每帧重跑六层渐变——那正是列表滚动与页面切换时卡顿的填充率来源。
+ *
+ * 4.1.0：预渲染挪到后台线程（换明暗/换配色时那一帧不再僵住），并支持
+ * [BackdropMode.IMAGE]——用户挑的照片按 cover 铺满，上面压一层极淡的底色纱
+ * 保证文字对比度。照片本身也走 `drawImage`，每帧只有「一张图 + 一个纯色矩形」。
  */
 @Composable
 fun GlassBackdrop(modifier: Modifier = Modifier) {
     val colors = GlasmioTheme.colors
     val dark = LocalGlassDark.current
     val base = colors.groupedBackground
+    val backdrop = LocalBackdropSettings.current
 
-    // 四团色斑来自当前配色方案（见 `AccentColor.blobs`）。这是「换主题整页换色」的
+    // 四团色斑来自当前配色方案（见 `AccentPalette`）。这是「换主题整页换色」的
     // 落点：卡片、底栏、弹层都是玻璃，它们透出来的正是这几团色；只换强调色的话，
-    // 屏幕上只有图标与按钮变，底子还是同一片象牙白。
-    val blobs = LocalAccentPalette.current.blobs(dark)
+    // 屏幕上只有图标与按钮变，底子还是同一片底色。
+    val palette = LocalAccentPalette.current
+    val blobs = remember(palette, dark) { palette.blobs(dark) }
+
+    // 自定义图片：只在真的用图片档时才去读盘。解码与取色都在 IO 线程，
+    // 完成后主线程只是换一个 ImageBitmap 引用。
+    val context = LocalContext.current
+    val photo by produceState<ImageBitmap?>(initialValue = null, backdrop.image, backdrop.effectiveMode) {
+        value = if (backdrop.effectiveMode == BackdropMode.IMAGE) {
+            withContext(Dispatchers.IO) { BackdropImage.load(context, backdrop.image)?.asImageBitmap() }
+        } else {
+            null
+        }
+    }
+
+    var sizePx by remember { mutableStateOf(IntSize.Zero) }
+    // 首帧先用上一次渲染出来的那张（进程内可能已经在别的页面画过），
+    // 让「刚进应用」和「刚换主题」这两条路径都不出现空白帧。
+    var wallpaper by remember { mutableStateOf(GlassWallpaper.placeholder()) }
+
+    // 图片真的解码出来了才不需要丝缎壁纸。写成布尔量而不是直接读 photo：
+    // 它要当 LaunchedEffect 的 key（图刚就绪时要把还没画的丝缎补上）。
+    val needSatin = !(backdrop.effectiveMode == BackdropMode.IMAGE && photo != null)
+
+    LaunchedEffect(sizePx, base, dark, blobs, needSatin) {
+        if (sizePx.width <= 0 || sizePx.height <= 0) return@LaunchedEffect
+        // 图片档根本不用丝缎壁纸：白画一张 2.6M 像素的图纯属浪费
+        if (!needSatin) return@LaunchedEffect
+        val width = sizePx.width
+        val height = sizePx.height
+        val hit = GlassWallpaper.cached(width, height, base, dark, blobs)
+        if (hit != null) {
+            wallpaper = hit
+            return@LaunchedEffect
+        }
+        // 冷启动第一张同步画：此刻既没有缓存也没有上一张，异步的话第一帧只能铺纯底色，
+        // 用户会先看到一下「整页灰白」再变成壁纸。这一下发生在启动期（本来就在跑
+        // 各种初始化），而换明暗 / 换配色时才走后台——那才是用户反复触发、要求流畅的路径。
+        wallpaper = if (GlassWallpaper.placeholder() == null) {
+            GlassWallpaper.render(width, height, base, dark, blobs)
+        } else {
+            // 不清空 wallpaper：新图就绪前继续显示旧的那张，比闪一下纯底色自然得多
+            withContext(Dispatchers.Default) {
+                GlassWallpaper.render(width, height, base, dark, blobs)
+            }
+        }
+    }
 
     Box(
         modifier
             .fillMaxSize()
+            .onSizeChanged { if (it != sizePx) sizePx = it }
             .drawWithCache {
-                // 整幅壁纸**预渲染成一张位图**，之后每帧只贴一次图。
-                //
-                // 之前这里在 `onDrawBehind` 里每帧重跑 4 个径向渐变 + 2 个铺在 3 倍面积
-                // 矩形上的渐变（还带 18° 旋转），玻璃面板再从这层采样一遍做模糊——同一批
-                // 像素被算两遍，滚动、切页、拖底栏时全压在填充率上。壁纸是静态的，
-                // 按屏幕尺寸与配色渲染一次就够（详见 `GlassWallpaper`）。
-                val image = GlassWallpaper.image(
-                    widthPx = size.width.roundToInt(),
-                    heightPx = size.height.roundToInt(),
-                    base = base,
-                    dark = dark,
-                    blobs = blobs,
-                )
                 // 位图按整像素生成，而 `size` 常带小数（dp→px 的余数）：
                 // 贴图时显式给 dstSize，否则右 / 下边缘会留一条 1px 没盖住的缝。
-                val dst = IntSize(size.width.roundToInt(), size.height.roundToInt())
+                val dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt())
+                // 照片上的那层纱：不是装饰，是**可读性**的兜底。亮色的照片会把
+                // 玻璃上的白字吞掉，压一层底色纱后对比度回到可用范围。
+                val veil = base.copy(alpha = if (dark) 0.30f else 0.16f)
                 onDrawBehind {
-                    drawImage(image, dstOffset = IntOffset.Zero, dstSize = dst)
+                    val photoBitmap = photo
+                    val satin = wallpaper
+                    when {
+                        // 图片模式：cover 裁切（短边铺满，长边居中裁掉），不做拉伸
+                        photoBitmap != null -> {
+                            val iw = photoBitmap.width.toFloat()
+                            val ih = photoBitmap.height.toFloat()
+                            if (iw > 0f && ih > 0f && dstSize.width > 0 && dstSize.height > 0) {
+                                val scale = maxOf(dstSize.width / iw, dstSize.height / ih)
+                                val srcW = (dstSize.width / scale).roundToInt().coerceIn(1, photoBitmap.width)
+                                val srcH = (dstSize.height / scale).roundToInt().coerceIn(1, photoBitmap.height)
+                                val srcX = (photoBitmap.width - srcW) / 2
+                                val srcY = (photoBitmap.height - srcH) / 2
+                                drawImage(
+                                    image = photoBitmap,
+                                    srcOffset = IntOffset(srcX, srcY),
+                                    srcSize = IntSize(srcW, srcH),
+                                    dstOffset = IntOffset.Zero,
+                                    dstSize = dstSize,
+                                    // 照片通常比屏幕大，缩小时用双线性 + mipmap：
+                                    // 默认的 Low 会把细密纹理（树叶、砖墙）抖成噪点
+                                    filterQuality = FilterQuality.Medium,
+                                )
+                            } else {
+                                drawImage(
+                                    image = photoBitmap,
+                                    dstOffset = IntOffset.Zero,
+                                    dstSize = dstSize,
+                                    filterQuality = FilterQuality.Medium,
+                                )
+                            }
+                            drawRect(veil)
+                        }
+                        // 丝缎：等首张位图就绪时先铺一块纯底色，避免透出系统黑
+                        satin != null -> drawImage(satin, dstOffset = IntOffset.Zero, dstSize = dstSize)
+                        else -> drawRect(base)
+                    }
                 }
             },
     )

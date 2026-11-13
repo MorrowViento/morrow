@@ -13,6 +13,7 @@ import com.morrowviento.morrow.MainActivity
 import com.morrowviento.morrow.R
 import com.morrowviento.morrow.MorrowApp
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AccentPalette
 import com.morrowviento.morrow.data.widget.WidgetRow
 import com.morrowviento.morrow.data.widget.WidgetSnapshotBuilder
 import kotlinx.coroutines.flow.first
@@ -45,15 +46,15 @@ private class WidgetListFactory(
     private var rows: List<WidgetRow> = emptyList()
     private var style: WidgetStyle = WidgetStyle()
 
-    /** 应用内的配色方案；行文字与进度条跟着它走，和刷新器用的是同一份。 */
-    private var palette: AccentColor = AccentColor.DEFAULT
+    /** 应用内实际生效的配色；行文字与进度条跟着它走，和刷新器用的是同一份。 */
+    private var palette: AccentPalette = AccentColor.DEFAULT.palette
 
     /** 读库只在 onDataSetChanged 里做一次，getViewAt 只做排版。 */
     override fun onDataSetChanged() {
         val app = context.applicationContext as? MorrowApp ?: return
         runBlocking {
             runCatching {
-                palette = app.settingsRepository.appSettings.first().accent
+                palette = app.settingsRepository.appSettings.first().resolvedAccent
                 style = WidgetConfigStore(app.settingsRepository).load(widgetId)
                 val events = app.eventRepository.loadAll()
                 rows = WidgetSnapshotBuilder.overview(
@@ -116,6 +117,11 @@ private class WidgetListFactory(
                 android.content.res.ColorStateList.valueOf(colors.accent),
             )
         }
+
+        // 行分隔线：颜色在运行时写（RemoteViews 没有「设 drawable」的能力，
+        // 但 setBackgroundColor 是 @RemotableViewMethod，可以按反射调用）。
+        // 最后一行也画——List 底部本来就有留白，多一条线正好收边。
+        views.setInt(R.id.widget_row_divider, "setBackgroundColor", colors.separator)
 
         // 点击由父级（WidgetRefresher 里的 setPendingIntentTemplate）+ 这里的 fill-in 组合而成：
         // fill-in 只能补 extras/data，不能自己带 PendingIntent

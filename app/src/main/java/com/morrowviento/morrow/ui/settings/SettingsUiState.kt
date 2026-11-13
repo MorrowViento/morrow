@@ -57,8 +57,16 @@ data class SettingsActions(
     /** 页面重新可见时刷新系统权限状态（通知 / 精确闹钟只能在系统界面改）。 */
     val refresh: () -> Unit,
     val setTheme: (com.morrowviento.morrow.data.settings.ThemeMode) -> Unit,
-    /** 换主题色（强调色），全应用统一生效。 */
+    /** 换主题色（强调色）：同时关掉「从背景图取色」，否则用户选了也看不见。 */
     val setAccent: (com.morrowviento.morrow.data.settings.AccentColor) -> Unit,
+    /** 切换「从背景图取色」。打开时用已算好的种子色，不需要重新读图。 */
+    val setAutoAccent: (Boolean) -> Unit,
+    /** 切换底色：丝缎 / 自定义图片（选图片档但还没有图时，UI 会顺手拉起相册）。 */
+    val setBackdropMode: (com.morrowviento.morrow.data.settings.BackdropMode) -> Unit,
+    /** 选图：复制进私有目录 → 取主色 → 落盘 → 刷新小部件。 */
+    val importBackdrop: (android.net.Uri) -> Unit,
+    /** 移除自定义图，回到丝缎（取色种子一并清掉）。 */
+    val clearBackdrop: () -> Unit,
     /** 切换玻璃厚度档位（写该档位的连续值）。 */
     val setGlassFrostLevel: (GlassFrostLevel) -> Unit,
     val setReduceMotion: (Boolean) -> Unit,

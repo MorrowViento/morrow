@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTheme
 import com.morrowviento.morrow.ui.glass.LocalAccentPalette
+import com.morrowviento.morrow.ui.glass.LocalBackdropSettings
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import kotlinx.coroutines.launch
@@ -119,12 +121,14 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                 reduceTransparency = prefs.usesOpaqueGlass,
                 reduceMotion = prefs.reduceMotion,
                 frost = prefs.glassFrost,
-                accent = prefs.accent,
+                // 取色档也要在这里生效：否则应用里是「从图取色」的紫，配置台还是海蓝
+                accent = prefs.resolvedAccent,
             ) {
-                GlassBackdropHost(
-                    modifier = Modifier.fillMaxSize(),
-                    sampledContent = { GlassBackdrop() },
-                    overlayContent = {
+                CompositionLocalProvider(LocalBackdropSettings provides prefs.backdrop) {
+                    GlassBackdropHost(
+                        modifier = Modifier.fillMaxSize(),
+                        sampledContent = { GlassBackdrop() },
+                        overlayContent = {
                         var style by remember { mutableStateOf(WidgetStyle()) }
                         var events by remember { mutableStateOf<List<CountdownEvent>>(emptyList()) }
                         var adding by remember { mutableStateOf(false) }
@@ -191,6 +195,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                         )
                     },
                 )
+                }
             }
         }
     }

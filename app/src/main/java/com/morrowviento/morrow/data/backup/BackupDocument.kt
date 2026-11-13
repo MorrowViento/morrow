@@ -5,6 +5,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.AppSettings
+import com.morrowviento.morrow.data.settings.BackdropMode
+import com.morrowviento.morrow.data.settings.BackdropSettings
 import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
 import com.morrowviento.morrow.data.settings.legacyGlassFrost
 import com.morrowviento.morrow.data.settings.ThemeMode
@@ -78,6 +80,16 @@ data class BackupSettings(
     val glassFrost: Float = -1f,
     /** 旧版四档字符串，只为兼容老备份的读取；导出时仍写一份，方便降级。 */
     val glassMaterial: String = "",
+    /**
+     * 页面底色与取色（4.1.0 新增）。
+     *
+     * **图片本体不进备份**：一张 3 MB 的照片塞进 JSON 会让文件膨胀到没法用邮箱传，
+     * 而且换机后路径也失效。这里只带走「取色种子」——导入后配色仍是同一套，
+     * 底图回落到丝缎，用户在新设备上重新选一张即可。空串表示这份备份没有这个字段。
+     */
+    val backdropMode: String = "",
+    val backdropAutoTint: Boolean = false,
+    val backdropTintSeed: Long = 0L,
 )
 
 data class BackupWidget(
@@ -177,6 +189,9 @@ object BackupCodec {
         addProperty("glassMaterial", settings.glassMaterial)
         addProperty("reduceTransparency", settings.reduceTransparency)
         addProperty("reduceMotion", settings.reduceMotion)
+        addProperty("backdropMode", settings.backdropMode)
+        addProperty("backdropAutoTint", settings.backdropAutoTint)
+        addProperty("backdropTintSeed", settings.backdropTintSeed)
     }
 
     // ---------------------------------------------------------------- 解码
@@ -299,6 +314,9 @@ object BackupCodec {
         glassMaterial = obj.stringOrNull("glassMaterial").orEmpty(),
         reduceTransparency = obj.boolOrNull("reduceTransparency") ?: false,
         reduceMotion = obj.boolOrNull("reduceMotion") ?: false,
+        backdropMode = obj.stringOrNull("backdropMode").orEmpty(),
+        backdropAutoTint = obj.boolOrNull("backdropAutoTint") ?: false,
+        backdropTintSeed = obj.longOrNull("backdropTintSeed") ?: 0L,
     )
 
     // ---------------------------------------------------------------- 工具
@@ -351,6 +369,18 @@ object BackupCodec {
         return when {
             primitive.isNumber -> primitive.asFloat
             primitive.isString -> primitive.asString.trim().toFloatOrNull()
+            else -> null
+        }
+    }
+
+    /** 长整型读取：`backdropTintSeed` 是 ARGB（可能超过 Int 上限），先按 Long 收。 */
+    private fun JsonObject.longOrNull(key: String): Long? {
+        val element = get(key) ?: return null
+        if (!element.isJsonPrimitive) return null
+        val primitive = element.asJsonPrimitive
+        return when {
+            primitive.isNumber -> primitive.asLong
+            primitive.isString -> primitive.asString.trim().toLongOrNull()
             else -> null
         }
     }
@@ -441,6 +471,14 @@ object BackupMapper {
             glassFrost = frost,
             reduceTransparency = frost >= 0.85f,
             reduceMotion = backup.reduceMotion,
+            // 图片本体不随备份走，所以这里强制回落到丝缎；取色种子留着，
+            // 导入后配色仍是那套「从原图取出来的」颜色，只是底图要重新选一张。
+            backdrop = BackdropSettings(
+                mode = BackdropMode.SATIN,
+                image = null,
+                autoTint = backup.backdropAutoTint,
+                tintSeed = backup.backdropTintSeed,
+            ),
         )
     }
 
@@ -458,6 +496,9 @@ object BackupMapper {
         },
         reduceTransparency = settings.glassFrost >= 0.85f,
         reduceMotion = settings.reduceMotion,
+        backdropMode = settings.backdrop.effectiveMode.prefValue,
+        backdropAutoTint = settings.backdrop.autoTint,
+        backdropTintSeed = settings.backdrop.tintSeed,
     )
 
     private inline fun <reified T : Enum<T>> enumOrDefault(name: String, fallback: T): T =

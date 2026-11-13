@@ -13,9 +13,12 @@ import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.backup.BackupParse
 import com.morrowviento.morrow.data.backup.BackupRepository
 import com.morrowviento.morrow.data.backup.ImportMode
+import com.morrowviento.morrow.data.backdrop.BackdropImage
 import com.morrowviento.morrow.data.reminder.ReminderPermissions
 import com.morrowviento.morrow.data.reminder.ReminderScheduler
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.BackdropMode
+import com.morrowviento.morrow.data.settings.BackdropSettings
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.SettingsRepository
 import com.morrowviento.morrow.data.settings.ThemeMode
@@ -34,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -141,10 +145,70 @@ class SettingsViewModel(
      * 桌面上的小部件**不会**因为我们改了 DataStore 就自己重绘——它只认
      * `AppWidgetManager` 推过去的 RemoteViews。不主动刷一次，用户改完配色回到桌面
      * 还是旧颜色，看起来就像「设置没生效」。
+     *
+     * 同时**关掉「从背景图取色」**：用户是手动点了一个色点，如果取色开关还开着，
+     * 实际配色仍由图片决定，点了没反应——这是「设置了但看不出来」的经典成因。
      */
     fun setAccent(color: AccentColor) = persist {
+        val current = settings.appSettings.first().backdrop
+        if (current.autoTint) settings.setBackdrop(current.copy(autoTint = false))
         settings.setAccentColor(color)
         withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+    }
+
+    /** 打开 / 关闭「从背景图取色」。种子上次选图时已经算好，这里不重新读图。 */
+    fun setAutoAccent(enabled: Boolean) = persist {
+        val current = settings.appSettings.first().backdrop
+        if (current.tintSeed == 0L) {
+            // 没有种子（没选过图 / 图已失效）：开关拨不动，给一句提示而不是静默失败
+            local.update { it.copy(message = "先选一张背景图，才能从它取色") }
+            return@persist
+        }
+        settings.setBackdrop(current.copy(autoTint = enabled))
+        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+    }
+
+    /** 切换底色：丝缎 / 图片。切到图片但没有图时不做任何事（由 UI 拉起相册）。 */
+    fun setBackdropMode(mode: BackdropMode) = persist {
+        val current = settings.appSettings.first().backdrop
+        if (mode == BackdropMode.IMAGE && !current.hasImage) return@persist
+        settings.setBackdrop(current.copy(mode = mode))
+        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+    }
+
+    /**
+     * 选一张背景图。
+     *
+     * 三步都在 IO 线程：解码采样、重编码落盘、取主色（要知道主色得先解码）。
+     * 完成后一次写完四项设置，避免壁纸位图连着重绘四次。
+     *
+     * 首次选图默认打开「从背景图取色」：那正是用户说的「加了背景图，主题色跟着图走」。
+     * 之后用户手动选了预设色，开关会被 {@link setAccent} 关掉，这里不去抢回来。
+     */
+    fun importBackdrop(uri: Uri) = runTask(failure = "设置背景失败") {
+        val name = BackdropImage.import(appContext, uri)
+        val seed = BackdropImage.seedOf(appContext, name)
+        val current = settings.appSettings.first().backdrop
+        settings.setBackdrop(
+            current.copy(
+                mode = BackdropMode.IMAGE,
+                image = name,
+                autoTint = true,
+                tintSeed = if (seed != 0L) seed else current.tintSeed,
+            ),
+        )
+        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        local.update {
+            it.copy(message = if (seed == 0L) "背景已换；这张图取不出颜色，配色保持不变" else "背景已换，配色已按图片取色")
+        }
+    }
+
+    /** 移除自定义背景图：回到丝缎，取色种子一并清掉（留着会继续影响配色）。 */
+    fun clearBackdrop() = runTask(failure = "移除背景失败") {
+        BackdropImage.clear(appContext)
+        settings.setBackdrop(BackdropSettings())
+        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        local.update { it.copy(message = "已回到丝缎背景") }
     }
 
     // ---- 导出 / 导入 ----
@@ -191,6 +255,9 @@ class SettingsViewModel(
     fun confirmClearAll() = runTask(failure = "清除失败") {
         val before = events.loadAll()
         backup.clearAllData()
+        // 背景图不在 DataStore 里，得单独删；否则「清除全部数据」之后桌面/设置页
+        // 还留着一张孤立的照片，用户以为没清干净
+        BackdropImage.clear(appContext)
         reconcile(before)
         local.update { it.copy(confirmClearAll = false, message = "已清除全部数据") }
     }
