@@ -42,7 +42,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -576,7 +575,10 @@ private fun EventList(
                 items(state.completed, key = { "done-${it.id}" }) { card ->
                     EventCardView(
                         card = card,
-                        modifier = Modifier.alpha(0.55f),
+                        // 用内容 dim 而不是 `Modifier.alpha`：alpha 会给每张卡开一块
+                        // 离屏层，按压时玻璃的放大/折射一超出自身边界就被这层裁掉，
+                        // 只有已完成的卡片会「一按就缺一角」。
+                        dim = 0.55f,
                         onClick = { onOpenDetail(card.id) },
                     )
                 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.event.EventCardModel
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import androidx.compose.foundation.background
@@ -37,18 +39,28 @@ import androidx.compose.foundation.background
  * 事件卡片：左侧标题与元信息，右侧天数徽章（带进度环）。
  *
  * 视觉靠 [GlassPanel] 提供模糊/折射，内部不画背景色，否则会盖住材质。
+ *
+ * @param dim 内容亮度（1 = 正常，0.55 = 已完成）。**不要**再用 `Modifier.alpha`
+ *   在卡片外面套一层来做这件事：alpha < 1 会让 Compose 为这张卡单独开一块离屏层，
+ *   而玻璃的按压放大会把内容画出自身边界——一旦被这层的边界裁掉，就成了
+ *   「一按就缺一块角」。这里改成分别压暗文字、并在玻璃**内侧**垫一层同背景色的薄纱，
+ *   观感同样是「退到后面」，但没有任何额外图层。
  */
 @Composable
 fun EventCardView(
     card: EventCardModel,
     modifier: Modifier = Modifier,
+    dim: Float = 1f,
     onClick: () -> Unit = {},
 ) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
+    val primary = glassTextPrimary().dimBy(dim)
+    val secondary = glassTextSecondary().dimBy(dim)
+    // 与背景同色的薄纱：盖在玻璃内侧，把整块面板的对比度压下去（深色下是 #1C1C1E）
+    val scrim = if (dim >= 1f) null else glassColors().elevatedBackground.copy(alpha = (1f - dim) * 0.55f)
 
     GlassPanel(
         modifier = modifier.fillMaxWidth(),
+        tint = scrim,
         // 按压光学由玻璃材质自己画（Glasmio 的 press highlight），没有 Material ripple
         onClick = onClick,
     ) {
@@ -93,21 +105,21 @@ fun EventCardView(
                     Spacer(Modifier.height(3.dp))
                     Text(
                         text = "今日剩余 $remaining",
-                        style = TextStyle(fontSize = 12.sp, color = primary.copy(alpha = 0.75f)),
+                        style = TextStyle(fontSize = 12.sp, color = primary.fade(0.75f)),
                     )
                 }
             }
             Spacer(Modifier.width(14.dp))
-            CountdownBadge(card)
+            CountdownBadge(card, dim)
         }
     }
 }
 
 /** 右侧天数徽章；非重复事件在外圈画进度环，重复事件不画（进度无意义）。 */
 @Composable
-private fun CountdownBadge(card: EventCardModel) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
+private fun CountdownBadge(card: EventCardModel, dim: Float) {
+    val primary = glassTextPrimary().dimBy(dim)
+    val secondary = glassTextSecondary().dimBy(dim)
     val isToday = card.dayDelta == 0
 
     Box(modifier = Modifier.size(62.dp), contentAlignment = Alignment.Center) {
@@ -117,7 +129,7 @@ private fun CountdownBadge(card: EventCardModel) {
                 val inset = stroke / 2f
                 val arcSize = Size(size.width - stroke, size.height - stroke)
                 drawArc(
-                    color = primary.copy(alpha = 0.14f),
+                    color = primary.fade(0.14f),
                     startAngle = -90f,
                     sweepAngle = 360f,
                     useCenter = false,
@@ -127,7 +139,7 @@ private fun CountdownBadge(card: EventCardModel) {
                 )
                 if (card.progress > 0f) {
                     drawArc(
-                        color = primary.copy(alpha = 0.8f),
+                        color = primary.fade(0.8f),
                         startAngle = -90f,
                         sweepAngle = 360f * card.progress,
                         useCenter = false,
@@ -162,4 +174,9 @@ private fun CountdownBadge(card: EventCardModel) {
     }
 }
 
-/** 右侧天数徽章；非重复事件在外圈画进度环，重复事件不画（进度无意义）。 */
+/** 亮度和透明度一起收：`alpha * factor`，而不是把 alpha 直接改成 factor。 */
+private fun Color.dimBy(dim: Float): Color =
+    if (dim >= 1f) this else copy(alpha = alpha * dim)
+
+/** 在已压暗的基色上再按比例降一档（进度环、副标题用）。 */
+private fun Color.fade(factor: Float): Color = copy(alpha = alpha * factor)
