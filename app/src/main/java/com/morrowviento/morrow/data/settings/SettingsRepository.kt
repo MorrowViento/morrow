@@ -2,6 +2,7 @@ package com.morrowviento.morrow.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -125,27 +126,26 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         putString(LegacySettingsKeys.ACCENT_COLOR, color.prefValue)
 
     /**
+     * 换配色 + 同时改背景设置（关掉「从图取色」），**一次落盘**。
+     *
+     * 分成两次写的话 `appSettings` 会连发两轮：第一轮已经关掉取色、强调色还是旧的，
+     * 第二轮才换成新的——整棵主题子树要重建两次，用户看到的是颜色「跳一下」。
+     */
+    suspend fun setAccentColor(color: AccentColor, backdrop: BackdropSettings) {
+        store.edit { prefs ->
+            prefs[stringPreferencesKey(LegacySettingsKeys.ACCENT_COLOR)] = color.prefValue
+            prefs.writeBackdrop(backdrop)
+        }
+    }
+
+    /**
      * 一次写完四项背景设置。
      *
      * 必须挤进同一次 `edit`：分成四次写会让 `backdrop` 这条 Flow 连发四轮，
      * 每轮都要重绘整页壁纸位图，选图时肉眼可见地闪三下。
      */
     suspend fun setBackdrop(value: BackdropSettings) {
-        store.edit { prefs ->
-            prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_MODE)] = value.mode.prefValue
-            val image = value.image
-            if (image.isNullOrBlank()) {
-                prefs.remove(stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE))
-            } else {
-                prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE)] = image
-            }
-            prefs[booleanPreferencesKey(LegacySettingsKeys.BACKDROP_AUTO_TINT)] = value.autoTint
-            if (value.tintSeed == 0L) {
-                prefs.remove(longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED))
-            } else {
-                prefs[longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED)] = value.tintSeed
-            }
-        }
+        store.edit { prefs -> prefs.writeBackdrop(value) }
     }
 
     /**
@@ -184,19 +184,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             }
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = frost >= 0.85f
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] = value.reduceMotion
-            prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_MODE)] = value.backdrop.mode.prefValue
-            val backdropImage = value.backdrop.image
-            if (backdropImage.isNullOrBlank()) {
-                prefs.remove(stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE))
-            } else {
-                prefs[stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE)] = backdropImage
-            }
-            prefs[booleanPreferencesKey(LegacySettingsKeys.BACKDROP_AUTO_TINT)] = value.backdrop.autoTint
-            if (value.backdrop.tintSeed == 0L) {
-                prefs.remove(longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED))
-            } else {
-                prefs[longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED)] = value.backdrop.tintSeed
-            }
+            prefs.writeBackdrop(value.backdrop)
         }
     }
 
@@ -273,6 +261,28 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             else -> return false
         }
         return true
+    }
+}
+
+/**
+ * 把背景设置写进同一次 `edit`。
+ *
+ * 空的键要 `remove` 而不是写空串：`backdropOrDefault()` 用「缺失」表示「没选过图」，
+ * 写空串虽然也走 `isNullOrBlank` 分支，但会在 DataStore 里留一堆无意义的键。
+ */
+private fun MutablePreferences.writeBackdrop(value: BackdropSettings) {
+    this[stringPreferencesKey(LegacySettingsKeys.BACKDROP_MODE)] = value.mode.prefValue
+    val image = value.image
+    if (image.isNullOrBlank()) {
+        remove(stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE))
+    } else {
+        this[stringPreferencesKey(LegacySettingsKeys.BACKDROP_IMAGE)] = image
+    }
+    this[booleanPreferencesKey(LegacySettingsKeys.BACKDROP_AUTO_TINT)] = value.autoTint
+    if (value.tintSeed == 0L) {
+        remove(longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED))
+    } else {
+        this[longPreferencesKey(LegacySettingsKeys.BACKDROP_TINT_SEED)] = value.tintSeed
     }
 }
 

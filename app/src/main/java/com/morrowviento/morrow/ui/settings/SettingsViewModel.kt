@@ -151,8 +151,8 @@ class SettingsViewModel(
      */
     fun setAccent(color: AccentColor) = persist {
         val current = settings.appSettings.first().backdrop
-        if (current.autoTint) settings.setBackdrop(current.copy(autoTint = false))
-        settings.setAccentColor(color)
+        // 一次落盘：关取色与换强调色写在同一次 edit 里，主题子树只重建一次
+        settings.setAccentColor(color, current.copy(autoTint = false))
         withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
     }
 
