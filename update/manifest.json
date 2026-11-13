@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.0.0-alpha2-41",
-  "name": "朝夕 4.0.0-alpha2 (41)",
-  "body": "首个可安装的「朝夕」版本：品牌更名为朝夕、包名切到 com.morrowviento.morrow、新增自适应图标；应用内更新链路（三路探测 + 断点续传 + 校验 + 会话安装）首次有真实 Release 可检测；新建事件年份范围扩到 1900–2100，并包含前几轮真机反馈的全部修复。本资产为 debug 签名的通用包，可直接覆盖旧的 debug 安装。",
-  "published_at": "2026-11-12T07:17:46Z",
+  "tag_name": "v4.0.0-68",
+  "name": "朝夕 4.0.0 (68)",
+  "body": "## 朝夕 4.0.0 — 第一个正式版\n\n从这一版开始换成项目自有签名（RSA 4096），也是第一个开 R8 的包：**安装包从 80 MB 降到 4.8 MB**。\n\n> ⚠️ **换签名了，不能覆盖安装。** 之前装过任何 debug 包的，请先「设置 → 数据 → 导出备份」，\n> 卸载旧包，再装这个包，最后用「导入」恢复。卸载会清空应用数据，这一步别省。\n\n### 这一版改了什么\n\n**滚动和切页更顺了。** 整页背景（四团色斑 + 两道斜向光带）原来每一帧都在重新计算——\n4 个径向渐变加 2 个铺在 3 倍屏幕面积上、还带 18° 旋转的渐变，玻璃面板再从这层采样一遍做模糊，\n同一批像素算了两遍。现在按屏幕尺寸与配色渲染成一张位图，每帧只贴一次，观感逐像素不变。\n\n**桌面小部件不再是「一块黑板」。** 底色整体抬亮一档，主题色档不再把强调色压到发暗；\n玻璃的体积感补齐了三处：上沿一圈柔光、下沿压出内阴影、圆角内侧一圈模糊亮边——\n远看不再是一个白边，而是有厚度的弧面。\n\n### 包含的完整功能\n\n- 倒数日列表：三种排序、置顶、已完成折叠、逐秒倒计时、6 秒撤销\n- ",
+  "published_at": "2026-11-13T19:03:46Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-41-4.0.0-alpha2-debug.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.0.0-alpha2-41/morrow-41-4.0.0-alpha2-debug.apk",
-      "size": 79389680,
-      "digest": "sha256:04d81bdc7e67745dbb54864f8a7802b6c9465eed36b02a7ba275313f1fd83ed6"
+      "name": "morrow-68-4.0.0-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.0.0-68/morrow-68-4.0.0-release.apk",
+      "size": 5028400,
+      "digest": "sha256:2dcc4921ca47974358ffaca9a7607c4210324ef3a7e0917715d157df4ca9bb8f"
     }
   ]
 }
