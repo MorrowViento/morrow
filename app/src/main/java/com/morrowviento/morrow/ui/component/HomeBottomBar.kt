@@ -10,13 +10,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.morrowviento.morrow.ui.glass.GlassBottomNavigation
+import com.morrowviento.morrow.ui.glass.GlassContentBackdrop
 import com.morrowviento.morrow.ui.glass.GlassTab
 
 /**
  * 常驻底栏（首页 / 日历 / 设置之外的所有页面共用一条）。
  *
  * 真正的实现在 [GlassBottomNavigation]（`ui/glass`，Glasmio API 的隔离层）：
- * 一条胶囊玻璃栏 + 右侧一颗独立悬浮圆钮，两者共用同一份材质。
+ * 一条带收腰颈部的联合玻璃栏（胶囊 + 右圆球）、一颗会滑的凸出玻璃珠。
  * 这里只做「本项目三个页面」到「三格 + 新建」的翻译，业务代码不用认识 Glasmio 的枚举。
  *
  * 排序不再是底栏的一格：它挪到了首页大标题右侧（见 `HomeHeader` 的排序胶囊），
@@ -30,6 +31,8 @@ fun HomeBottomBar(
     onSearch: () -> Unit,
     onCreate: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 壁纸 + 页面内容的合成采样层：底栏靠它透出背后的卡片边缘。 */
+    backdrop: GlassContentBackdrop? = null,
 ) {
     GlassBottomNavigation(
         selected = if (calendarActive) GlassTab.CALENDAR else GlassTab.HOME,
@@ -42,6 +45,7 @@ fun HomeBottomBar(
         },
         onCreate = onCreate,
         modifier = modifier,
+        backdrop = backdrop,
     )
 }
 

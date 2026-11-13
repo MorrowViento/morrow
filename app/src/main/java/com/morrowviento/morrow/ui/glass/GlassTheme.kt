@@ -32,8 +32,14 @@ import io.github.neoruaa.glasmio.core.LocalGlassDimensions
 import io.github.neoruaa.glasmio.glass.GlassEmphasis
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
+import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
 import io.github.neoruaa.glasmio.glass.NavigationGlassMaterial
+import io.github.neoruaa.glasmio.glass.glassBackdropSource
+import io.github.neoruaa.glasmio.glass.render.Backdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberCombinedBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.glass.trackBackdropPosition
 
 /**
  * Glasmio API 隔离层（重构计划决策 D3）。
@@ -329,21 +335,60 @@ fun glassTextSecondary(): Color = GlasmioTheme.colors.secondaryContent
 fun glassTextTertiary(): Color = GlasmioTheme.colors.tertiaryContent
 
 /**
- * 玻璃背景宿主（自定义内容版，与 Glasmio 0.1.2 原始签名一一对应）。
+ * 「壁纸 + 页面内容」两层合成后的采样句柄。
  *
- * sampledContent 为被采样的底层内容，overlayContent 为其上的玻璃控件；
- * 玻璃控件**不得**放入 sampledContent，否则会自我采样形成递归。
+ * 业务层只持有这个对象传给 [GlassPanel] / [GlassBottomNavigation]，
+ * 不需要（也不允许）import 任何 Glasmio 类型。
+ *
+ * @property source 需要挂在滚动内容容器上的录制层（见 [glassContentSource]）。
+ * @property backdrop 合成后的采样源：先铺壁纸，再叠列表内容。
+ */
+class GlassContentBackdrop internal constructor(
+    internal val source: LayerBackdrop,
+    internal val backdrop: Backdrop,
+)
+
+/**
+ * 把一棵内容子树登记为玻璃的采样源。
+ *
+ * **这是「底栏看不见背后卡片」的根治点**：玻璃采样的是 backdrop 层，不是屏幕上
+ * 恰好压在它下面的像素。只把壁纸放进 `sampledContent` 时，无论列表怎么滚、卡片
+ * 怎么从底栏背后穿过去，底栏采到的永远只有那张壁纸；16dp 高斯一糊就成一片纯色，
+ * 看起来就是「一块不透明的板」。示例工程的做法正是把整页滚动内容挂到
+ * `glassBackdropSource(...)` 上，再让底栏采样它。
+ *
+ * 必须挂在**只含内容、不含玻璃控件**的容器上（这里是首页的 Column）：
+ * 底栏、弹层都在它外面，否则玻璃会采到自己形成递归。
+ * `trackBackdropPosition` 让滚动时的坐标变换每帧同步，否则采到的是旧位置。
+ */
+fun Modifier.glassContentSource(handle: GlassContentBackdrop): Modifier =
+    this.glassBackdropSource(handle.source).trackBackdropPosition(handle.source)
+
+/**
+ * 玻璃背景宿主（自定义内容版）。
+ *
+ * sampledContent 只放**不透明背景**（壁纸）；overlayContent 放全部玻璃控件，
+ * 并从参数拿到合成后的 [GlassContentBackdrop]，把它挂在内容层、传给底栏。
+ *
+ * 玻璃控件**不得**放入 sampledContent 或内容层之外，否则会自我采样形成递归。
  */
 @Composable
 fun GlassBackdropHost(
     modifier: Modifier = Modifier,
-    sampledContent: @Composable BoxScope.(LayerBackdrop) -> Unit,
-    overlayContent: @Composable BoxScope.(LayerBackdrop) -> Unit,
+    sampledContent: @Composable BoxScope.() -> Unit,
+    overlayContent: @Composable BoxScope.(GlassContentBackdrop) -> Unit,
 ) {
     GlasmioBackdropHost(
         modifier = modifier,
-        sampledContent = sampledContent,
-        overlayContent = overlayContent,
+        sampledContent = { sampledContent() },
+        overlayContent = { wallpaperLayer ->
+            val contentLayer = rememberLayerBackdrop()
+            val combined = rememberCombinedBackdrop(wallpaperLayer, contentLayer)
+            val handle = remember(contentLayer, combined) {
+                GlassContentBackdrop(contentLayer, combined)
+            }
+            overlayContent(handle)
+        },
     )
 }
 
@@ -377,6 +422,14 @@ fun GlassBackdropHost(
  * @param prominent 强调材质（Glasmio 的 `GlassEmphasis.Prominent`，iOS 的 tinted glass）。
  *   用于底栏「＋」这类主操作：按下时的高光由材质自己绘制，比内侧叠一层色块更干净。
  * @param accent 强调材质的底色（配合 [prominent] 使用）。
+ * @param frostScale 厚度缩放：**只有底栏这类又窄又长的控件需要**（见 [GlassBottomNavigation]）。
+ *   默认厚度 0.62 对应 16dp 高斯，一块 62dp 高的横条压上去，背后全被糊成一片均匀色，
+ *   眼睛就只能读到「一块实色板」。底栏传 0.55 → 约 9dp，背后的卡片边缘与色带还认得出来，
+ *   同时四档厚度依旧单调可辨。
+ * @param shape 完全自定义的轮廓（底栏那条带颈部的联合玻璃用）。给了它就不看
+ *   [capsule] / [cornerRadius]。
+ * @param backdrop 显式采样源（底栏传 [GlassContentBackdrop]）。不传就沿用宿主的壁纸层——
+ *   这正是「只有壁纸被采样」的老问题，见 [glassContentSource]。
  * @param onClick 非空即成为玻璃按钮：**按压光学直接由 Glasmio 材质绘制**
  *   （`GlassSurface` 内部是 `clickable(indication = null)` + 按压高光采样，
  *   因此天然没有 Material 的矩形 ripple）。点击后不会有任何 Material 指示器。
@@ -406,19 +459,24 @@ fun GlassPanel(
     accent: Color? = null,
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    frostScale: Float = 1f,
+    shape: Shape? = null,
+    backdrop: GlassContentBackdrop? = null,
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val veil = glassVeil()
-    val shape = glassShape(capsule, cornerRadius)
+    val surfaceShape = shape ?: glassShape(capsule, cornerRadius)
+    val surfaceBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
     GlassSurface(
         modifier = modifier,
-        shape = shape,
+        backdrop = surfaceBackdrop,
+        shape = surfaceShape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
         material = CLEAR_MATERIAL,
         // 连续的模糊半径：厚度档位真正改变光学的地方
-        frostRadius = frostRadiusOf(LocalGlassFrost.current),
+        frostRadius = frostRadiusOf(LocalGlassFrost.current * frostScale),
         onClick = onClick,
         enabled = enabled,
         contentAlignment = contentAlignment,
@@ -426,18 +484,25 @@ fun GlassPanel(
         // 色纱是 content 的第一个子项，因此盖住玻璃绘制、又垫在真正的内容下面。
         // matchParentSize 是 BoxScope 的成员函数，不需要（也不能）import。
         if (veil != null) {
-            Box(Modifier.matchParentSize().clip(shape).background(veil))
+            Box(Modifier.matchParentSize().clip(surfaceShape).background(veil))
         }
         // 色纱之上再叠一层显式 wash（强调色 / 选中态）。两者互不覆盖：
         // 之前 `tint` 直接把 veil 顶掉，导致「减弱透明 + 选中格」反而更透。
         if (tint != null) {
-            Box(Modifier.matchParentSize().clip(shape).background(tint))
+            Box(Modifier.matchParentSize().clip(surfaceShape).background(tint))
         }
         content()
     }
 }
 
-/** 圆形玻璃面板（悬浮按钮用）。 */
+/**
+ * 圆形玻璃面板（悬浮按钮、底栏的选中透镜用）。
+ *
+ * @param clear 去掉内侧色纱：透镜要**看得见背后**才是透镜。底栏那枚珠子用它——
+ *   它压在一条玻璃栏上，如果自己也带色纱，两层纱叠起来正好把背后的东西糊死，
+ *   看起来就成了「一格被涂了色」。第一张示例图里那颗珠子能透出壁纸与卡片边缘，
+ *   靠的就是「真玻璃 + 没有面纱」。
+ */
 @Composable
 fun GlassCirclePanel(
     modifier: Modifier = Modifier,
@@ -446,16 +511,21 @@ fun GlassCirclePanel(
     accent: Color? = null,
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    frostScale: Float = 1f,
+    clear: Boolean = false,
+    backdrop: GlassContentBackdrop? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val veil = glassVeil()
+    val veil = if (clear) null else glassVeil()
+    val surfaceBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
     GlassSurface(
         modifier = modifier,
+        backdrop = surfaceBackdrop,
         shape = CircleShape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
         material = CLEAR_MATERIAL,
-        frostRadius = frostRadiusOf(LocalGlassFrost.current),
+        frostRadius = frostRadiusOf(LocalGlassFrost.current * frostScale),
         onClick = onClick,
         enabled = enabled,
         contentAlignment = Alignment.Center,

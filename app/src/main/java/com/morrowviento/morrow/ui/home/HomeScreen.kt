@@ -81,6 +81,7 @@ import com.morrowviento.morrow.ui.glass.GlassMotion
 import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassPage
 import com.morrowviento.morrow.ui.glass.GlassTheme
+import com.morrowviento.morrow.ui.glass.glassContentSource
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import com.morrowviento.morrow.ui.reminder.ReminderActions
@@ -192,13 +193,17 @@ fun HomeScreen(
         GlassBackdropHost(
             modifier = Modifier.fillMaxSize(),
             sampledContent = { GlassBackdrop() },
-            overlayContent = {
+            overlayContent = { contentBackdrop ->
                 Box(
                     Modifier
                         .fillMaxSize()
                         .safeDrawingPadding(),
                 ) {
-                    Column(Modifier.fillMaxSize()) {
+                    // 这一整列（标题 + 事件列表）登记为底栏的采样源。
+                    // 玻璃采的是 backdrop 层而不是屏幕上压在它下面的像素：只把壁纸放进
+                    // sampledContent 的话，卡片再怎么从底栏背后滚过去也永远透不出来。
+                    // 底栏与所有浮层都在这列之外，避免玻璃采到自己。
+                    Column(Modifier.fillMaxSize().glassContentSource(contentBackdrop)) {
                         HomeHeader(
                             state = state,
                             listState = listState,
@@ -318,7 +323,10 @@ fun HomeScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(horizontal = 16.dp)
-                                .padding(bottom = 14.dp),
+                                // 底栏槽比栏体高 14dp（珠子上下各凸出 7dp），
+                                // 所以这里只留一半，栏体的视觉位置才和之前一致
+                                .padding(bottom = 7.dp),
+                            backdrop = contentBackdrop,
                             calendarActive = showCalendar,
                             // 搜索还是预留位：点一下给个提示，不做假界面
                             onSearch = {
@@ -553,7 +561,10 @@ private fun EventList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 150.dp),
+        // 底部留白刚好让最后一条完整露出（底栏槽顶在 84dp），
+        // 又让滚动中的卡片能从底栏背后穿过去——不穿过去，玻璃就没有东西可折，
+        // 看起来就是一块实色板
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "active-header") {

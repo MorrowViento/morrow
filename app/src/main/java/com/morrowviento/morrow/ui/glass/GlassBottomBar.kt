@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,30 +28,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kyant.capsule.ContinuousRoundedRectangle
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * 底栏的三个位置。
  *
- * 只有三个：主页、日历、搜索（预留）。新建不占位置——它是右侧那颗独立的悬浮圆钮，
+ * 只有三个：主页、日历、搜索（预留）。新建不占位置——它是右侧那颗独立的圆球，
  * 和 iOS 26 把「搜索」从 tab 里拆出来单独一颗是同一个排布。
  */
 enum class GlassTab(val label: String) {
@@ -60,51 +65,128 @@ enum class GlassTab(val label: String) {
     SEARCH("搜索"),
 }
 
-/** 底栏高度与悬浮圆钮直径：两者必须一样，否则并排时基线会歪。 */
+/** 胶囊主体高度。 */
 private val BarHeight = 62.dp
 
-/** 悬浮圆钮与底栏之间的缝：和 iOS 26 一样，留一条能看见底色的缝。 */
-private val BarGap = 10.dp
+/**
+ * 底栏槽高 = 右端圆球直径 = 选中玻璃珠直径。
+ *
+ * 比 [BarHeight] 高 14dp，所以圆球和珠子上下各凸出 7dp——图 2 里那颗珠子能一眼
+ * 认出是「按进栏里的一颗玻璃珠」，靠的就是它不合规矩地凸出去一圈。
+ */
+private val BeadDiameter = 76.dp
 
-/** 胶囊形状：只在文件级建一次，避免每帧给每一格新建 Shape。 */
+/** 收腰起点：从圆球左边缘往左 22dp，胶囊顶边在这里开始往内收。 */
+private val NeckInset = 22.dp
+
+/** 腰部最窄处：从圆球左边缘往左 10dp。 */
+private val WaistInset = 10.dp
+
+/** 腰的半高（21dp → 腰高 42dp，胶囊 62dp、圆球 76dp）。 */
+private val WaistHalf = 21.dp
+
+/**
+ * 珠子上的强调色纱：只有 0.10。珠子主体必须是「透过去的壁纸 + 卡片」，
+ * 强调色只负责说明「这颗被选中」。给到 0.30 就是一块蓝色圆片。
+ */
+private const val BeadTintAlpha = 0.10f
+
+/**
+ * 底栏的厚度缩放（默认档 0.62 → 约 9dp 高斯）。
+ *
+ * 一条 62dp 高的横条若用 16dp，背后全被抹平，眼睛读到的就是「一块实色板」——
+ * 这正是上一版「底栏一点都不透明」的另一半原因。降到 0.55 之后色带与卡片边缘
+ * 还认得出来，四档厚度的差异也依旧单调可辨。
+ */
+private const val BarFrostScale = 0.55f
+
+/** 三格按下时的裁剪形状：只在文件级建一次。 */
 private val BarShape = RoundedCornerShape(50)
 
 /**
- * 选中透镜的高度。**不是满高**：Glasmio 示例里的底栏（图 2）那枚指示器是一块
- * 「方中带圆」的玻璃片，上下各留出栏体自己的一圈边——正是这圈边让它读起来是
- * 「栏里嵌了一片玻璃」，而不是「一格被涂了色」。
+ * 「胶囊 + 收腰颈部 + 右圆球」的**一整块**玻璃轮廓（图 1 的吸附效果）。
+ *
+ * 为什么必须是一整块 Shape 而不是两片玻璃叠在一起：两块独立玻璃各有自己的
+ * 外描边和折射边，接缝处会互相打架；只有共用一条轮廓，边缘高光才会顺着颈部
+ * 连续地流过去，读起来才是「被吸住了」。库示例里这一步是 `BottomNavigationContact`
+ * 用 SDF 算出来的，0.1.3 没有把它开放给任意组合，这里用等价的解析路径：
+ *
+ * - 上缘：胶囊顶边 → 两段三次贝塞尔（腰点两侧切线都水平，保证连续）→ 圆球 225° 点；
+ * - 圆球只保留 225°→135° 的 270° 外弧，左边缺的 90° 交给颈部；
+ * - 下缘镜像，左端用 180° 圆弧封口。
+ *
+ * 几何是纯解析的，没有布尔挖圆（布尔会在切线交界留尖角）。参数由离屏预览调过：
+ * 腰部是一段连续 S 凹弧，圆球上下各凸出 7dp。
+ *
+ * 用 `object` 单例：Shape 的 equals 稳定，Compose 才能缓存 outline，不会每帧重算路径。
  */
-private val LensHeight = 46.dp
+private object BarUnionShape : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val w = size.width
+        val h = size.height
+        val cy = h / 2f
+        val r1 = with(density) { (BarHeight / 2).toPx() }
+        val r2 = h / 2f
+        val ballCx = w - r2
+        val ballLeft = ballCx - r2
+        val neckStart = ballLeft - with(density) { NeckInset.toPx() }
+        val waistX = ballLeft - with(density) { WaistInset.toPx() }
+        val waistHalf = with(density) { WaistHalf.toPx() }
 
-/** 透镜的圆角：≈ 高度的三分之一，接近 squircle；给满高就会退化成胶囊。 */
-private val LensCorner = 15.dp
+        // 颈部与圆球相接的点：225°（左上）/ 135°（左下）
+        val startRad = Math.toRadians(225.0).toFloat()
+        val sweepRad = Math.toRadians(270.0).toFloat()
+        val leftArcStart = Math.toRadians(90.0).toFloat()
+        val leftArcSweep = Math.toRadians(180.0).toFloat()
+        val rad = startRad.toDouble()
+        val joinX = ballCx + r2 * cos(rad).toFloat()
+        val joinY = cy + r2 * sin(rad).toFloat()
+        val a = (waistX - neckStart) * 0.55f
+        val b = (joinX - waistX) * 0.55f
+        // 进入圆球时沿该点的切线方向，否则曲线会冲过头再回落，腰部会长出尖刺
+        val k = b * 0.75f
+        val lowerJoinY = cy - (joinY - cy)
 
-/** 透镜左右留白：格子两侧各让出一点，滑动过程中不会蹭到相邻格的图标。 */
-private val LensInsetX = 12.dp
+        return Outline.Generic(
+            Path().apply {
+                moveTo(r1, cy - r1)
+                lineTo(neckStart, cy - r1)
+                cubicTo(neckStart + a, cy - r1, waistX - a, cy - waistHalf, waistX, cy - waistHalf)
+                cubicTo(waistX + b, cy - waistHalf, joinX - k, joinY + k, joinX, joinY)
+                arcToRad(Rect(ballCx - r2, cy - r2, ballCx + r2, cy + r2), startRad, sweepRad, false)
+                cubicTo(joinX - k, lowerJoinY - k, waistX + b, cy + waistHalf, waistX, cy + waistHalf)
+                cubicTo(waistX - a, cy + waistHalf, neckStart + a, cy + r1, neckStart, cy + r1)
+                lineTo(r1, cy + r1)
+                arcToRad(Rect(0f, cy - r1, r1 * 2f, cy + r1), leftArcStart, leftArcSweep, false)
+                close()
+            },
+        )
+    }
+}
 
 /**
  * 常驻底栏（首页 / 日历共用一条，切页面时它不重建、不换内容）。
  *
- * ## 为什么不再用 `GlasmioNavigationBar`
+ * ## 不用 `GlasmioNavigationBar` 的原因
  *
- * 库的导航栏有两个改不动的限制，正好对上「底栏完全不透明、且不跟随厚度」：
+ * 库的导航栏由 `BottomNavigationContact` 统一画材质，材质是库内部按尺寸挑的
+ * `NavigationGlassMaterial`（有的档带三层不透明 `fills`），**没有** `material` /
+ * `frostRadius` / `backdrop` 参数可传——厚度滑块对它完全无效；示例里它能透，是因为
+ * `GlasmioNavigationScaffold` 替它把整页滚动内容登记成了 `contentBackdrop`。
+ * 我们不用那套脚手架，所以自己接过这两个职责。
  *
- * - 它由 `BottomNavigationContact` 统一画材质，材质是库内部按尺寸挑的
- *   `NavigationGlassMaterial`（其中一档带三层不透明 `fills`），**没有**
- *   `material` / `frostRadius` 参数可传——厚度滑块对它完全无效；
- * - 选中格那块「透镜指示器」也只能由它自己画，外部拿不到。
+ * ## 三件让底栏「真的是玻璃」的事
  *
- * 现在就是一块普通玻璃：`GlassPanel(capsule = true)`——和卡片同一档 Clear 材质、
- * 同一个 `frostRadius`（跟随厚度）、同一份色纱。整条底栏因此和卡片一样透，
- * 也会被「通透 ↔ 厚重」改变。
- *
- * ## 选中态照 Glasmio 示例的底栏（图 2）
- *
- * 那一枚指示器不是「满格涂色」，而是一块**方中带圆的玻璃片**：
- * 上下留出栏体的一圈边、左右不贴邻格，强调色纱上浓下淡，边缘一圈细描边。
- * 三格的图标也照着它的分量做过：笔画 2.0dp（选中 2.3dp）、21dp 见方、
- * 未选中用主文字色（不是次级灰），选中才换成强调色 + 半粗字重。
- * 尺寸与形状参数见文件头的 `Lens*` 常量。
+ * 1. **采样内容层**（[backdrop]）：见 [glassContentSource]。底栏读的是
+ *    「壁纸 + 列表卡片」合成层，卡片边缘经过时会被折射弯折，而不是永远只有壁纸。
+ * 2. **整块联合玻璃**：胶囊、颈部、右圆球共用 [BarUnionShape] 一条轮廓，
+ *    这就是图 1 的「搜索按钮吸附」。
+ * 3. **凸出的真玻璃珠**：选中态是一颗独立 [GlassCirclePanel]，`clear = true`
+ *    不垫面纱、直径比栏高大、采样同一层内容，边缘由材质自己画折射高光。
  *
  * 三格的图标自己画（House / Calendar / Search）：库的 `SfSymbol` 只有十几个符号，
  * 既没有日历也没有加号，之前日历只能拿 `Clock` 顶替，语义还是错的。
@@ -116,98 +198,75 @@ fun GlassBottomNavigation(
     onCreate: () -> Unit,
     modifier: Modifier = Modifier,
     createLabel: String = "新建",
+    /** 壁纸 + 列表内容的合成采样层。null 时退回宿主壁纸层（不透明，仅作兜底）。 */
+    backdrop: GlassContentBackdrop? = null,
 ) {
     val tabs = GlassTab.entries
-    Row(
-        modifier = modifier.height(BarHeight),
-        verticalAlignment = Alignment.CenterVertically,
+    val accent = glassAccent()
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(BeadDiameter),
     ) {
+        // 三格占「胶囊顶边直到收腰起点」这一段，正好和联合形状对齐
+        val tabsWidth = maxWidth - BeadDiameter - NeckInset
+        val cell = tabsWidth / tabs.size
+        val index = tabs.indexOf(selected).coerceAtLeast(0)
+        val slide by animateFloatAsState(
+            targetValue = index.toFloat(),
+            animationSpec = spring(dampingRatio = 0.78f, stiffness = 620f, visibilityThreshold = 0.01f),
+            label = "tabLensSlide",
+        )
+        // 珠子居中在格子里；格子比珠子窄时（超窄屏）至少不往左溢出
+        val beadInset = ((cell - BeadDiameter) / 2).coerceAtLeast(0.dp)
+
+        // 1) 整块联合玻璃：胶囊 + 颈部 + 圆球，一条轮廓、一次采样
         GlassPanel(
+            modifier = Modifier.fillMaxSize(),
+            shape = BarUnionShape,
+            backdrop = backdrop,
+            frostScale = BarFrostScale,
+        ) {}
+
+        // 2) 会滑的玻璃珠：真玻璃、无面纱、凸出栏体
+        GlassCirclePanel(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            capsule = true,
+                .align(Alignment.CenterStart)
+                .offset { IntOffset((cell * slide + beadInset).roundToPx(), 0) }
+                .size(BeadDiameter),
+            tint = accent.copy(alpha = BeadTintAlpha),
+            frostScale = BarFrostScale,
+            clear = true,
+            backdrop = backdrop,
+        ) {}
+
+        // 3) 三格的图标与文字压在珠子之上（图 2 里文字就在透镜里面）
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .width(tabsWidth)
+                .height(BarHeight),
         ) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                // 每格宽度 = 整条栏 / 3；透镜的位移与宽度都按它算，
-                // 因此改格数或改高度都不用再调常量。
-                val cell = maxWidth / tabs.size
-                val index = tabs.indexOf(selected).coerceAtLeast(0)
-                val slide by animateFloatAsState(
-                    targetValue = index.toFloat(),
-                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 620f, visibilityThreshold = 0.01f),
-                    label = "tabLensSlide",
+            tabs.forEach { tab ->
+                TabCell(
+                    tab = tab,
+                    selected = tab == selected,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onSelected(tab) },
                 )
-                TabLens(
-                    modifier = Modifier
-                        .offset { IntOffset((cell * slide).roundToPx(), 0) }
-                        .width(cell)
-                        .fillMaxHeight()
-                        // 上下各让出一圈边：透镜因此不是满高胶囊，而是栏里嵌的一片玻璃
-                        .padding(
-                            horizontal = LensInsetX,
-                            vertical = (BarHeight - LensHeight) / 2,
-                        ),
-                )
-                Row(Modifier.fillMaxSize()) {
-                    tabs.forEach { tab ->
-                        TabCell(
-                            tab = tab,
-                            selected = tab == selected,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onSelected(tab) },
-                        )
-                    }
-                }
             }
         }
-        Spacer(Modifier.width(BarGap))
-        FloatingCreateButton(onClick = onCreate, label = createLabel)
-    }
-}
 
-/**
- * 选中格的透镜（照 Glasmio 示例底栏那一枚）。
- *
- * 形状是一块**方中带圆**的玻璃片，不是满高胶囊：上下留出栏体的一圈边，
- * 左右不贴邻格。四件事让它像玻璃而不是色块：
- *
- * 1. 强调色纱，上浓下淡（`0.30 → 0.16`）——玻璃片顶部被照亮、底部沉下去；
- * 2. 上缘一道白色镜面，只铺到 52% 高度就化掉，不做整块渐变（整块会变奶白）；
- * 3. 一圈 0.9dp 的强调色描边，就是玻璃的「厚边」；
- * 4. 形状用 `ContinuousRoundedRectangle`（squircle），描边由同一个 shape 的
- *    `Outline` 画出来，因此边和面严格贴合——用 `RoundedCornerShape` 描边会在
- *    直边与圆角交界处露出一条缝。
- *
- * 不再嵌第二片 `GlassSurface`：底栏里再套一层玻璃就是两次采样、两次模糊，
- * 两层糊在一起反而让「选中」糊掉。
- */
-@Composable
-private fun TabLens(modifier: Modifier = Modifier) {
-    val accent = glassAccent()
-    val shape = remember { ContinuousRoundedRectangle(LensCorner) }
-    Box(
-        modifier
-            .clip(shape)
-            .drawWithCache {
-                val outline = shape.createOutline(size, layoutDirection, this)
-                // 色纱：顶部亮、底部沉，玻璃才有厚度
-                val wash = Brush.verticalGradient(
-                    listOf(accent.copy(alpha = 0.30f), accent.copy(alpha = 0.16f)),
-                )
-                val sheen = Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0f)),
-                    endY = size.height * 0.52f,
-                )
-                val rim = Stroke(width = 0.9.dp.toPx())
-                val rimColor = accent.copy(alpha = 0.38f)
-                onDrawBehind {
-                    drawRect(wash)
-                    drawRect(sheen)
-                    drawOutline(outline, color = rimColor, style = rim)
-                }
-            },
-    )
+        // 4) 右端圆球上的「＋」：联合玻璃本身不给 onClick（否则整条栏都可点），
+        //    按压反馈由这一层自己画
+        CreateBall(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .size(BeadDiameter),
+            onClick = onCreate,
+            label = createLabel,
+        )
+    }
 }
 
 /** 一格：图标 + 小字，按下缩小一档（和 chips、文字按钮同一条弹簧）。 */
@@ -277,7 +336,7 @@ private fun TabGlyph(tab: GlassTab, color: Color, glyphSize: Dp, selected: Boole
                 drawLine(color, Offset(w * 0.17f, h * 0.40f), Offset(w * 0.17f, h * 0.89f), stroke, StrokeCap.Round)
                 drawLine(color, Offset(w * 0.83f, h * 0.40f), Offset(w * 0.83f, h * 0.89f), stroke, StrokeCap.Round)
                 drawLine(color, Offset(w * 0.17f, h * 0.89f), Offset(w * 0.83f, h * 0.89f), stroke, StrokeCap.Round)
-                // 门：贴底的一条实心圆角矩形，窗户般的留白交给底色
+                // 门：贴底的一条实心圆角矩形
                 drawRoundRect(
                     color = color,
                     topLeft = Offset(w * 0.39f, h * 0.60f),
@@ -321,18 +380,42 @@ private fun TabGlyph(tab: GlassTab, color: Color, glyphSize: Dp, selected: Boole
 }
 
 /**
- * 右侧独立的圆形按钮（玻璃里的「＋」）。
+ * 右端圆球上的「＋」。
  *
- * 和底栏一样是 [GlassCirclePanel]：跟随厚度、跟随主题，按下时由材质自己画折射光斑，
- * 不是 Material 的矩形涟漪。
+ * 圆球已经是 [BarUnionShape] 的一部分，这里**不再叠第二片玻璃**（两层 Clear 叠在
+ * 一起会把刚才修好的透明度又糊回去，也会在圆球左缘留一道假的接缝）。
+ * 按压改成缩一档 + 一圈很淡的强调色高光，和其余按钮同一条弹簧。
  */
 @Composable
-private fun FloatingCreateButton(onClick: () -> Unit, label: String) {
-    GlassCirclePanel(
-        modifier = Modifier
-            .size(BarHeight)
+private fun CreateBall(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    label: String,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 1200f, visibilityThreshold = 0.01f),
+        label = "createPress",
+    )
+    val accent = glassAccent()
+    Box(
+        modifier
+            .graphicsLayer {
+                val s = 1f - 0.05f * press
+                scaleX = s
+                scaleY = s
+            }
+            .drawBehind {
+                if (press > 0.001f) {
+                    drawCircle(accent.copy(alpha = 0.12f * press))
+                }
+            }
+            .clip(RoundedCornerShape(50))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .semantics { contentDescription = label },
-        onClick = onClick,
+        contentAlignment = Alignment.Center,
     ) {
         PlusGlyph(glassTextPrimary(), glyphSize = 25.dp)
     }
