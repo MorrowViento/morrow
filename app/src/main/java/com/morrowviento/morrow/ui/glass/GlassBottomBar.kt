@@ -451,8 +451,16 @@ fun GlassBottomNavigation(
         // 量化成 4 档：避免按压动画每帧都让材质重新解析一遍配方。
         val growth = growthPx * ((ballPress * 3).roundToInt() / 3f)
         val grownBallPx = ballPx + growth
-        // 圆球左边（px）：常态 = 胶囊右端 + 12dp 缝；按下长大会左右各涨一半。
-        val ballLeft = pillPx + gapPx + ballDrag.value - growth / 2f
+        /**
+         * 圆球**圆心**（px）：常态 = 胶囊右端 + 缝 + 半径，再加上拖动量。
+         *
+         * 圆球玻璃和「＋」必须用同一个圆心定位：`graphicsLayer` 的缩放是**绕中心**的，
+         * 如果像上一版那样两边都用「左边缘 - growth/2」，画出来的球与字就会差
+         * growth/2（1.5dp）；加上录制层重放旧画面，慢拖时能明显看出两者分离。
+         */
+        val ballCenterPx = pillPx + gapPx + ballPx / 2f + ballDrag.value
+        // 左缘 = 圆心 - 半径：按下长大时左右各涨一半。
+        val ballLeft = ballCenterPx - grownBallPx / 2f
         val gap = ballLeft - pillPx
         val ballScale = grownBallPx / ballPx
         // 拖到 k/2 以内：换成一块玻璃的并集轮廓（与光学场同一条 SDF，融合处没有界线）。
@@ -493,6 +501,9 @@ fun GlassBottomNavigation(
                         tab = tab,
                         selected = tab == selected,
                         modifier = Modifier.weight(1f),
+                        // 录制源也按同一个进度换色：透镜里折进去的那份，按下时同样是
+                        // 「蓝 → 黑」，不会和外面那格对不上。
+                        press = { press.value },
                         sourceScale = { 1f + LensSourceScale * press.value },
                     )
                 }
@@ -500,10 +511,18 @@ fun GlassBottomNavigation(
         }
 
         // 1) 显现层：玻璃 + 暗色选中块，整层录进 barLayer 供透镜采样。
+        //
+        //    **不能开 `reuseContent`**：它的语义是「录一次、之后重放录下的显示列表」，
+        //    而这一层里的东西（圆球的 offset、暗色块的 translationX、圆球的缩放）
+        //    都是逐帧变的绘制/布局阶段状态，重放出来就是旧画面。上一版开了它，
+        //    慢速拖 ＋ 时圆球停在上一次重录的位置、而外面的加号继续跟手 ——
+        //    用户反馈的「加号跟圆形背景脱离单独偏移」就是这么来的。
+        //    官方文档也写了：只有「可见与录制的绘制完全一致（含 graphicsLayer 读取）」
+        //    时才能开，我们显然不满足。
         Box(
             Modifier
                 .matchParentSize()
-                .layerBackdrop(barLayer, reuseContent = true),
+                .layerBackdrop(barLayer, reuseContent = false),
         ) {
             if (joined) {
                 // 吸附：一块玻璃，轮廓与光学场来自**同一个** smooth-min 场。
@@ -550,26 +569,14 @@ fun GlassBottomNavigation(
                     backdrop = backdrop,
                 ) {}
             } else {
-                // 分离态：两块**各自独立**的玻璃。圆球有自己的光心、自己的投影与
-                // 边缘高光，所以是一颗浮起来的按钮，而不是长胶囊末端的一截。
+                // 分离态：胶囊是独立的一块玻璃。圆球挪到第 4 步与「＋」同一个 Box 里画，
+                // 两者共用一次计算出来的圆心、一次 offset、一次 scale，结构上不可能错位。
                 GlassPanel(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .width(pillWidth)
                         .height(BarHeight),
                     capsule = true,
-                    frostScale = BarFrostScale,
-                    backdrop = backdrop,
-                ) {}
-                GlassCirclePanel(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(BallDiameter)
-                        .offset { IntOffset((ballDrag.value - growth / 2f).roundToInt(), 0) }
-                        .graphicsLayer {
-                            scaleX = ballScale
-                            scaleY = ballScale
-                        },
                     frostScale = BarFrostScale,
                     backdrop = backdrop,
                 ) {}
@@ -594,16 +601,14 @@ fun GlassBottomNavigation(
                 .then(drag.modifier),
         ) {
             tabs.forEach { tab ->
-                val cellSelected = tab == selected
                 TabCell(
                     tab = tab,
-                    selected = cellSelected,
+                    selected = tab == selected,
                     modifier = Modifier.weight(1f),
-                    // 被选中的那格在按下时淡出：透镜里已经有一份放大后的图标，
-                    // 底下再压一份原图就成了重影（库的做法是 hideSelectedItem）。
-                    contentAlpha = {
-                        if (cellSelected) 1f - press.value else 1f
-                    },
+                    // 按下时选中格**不淡出**：库虽然传了 hideSelectedItem，但那份淡出的是
+                    // 可见行，真正的选中图标由单独的 morphing 组件画；这里没有那个组件，
+                    // 照抄淡出就会让图标整块消失。改成把强调色渐变到正文色。
+                    press = { press.value },
                 )
             }
         }
@@ -649,65 +654,82 @@ fun GlassBottomNavigation(
             }
         }
 
-        // 4) 独立悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建。
+        // 4) 独立悬浮的「＋」：**圆球玻璃与字形放在同一个 Box 里**。
+        //
+        //    位置和缩放只在这里算一次（两个子项都 matchParentSize），所以拖动时
+        //    结构上不可能出现「字形跟手、圆球留在原地」。上一版的圆球画在第 1 步的
+        //    录制层里、字形画在外面，是两条独立的位置链，再加上录制层重放旧画面，
+        //    慢拖时就能看到两者分开。
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .size(BallDiameter)
-                .offset {
-                    IntOffset(
-                        (ballDrag.value - growth / 2f).roundToInt(),
-                        0,
-                    )
-                }
+                // 只跟手拖动量。缩放由下面的 graphicsLayer 绕**中心**做，所以这里
+                // 不能再减 growth/2，否则长大那一帧圆球圆心与字形中心会差半个增量。
+                .offset { IntOffset(ballDrag.value.roundToInt(), 0) }
                 .graphicsLayer {
                     scaleX = ballScale
                     scaleY = ballScale
-                }
-                .drawBehind {
-                    // 按压高光用径向渐变：实心圆会在玻璃球上留一圈硬边，
-                    // 看起来像又叠了一块白盘（库的 PressHighlightRenderer 也是柔和的）。
-                    if (ballPress > 0.001f) {
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.30f * ballPress),
-                                    Color.White.copy(alpha = 0f),
-                                ),
-                                center = center,
-                                radius = size.minDimension / 2f,
-                            ),
-                        )
-                    }
-                }
-                .clickable(
-                    interactionSource = ballInteraction,
-                    indication = null,
-                    onClick = onCreate,
-                )
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { ballDragging = true },
-                        onDragEnd = {
-                            ballDragging = false
-                            scope.launch { ballDrag.animateTo(0f, spring(0.8f, 420f)) }
-                        },
-                        onDragCancel = {
-                            ballDragging = false
-                            scope.launch { ballDrag.animateTo(0f, spring(0.8f, 420f)) }
-                        },
-                        onDrag = { change, amount ->
-                            val next = (ballDrag.value + amount.x)
-                                .coerceIn(-leftLimitPx, rightLimitPx)
-                            scope.launch { ballDrag.snapTo(next) }
-                            change.consume()
-                        },
-                    )
-                }
-                .semantics { contentDescription = createLabel },
+                },
             contentAlignment = Alignment.Center,
         ) {
-            PlusGlyph(darkInk, glyphSize = 24.dp)
+            if (!joined) {
+                // 分离态：圆球是它自己的一块玻璃，有独立的光心、投影与边缘高光，
+                // 所以才像「浮起来的按钮」。融合态由第 1 步的并集玻璃画球，这里不重复。
+                GlassCirclePanel(
+                    modifier = Modifier.matchParentSize(),
+                    frostScale = BarFrostScale,
+                    backdrop = backdrop,
+                ) {}
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .drawBehind {
+                        // 按压高光用径向渐变：实心圆会在玻璃球上留一圈硬边，
+                        // 看起来像又叠了一块白盘（库的 PressHighlightRenderer 也是柔和的）。
+                        if (ballPress > 0.001f) {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    listOf(
+                                        Color.White.copy(alpha = 0.30f * ballPress),
+                                        Color.White.copy(alpha = 0f),
+                                    ),
+                                    center = center,
+                                    radius = size.minDimension / 2f,
+                                ),
+                            )
+                        }
+                    }
+                    .clickable(
+                        interactionSource = ballInteraction,
+                        indication = null,
+                        onClick = onCreate,
+                    )
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { ballDragging = true },
+                            onDragEnd = {
+                                ballDragging = false
+                                scope.launch { ballDrag.animateTo(0f, spring(0.8f, 420f)) }
+                            },
+                            onDragCancel = {
+                                ballDragging = false
+                                scope.launch { ballDrag.animateTo(0f, spring(0.8f, 420f)) }
+                            },
+                            onDrag = { change, amount ->
+                                val next = (ballDrag.value + amount.x)
+                                    .coerceIn(-leftLimitPx, rightLimitPx)
+                                scope.launch { ballDrag.snapTo(next) }
+                                change.consume()
+                            },
+                        )
+                    }
+                    .semantics { contentDescription = createLabel },
+                contentAlignment = Alignment.Center,
+            ) {
+                PlusGlyph(darkInk, glyphSize = 24.dp)
+            }
         }
     }
 }
@@ -747,7 +769,9 @@ private fun androidx.compose.foundation.layout.BoxScope.SelectionBlock(
 /**
  * 一格：图标 + 小字。点击与拖动都交给外层 [DampedDragAnimation]，这里只负责画。
  *
- * @param contentAlpha 画到屏幕上的不透明度（按下时选中的那格淡出，避免和透镜重影）。
+ * @param press 按压进度（0…1）。选中项的强调色按它渐变到正文色，
+ *   等价于库里的 `lerp(accent, content, pressProgress)`：
+ *   按下时蓝色**逐渐变黑**，而不是整块消失。
  * @param sourceScale 这一个格子的放大倍数，只作用于录制给透镜的那份副本。
  */
 @Composable
@@ -755,17 +779,17 @@ private fun RowScope.TabCell(
     tab: GlassTab,
     selected: Boolean,
     modifier: Modifier = Modifier,
-    contentAlpha: () -> Float = { 1f },
+    press: () -> Float = { 0f },
     sourceScale: () -> Float = { 1f },
 ) {
     // 常态选中除了那块暗色范围，还靠颜色区分；未选中用主文字色而不是次级灰，
     // 否则整条栏看起来是「三个禁用按钮」。
-    val ink = if (selected) glassAccent() else glassTextPrimary()
+    val ink = glassTextPrimary()
+    val base = if (selected) glassAccent() else ink
     Column(
         modifier = modifier
             .fillMaxHeight()
             .graphicsLayer {
-                alpha = contentAlpha()
                 val scale = sourceScale()
                 scaleX = scale
                 scaleY = scale
@@ -774,24 +798,65 @@ private fun RowScope.TabCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        TabGlyph(tab = tab, color = ink, glyphSize = 23.dp, selected = selected)
+        Box {
+            TabGlyph(tab = tab, color = base, glyphSize = 23.dp, selected = selected)
+            if (selected) {
+                // 正文色叠在强调色上，alpha = 按压进度：0 → 纯强调色，1 → 纯正文色，
+                // 中间就是两者的混合。alpha 只在绘制阶段读，慢速拖动不会逐帧重组底栏。
+                TabGlyph(
+                    tab = tab,
+                    color = ink,
+                    glyphSize = 23.dp,
+                    selected = selected,
+                    modifier = Modifier.graphicsLayer { alpha = press() },
+                )
+            }
+        }
         Spacer(Modifier.height(4.dp))
-        Text(
-            text = tab.label,
-            maxLines = 1,
-            style = TextStyle(
-                fontSize = 11.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                color = ink,
-            ),
-        )
+        Box {
+            TabLabel(text = tab.label, color = base, selected = selected)
+            if (selected) {
+                TabLabel(
+                    text = tab.label,
+                    color = ink,
+                    selected = selected,
+                    modifier = Modifier.graphicsLayer { alpha = press() },
+                )
+            }
+        }
     }
+}
+
+/** 一格的小字。两份副本字体与字重完全一致，叠在同一个 Box 里不会错位。 */
+@Composable
+private fun TabLabel(
+    text: String,
+    color: Color,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        modifier = modifier,
+        maxLines = 1,
+        style = TextStyle(
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = color,
+        ),
+    )
 }
 
 /** 三格的图标：都是自绘线条，不依赖字体字形。 */
 @Composable
-private fun TabGlyph(tab: GlassTab, color: Color, glyphSize: Dp, selected: Boolean) {
-    Canvas(Modifier.size(glyphSize)) {
+private fun TabGlyph(
+    tab: GlassTab,
+    color: Color,
+    glyphSize: Dp,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier.size(glyphSize)) {
         val w = size.width
         val h = size.height
         val stroke = (if (selected) 2.4f else 2.1f).dp.toPx()
