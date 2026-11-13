@@ -115,20 +115,34 @@ private val SlotHeight = 70.dp
 private val BarGap = 12.dp
 
 /**
- * 两片玻璃开始「黏上」的间隙：Glasmio `BottomControlContact` 的 `contactDistance`。
+ * 并集融合半径：smooth-min 的 k。
  *
- * 直接作为 `liquidContactShape` 的 contactDistance 传进去，所以轮廓什么时候长出颈部、
- * 光学场什么时候连成一片，用的是同一个阈值。
+ * **轮廓和光学场必须共用同一个 k**，库的 `BottomControlContact` 就是这么做的
+ * （`nativeSmoothness` 同时交给 `NavigationNativeUnion` 与 `NavigationGlassUnionShape`）。
+ * 之前轮廓走 `liquidContactShape`、光学场走 union shape，两套几何在贴合段各画各的，
+ * 屏幕上就是「融合处一条分明的界线」，甚至会把胶囊自己的右端圆弧露在圆球里。
+ *
+ * 库默认 6dp，这里放大到 10dp：本栏常态有 12dp 的缝，k 太小时两片贴住只挤出一条
+ * 很细的腰，看着仍像两块玻璃被硬按在一起。10dp 时贴合段展开成一段圆润的大圆角，
+ * 也就是用户要的「不要这么分明的分界线」。
  */
-private val ContactDistance = 4.dp
+private val UnionSmoothness = 10.dp
 
 /**
- * 光学场并集半径：Glasmio `BottomControlContact.nativeSmoothness = 6.dp`。
+ * 切换到「一块玻璃」的间隙阈值。
  *
- * 这个值只影响 `NavigationGlassUnionShape` 的 compound shader 怎么把两个 capsule 的
- * 场平滑并起来，不参与裁剪。
+ * 必须落在**已经连通**的区间里：smooth-min 的零等值面在 `gap = k/2` 处才合拢，
+ * 所以取 0.4k（比 k/2 早一点），切换的瞬间颈部已经存在、宽度极细，
+ * 看得出是「两片刚黏上」而不是「忽然多出一条脖子」；
+ * `gap` 更大时仍然画两块独立玻璃，＋ 保留自己的光心、投影与边缘高光。
  */
-private val UnionSmoothness = 6.dp
+private val JoinDistance = UnionSmoothness * 0.4f
+
+/**
+ * 降级轮廓用的接触距离（仅在 [MergedCapsuleUnion] 返回 null 时才会走到）。
+ * 与库 `BottomControlContact` 的默认值一致。
+ */
+private val ContactDistance = 4.dp
 
 /** 圆球最多能往左 / 右拖多远。往左要够得着胶囊（缝 12dp，拖 8dp 就贴上）。 */
 private val BallDragLeft = 20.dp
@@ -228,6 +242,36 @@ private class PlainCapsulesShape(
         }
         return Outline.Generic(path)
     }
+}
+
+/**
+ * 融合态的裁剪轮廓：**直接用库的 `NavigationNativeUnion` 的路径**。
+ *
+ * 这是把 Glasmio 的合并真正「移植」过来的关键一步。库在
+ * `BottomControlContact.createSurface()` 里就是：
+ *
+ * ```
+ * NavigationNativeUnion.create(first, second, smoothness)
+ *     .let { LiquidContactShape(...).withNativeUnion(it) }   // 轮廓换成 native 并集路径
+ *     .withRefractionField(...)                              // 光学用同一条 SDF
+ * ```
+ *
+ * 也就是说**裁剪边界和折射场来自同一个 smooth-min 场**。之前这里用
+ * `liquidContactShape`（另一套几何：分离时两个独立闭合轮廓、贴合时按曲率求切），
+ * 与 `NavigationGlassUnionShape` 的场对不上，于是贴合处出现一条分明的界线，
+ * 圆球压到胶囊上时还会把胶囊自己的右端圆弧整条留在圆球里面。
+ *
+ * 几何本身见 [MergedCapsuleUnion]（库的 `NavigationNativeUnion` 在 0.1.3 是 internal，
+ * 无法直接引用，已按源码移植）。
+ */
+private class UnionOutlineShape(
+    private val union: MergedCapsuleUnion,
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline = Outline.Generic(union.path)
 }
 
 /**
@@ -387,9 +431,9 @@ fun GlassBottomNavigation(
         val ballPx = with(density) { BallDiameter.toPx() }
         val barPx = with(density) { BarHeight.toPx() }
         val slotPx = with(density) { SlotHeight.toPx() }
-        val lensPx = with(density) { LensHeight.toPx() }
         val gapPx = with(density) { BarGap.toPx() }
         val contactPx = with(density) { ContactDistance.toPx() }
+        val joinPx = with(density) { JoinDistance.toPx() }
         val smoothnessPx = with(density) { UnionSmoothness.toPx() }
         val insetPx = with(density) { IndicatorInsetX.toPx() }
         val leftLimitPx = with(density) { BallDragLeft.toPx() }
@@ -403,7 +447,6 @@ fun GlassBottomNavigation(
         val indicatorPx = (cell - 2f * insetPx).coerceAtLeast(with(density) { 36.dp.toPx() })
         val indicatorWidth = with(density) { indicatorPx.toDp() }
         val indicatorInsetPx = (cell - indicatorPx) / 2f
-        val lensTopPx = (slotPx - lensPx) / 2f
 
         // 量化成 4 档：避免按压动画每帧都让材质重新解析一遍配方。
         val growth = growthPx * ((ballPress * 3).roundToInt() / 3f)
@@ -412,8 +455,8 @@ fun GlassBottomNavigation(
         val ballLeft = pillPx + gapPx + ballDrag.value - growth / 2f
         val gap = ballLeft - pillPx
         val ballScale = grownBallPx / ballPx
-        // 拖到 4dp 内：换成一块玻璃的并集轮廓，颈部由库按间距连续生长。
-        val joined = gap < contactPx
+        // 拖到 k/2 以内：换成一块玻璃的并集轮廓（与光学场同一条 SDF，融合处没有界线）。
+        val joined = gap < joinPx
 
         // 两个 capsule primitive 的几何（px），单位是底栏槽的坐标空间。
         val capsuleRect = Rect(0f, (slotPx - barPx) / 2f, pillPx, (slotPx + barPx) / 2f)
@@ -463,19 +506,31 @@ fun GlassBottomNavigation(
                 .layerBackdrop(barLayer, reuseContent = true),
         ) {
             if (joined) {
-                // 吸附：一块玻璃、一条连续轮廓（库的 liquidContactShape + compound 场）。
+                // 吸附：一块玻璃，轮廓与光学场来自**同一个** smooth-min 场。
                 val capsuleFirst = LiquidContactCapsule(Size(pillPx, barPx), capsuleRect)
                 val capsuleSecond = LiquidContactCapsule(Size(grownBallPx, grownBallPx), ballRect)
-                val contactShape: Shape = remember(capsuleFirst, capsuleSecond, contactPx) {
-                    ResilientContactShape(
-                        primary = liquidContactShape(
-                            first = capsuleFirst,
-                            second = capsuleSecond,
-                            contactDistance = contactPx,
-                            includeDisconnected = true,
-                        ) ?: Capsule(),
-                        fallback = PlainCapsulesShape(listOf(capsuleFirst, capsuleSecond)),
-                    )
+                // 库 `BottomControlContact.createSurface()` 的做法：先建 native 并集，
+                // 既拿它的 path 当裁剪轮廓，又用同一个 smoothness 建光学场。
+                val nativeUnion = remember(capsuleFirst, capsuleSecond, smoothnessPx) {
+                    MergedCapsuleUnion.create(capsuleFirst, capsuleSecond, smoothnessPx)
+                }
+                val contactShape: Shape = remember(
+                    nativeUnion, capsuleFirst, capsuleSecond, contactPx,
+                ) {
+                    if (nativeUnion != null) {
+                        UnionOutlineShape(nativeUnion)
+                    } else {
+                        // 只在库返回 null（几何非法）时兜底，真机基本不会走到。
+                        ResilientContactShape(
+                            primary = liquidContactShape(
+                                first = capsuleFirst,
+                                second = capsuleSecond,
+                                contactDistance = contactPx,
+                                includeDisconnected = true,
+                            ) ?: Capsule(),
+                            fallback = PlainCapsulesShape(listOf(capsuleFirst, capsuleSecond)),
+                        )
+                    }
                 }
                 val barShape: Shape = remember(
                     contactShape, capsuleFirst, capsuleSecond, smoothnessPx, barPx,
@@ -560,13 +615,13 @@ fun GlassBottomNavigation(
         if (lensVisible) {
             Box(
                 Modifier
+                    // 只横向位移。垂直靠 `align(CenterStart)` 居中——之前这里又加了一次
+                    // `(SlotHeight - LensHeight) / 2`，等于把 54dp 的盒子先居中再往下推 8dp，
+                    // 透镜整块沉到槽底，只压住胶囊下边缘（用户反馈的「玻璃珠没有居中」）。
+                    // 54dp 的盒子里，放大到 70dp 的子项由 nativeControlLensGeometry 居中放置，
+                    // 上下各凸出 4dp 越过 62dp 的胶囊，正好对称。
                     .align(Alignment.CenterStart)
-                    .offset {
-                        IntOffset(
-                            (cell * drag.value).roundToInt(),
-                            lensTopPx.roundToInt(),
-                        )
-                    }
+                    .offset { IntOffset((cell * drag.value).roundToInt(), 0) }
                     .width(with(density) { cell.toDp() })
                     .height(LensHeight),
             ) {
