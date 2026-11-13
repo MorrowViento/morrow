@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,7 +36,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -62,11 +64,16 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.neoruaa.glasmio.glass.DampedDragAnimation
-import io.github.neoruaa.glasmio.glass.LiquidContactCapsule
+import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
 import io.github.neoruaa.glasmio.glass.NativeControlLensStyle
-import io.github.neoruaa.glasmio.glass.liquidContactShape
+import io.github.neoruaa.glasmio.glass.nativeControlLens
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.glass.render.drawPlainBackdrop
 import kotlinx.coroutines.launch
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * 底栏的三个位置。
@@ -80,120 +87,169 @@ enum class GlassTab(val label: String) {
     SEARCH("搜索"),
 }
 
-/** 胶囊高度。图 2 的示例栏是扁的，胶囊略小于右侧圆球直径。 */
+/** 胶囊高度。示例栏是扁的，胶囊略小于右侧圆球直径。 */
 private val BarHeight = 52.dp
 
-/** 右侧「＋」圆球直径：独立悬浮的一整块玻璃。 */
+/** 右侧「＋」圆球直径：常态单独悬浮的一整块玻璃。 */
 private val BallDiameter = 56.dp
 
-/** 选中指示器 / 抬起后的玻璃珠直径：比胶囊上下各凸 4dp。 */
+/** 点击抬起的玻璃珠直径：比胶囊上下各凸 4dp。 */
 private val LensDiameter = 60.dp
 
-/** 底栏槽高：三者取最大，指示器上下都不被裁。 */
+/** 底栏槽高：三者取最大，珠子上下都不被裁。 */
 private val SlotHeight = 60.dp
 
-/** 常态胶囊右端到圆球左端的缝。 */
-private val BarGap = 8.dp
+/**
+ * 常态胶囊右端到圆球左端的缝。
+ *
+ * 12dp 是能明确看出「两片独立玻璃」的距离；4dp 及以内才进入液态接触。
+ * 之前设 8dp 且把接触距离也设成 8dp，结果是库的 `liquidContactShape` 一直接触
+ * 分支、整条栏渲染成一根长胶囊，＋ 看着就像画在栏末端的一个字符。
+ */
+private val BarGap = 12.dp
 
 /**
- * 液态接触距离（库的 `liquidContactShape` 参数，单位是 px）。
- *
- * 库里间隙 ≥ `contactDistance` 时直接返回两块的原生并集（各自完整闭合），
- * 小于它才进入接触分支；`joinDistance = contactDistance / 2`，间隙再小于
- * 它才真正长出收腰颈部。设 8dp = 常态缝，于是：
- * 常态 = 完整独立的胶囊 + 圆球（单独悬浮）；按住圆球长大 3dp 就进入接触分支，
- * 再往左拖一点就融合成图 2 的收腰。
+ * 间隙小于这个值才长出收腰颈部。按住圆球光长大还不够（只少 3dp），
+ * 必须真的往左拖 5dp 以上才吸附——和示例「按住拖动」的手感一致。
  */
-private val ContactDistance = 8.dp
+private val ContactGap = 4.dp
 
-/** 圆球最多能往左拖多远（越界就夹住，避免两片深度重叠导致路径自交）。 */
-private val BallDragLeft = 10.dp
-
-/** 圆球最多能往右拖多远。 */
+/** 圆球最多能往左 / 右拖多远（夹住，避免两片深度重叠导致路径自交）。 */
+private val BallDragLeft = 14.dp
 private val BallDragRight = 8.dp
 
-/** 按住时圆球长大的量：图 2 里那颗球比常态明显大一圈。 */
+/** 按住时圆球长大的量。 */
 private val BallPressGrowth = 6.dp
+
+/**
+ * 常态暗色选中范围：**内缩一圈的圆角方块**（示例图 1）。
+ *
+ * 高度 38dp 对 52dp 栏高，上下各留 7dp；宽度是一格减去左右各 10dp。
+ * 之前用 60dp 的圆，比栏还高，看着就是「跟栏平齐的一整格色块」，
+ * 而且和点击抬起的玻璃珠同形，常态/按下分不出层次。
+ */
+private val IndicatorHeight = 38.dp
+private val IndicatorInsetX = 10.dp
+private val IndicatorCorner = 14.dp
+
+/** 融合态的腰部半高（从 6dp 的细颈长到 20dp）。 */
+private val WaistMinHalf = 6.dp
+private val WaistMaxHalf = 20.dp
+
+/**
+ * 腰部从细颈长到满粗所跨越的间隙变化量。
+ *
+ * 间隙从 [ContactGap] (4dp) 一路减到拖到底的 -5dp（12dp 缝 - 14dp 左拖 - 3dp 长大
+ * 的一半），正好 9dp；设成 9dp 让 t 能走到 1，拖动全程腰部都在连续变粗。
+ */
+private val JoinSpan = 9.dp
+
+/** 胶囊顶边从右端往左多少开始收成颈部。 */
+private val NeckInset = 22.dp
 
 /** 底栏厚度缩放：52dp 高的横条用满 16dp 高斯会把背后抹成一块实色板。 */
 private const val BarFrostScale = 0.55f
 
-/** 形状参数万一非法的兜底（正常路径不会走到）。 */
-private val FallbackShape = RoundedCornerShape(50)
+private const val DEG = Math.PI.toFloat() / 180f
 
 /**
- * 把库算出来的 [io.github.neoruaa.glasmio.glass.LiquidContactShape] 轮廓包成
- * 「库不认识的普通 Shape」。
+ * 底栏轮廓：**一块玻璃、两条可分离的闭合轮廓**。
  *
- * 几何仍然 100% 用库的接触算法；但 `GlassSurface` 里有一串
- * `is LiquidContactShape -> navigationContainerGlassField(...)` 的 native 光学分支，
- * 那是给 `BottomNavigationContact` 整套脚手架用的（要 nativeUnion / opticalCenter /
- * 共享材质层）。我们只借形状，不接那套脚手架，所以故意让它落到 `else -> null`
- * 的通用 `lens(... chromaticAberration = true)` 路径——alpha14 已验证过这条路径
- * 配 Clear 材质是安全且透明的。
+ * 不直接用库的 `liquidContactShape`：它内部走 `PathIterator`（native 库），
+ * 而且在真机上把常态两片合成了一整条长胶囊（＋ 因此没有「单独悬浮」）。
+ * 这里用纯 Compose Path 自己解析：
+ *
+ * - `gap >= contactPx`：胶囊圆角矩形 + 圆球椭圆，两条互不重叠的闭合轮廓。
+ *   Compose 的 clip / 玻璃面层按 NonZero 填充，得到的就是两块独立玻璃。
+ * - `gap < contactPx`：改成一条连续轮廓——胶囊顶边经两段三次贝塞尔收成 S 形细腰，
+ *   接圆球 225° 点、外弧扫 270°、下缘镜像、左端 180° 封口。腰半高随接近程度
+ *   从 6dp（刚粘上的细丝）长到 20dp，所以吸附是连续长出来的而不是突然跳变。
+ *
+ * 整条栏始终只有一块 `GlassSurface`：共用一条轮廓才有连续的边缘高光，
+ * 也不会出现两层 Clear 互相糊掉透明度、或在圆球左缘留一道假接缝。
  */
-private class ContactOutlineShape(
-    private val delegate: Shape,
-    private val capsuleBounds: Rect,
-    private val ballBounds: Rect,
+private class BarShape(
+    private val capsule: Rect,
+    private val ball: Rect,
+    private val contactPx: Float,
+    private val joinSpanPx: Float,
+    private val neckInsetPx: Float,
+    private val waistMinPx: Float,
+    private val waistMaxPx: Float,
 ) : Shape {
     override fun createOutline(
         size: Size,
         layoutDirection: LayoutDirection,
         density: Density,
-    ): Outline = try {
-        delegate.createOutline(size, layoutDirection, density)
-    } catch (_: LinkageError) {
-        // 库的接触几何内部走 PathIterator，依赖 androidx.graphics.path 的 native 库。
-        // 真机（API 34+ / graphics-path）有；Robolectric 的 JVM 单测没有，静态初始化会
-        // 抛 UnsatisfiedLinkError / NoClassDefFoundError（都是 LinkageError）。
-        // 这里降级成一块等价的纯 Compose 轮廓，让启动冒烟测试能画完首帧。
-        val radius = capsuleBounds.height / 2f
-        Outline.Generic(
-            Path().apply {
-                addRoundRect(
-                    RoundRect(
-                        capsuleBounds.left, capsuleBounds.top,
-                        capsuleBounds.right, capsuleBounds.bottom,
-                        radius, radius,
-                    ),
-                )
-                addOval(ballBounds)
-            },
+    ): Outline {
+        val path = Path()
+        val gap = ball.left - capsule.right
+        if (gap >= contactPx) {
+            path.addRoundRect(
+                RoundRect(capsule, CornerRadius(capsule.height / 2f, capsule.height / 2f)),
+            )
+            path.addOval(ball)
+            return Outline.Generic(path)
+        }
+
+        val t = ((contactPx - gap) / joinSpanPx).coerceIn(0f, 1f)
+        val ease = t * t * (3f - 2f * t)
+        val waistHalf = waistMinPx + (waistMaxPx - waistMinPx) * ease
+        val cy = (capsule.center.y + ball.center.y) / 2f
+        val r1 = capsule.height / 2f
+        val r2 = ball.height / 2f
+        val ballCx = ball.center.x
+        val ballCy = ball.center.y
+
+        val neckStart = capsule.right - neckInsetPx
+        val waistX = (capsule.right + ball.left) / 2f
+        val a = (waistX - neckStart) * 0.55f
+        val upperJoin = Offset(
+            ballCx + r2 * cos(225f * DEG),
+            ballCy + r2 * sin(225f * DEG),
         )
+        val lowerJoin = Offset(
+            ballCx + r2 * cos(135f * DEG),
+            ballCy + r2 * sin(135f * DEG),
+        )
+        val b = ((upperJoin.x - waistX) * 0.55f).coerceAtLeast(2f)
+        val k = b * 0.75f
+
+        path.moveTo(r1, capsule.top)
+        path.lineTo(neckStart, capsule.top)
+        path.cubicTo(neckStart + a, capsule.top, waistX - a, cy - waistHalf, waistX, cy - waistHalf)
+        path.cubicTo(waistX + b, cy - waistHalf, upperJoin.x - k, upperJoin.y + k, upperJoin.x, upperJoin.y)
+        path.arcToRad(Rect(ball.left, ball.top, ball.right, ball.bottom), 225f * DEG, 270f * DEG, false)
+        path.cubicTo(lowerJoin.x - k, lowerJoin.y - k, waistX + b, cy + waistHalf, waistX, cy + waistHalf)
+        path.cubicTo(waistX - a, cy + waistHalf, neckStart + a, capsule.bottom, neckStart, capsule.bottom)
+        path.lineTo(r1, capsule.bottom)
+        path.arcToRad(Rect(0f, capsule.top, r1 * 2f, capsule.bottom), 90f * DEG, 180f * DEG, false)
+        path.close()
+        return Outline.Generic(path)
     }
 }
 
 /**
  * 常驻底栏（首页 / 日历共用一条，切页面时它不重建、不换内容）。
  *
- * ## 这一版从 Glasmio 源码移植过来的三样东西
+ * ## 从 Glasmio 源码移植的两套机制
  *
- * 1. **可拖动的选中指示器**（[DampedDragAnimation] + `TabBarIndicator`）：
- *    库 `GlasmioNavigationBar` / `GlasmioTabBar` 用的是同一个类。它给出
- *    `value`（浮点 tab 位置，拖动中连续）、`pressProgress`（抬起程度）、
- *    `scaleX/scaleY`（按下 78/56 放大）和三组 UIKit 弹簧。`drag.modifier`
- *    直接挂在三格 Row 上，按下定位、拖动跟手、松手吸附到最近一格并提交
- *    `onSelected`；外部切页由 `animateToValue(..., animatePress = false)` 滑过去。
- *    这就是图 3 的拖动动效，也让「按钮滑动」回来了。
- * 2. **常态暗色范围**：库在不用 backdrop 时给的指示器底色就是
- *    `Color.Black.copy(alpha = 0.10f)`（深色主题 `White 0.10`）。这里用主文字色
- *    的 10% 复刻它，随 `pressProgress` 淡出。
- * 3. **液态吸附**（[liquidContactShape]）：库 `GlasmioToolbarActionGroup` /
- *    `BottomNavigationContact` 用两个 `LiquidContactCapsule` 算连续的 S 形接触轮廓。
- *    这里整条底栏始终只有**一块玻璃**，Shape 由胶囊与圆球两个 capsule 生成：
- *    常态两片各自完整（单独悬浮），按住圆球往左拖 → 间隙缩小 → 自动长出
- *    收腰颈部（图 2）。只有一块玻璃才有连续的边缘高光，也不会两层 Clear
- *    互相糊掉透明度。
+ * 1. **可拖动的选中指示器**（[DampedDragAnimation]）：库 `GlasmioNavigationBar` /
+ *    `GlasmioTabBar` 用的是同一个类。`value` 是浮点 tab 位置（拖动中连续跟手），
+ *    `pressProgress` 管抬起，`scaleX/scaleY` 是 UIKit 的 78/56 放大，三组弹簧管
+ *    定位 / 吸附 / 回弹。`drag.modifier` 挂在三格 Row 上，按下定位、松手吸附到
+ *    最近一格并提交 `onSelected`；外部切页用 `animateToValue(animatePress=false)`。
+ * 2. **原生控制透镜**（`drawPlainBackdrop` + `nativeControlLens`）：这是让**栏内图标
+ *    文字透进玻璃珠**的关键。库 `GlasmioTabBar` 会把一份不可见的标签 Row 录进
+ *    `labelsBackdrop`，再把它作为 `liftedContent` 交给 lens；只采壁纸/页面内容的
+ *    `GlassCirclePanel` 里根本没有图标，所以之前的珠子是一块空白的浅蓝圆盘。
+ *    这里照同样的方式接：可见三格 + 一份 `alpha(0f).layerBackdrop(...)` 的副本。
  *
- * 抬起时指示器由暗色块换成一颗 `clear = true` 的 Clear 玻璃珠（`GlassCirclePanel`），
- * 采样同一份「壁纸 + 列表内容」合成层，边缘由材质自己画色散折射。
- * 库里这一步是 `drawPlainBackdrop + nativeControlLens(liftedContent = labelsBackdrop)`，
- * 会把栏内图标文字也折进去；那条路要单独起 RuntimeShader / MipAtlas，
- * 没有真机可验证时不冒险，先用已验证过的 Clear 材质承担折射。
+ * 常态选中是「暗色内缩圆角方块」（库在不用 backdrop 时给的是 `Black 10%`），
+ * 抬起时淡出、由原生 lens 接手并把图标文字折进去。
  *
- * 三格的图标自己画（House / Calendar / Search）：库的 `SfSymbol` 只有十几个符号，
- * 既没有日历也没有加号，之前日历只能拿 `Clock` 顶替，语义还是错的。
+ * 右侧 ＋ 常态是独立悬浮的圆球，按住往左拖动时 [BarShape] 会长出 S 形收腰颈部
+ * 与胶囊吸附；松手带弹簧弹回。三格的图标自己画（库的 `SfSymbol` 没有日历和加号）。
  */
 @Composable
 fun GlassBottomNavigation(
@@ -209,6 +265,8 @@ fun GlassBottomNavigation(
     val lastIndex = tabs.lastIndex.toFloat()
     val scope = rememberCoroutineScope()
     val darkInk = glassTextPrimary()
+    val isDark = LocalGlassDark.current
+    val lensBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
     val selectedIndex = tabs.indexOf(selected).coerceAtLeast(0)
 
     // 三格 Row 的每格宽度（px）：拖动回调里要按它把位移换算成 tab 位置。
@@ -224,7 +282,6 @@ fun GlassBottomNavigation(
             valueRange = 0f..lastIndex,
             visibilityThreshold = 0.001f,
             initialScale = 1f,
-            // 库的 UIKit TabBarIndicator 按下放大系数
             pressedScale = 78f / 56f,
             lensStyle = NativeControlLensStyle.TabBarIndicator,
             onDragStarted = { position ->
@@ -248,14 +305,17 @@ fun GlassBottomNavigation(
             },
         )
     }
-    // 外部切页（返回键、切日历）只挪指示器，不触发导航回调——和库里一致。
     LaunchedEffect(selectedIndex, drag) {
         if (drag.targetValue != selectedIndex.toFloat()) {
             drag.animateToValue(selectedIndex.toFloat(), animatePress = false)
         }
     }
-    // 只在「抬起布尔值」翻转时重组，pressProgress 的逐帧变化留给 graphicsLayer。
     val lifted by remember { derivedStateOf { drag.pressProgress > 0.01f } }
+
+    // 栏内图标文字的录制层：nativeControlLens 把它折进抬起的玻璃珠。
+    // 和库 GlasmioTabBar 一样，用 alpha(0f) 的副本，只有 backdrop 的 capture
+    // graphicsLayer 里才真正 drawContent，屏幕上不会多画一份。
+    val labelsBackdrop = rememberLayerBackdrop()
 
     // 圆球拖动位移（px）。用 Animatable：松手能带弹簧回弹到 0。
     val ballDrag = remember { Animatable(0f) }
@@ -281,7 +341,12 @@ fun GlassBottomNavigation(
         val slotPx = with(density) { SlotHeight.toPx() }
         val lensPx = with(density) { LensDiameter.toPx() }
         val gapPx = with(density) { BarGap.toPx() }
-        val contactPx = with(density) { ContactDistance.toPx() }
+        val contactPx = with(density) { ContactGap.toPx() }
+        val joinSpanPx = with(density) { JoinSpan.toPx() }
+        val neckInsetPx = with(density) { NeckInset.toPx() }
+        val waistMinPx = with(density) { WaistMinHalf.toPx() }
+        val waistMaxPx = with(density) { WaistMaxHalf.toPx() }
+        val insetPx = with(density) { IndicatorInsetX.toPx() }
         val leftLimitPx = with(density) { BallDragLeft.toPx() }
         val rightLimitPx = with(density) { BallDragRight.toPx() }
         val growthPx = with(density) { BallPressGrowth.toPx() }
@@ -291,36 +356,29 @@ fun GlassBottomNavigation(
         val cell = pillPx / tabs.size
         cellPx.floatValue = cell
         val lensInsetPx = ((cell - lensPx) / 2f).coerceAtLeast(0f)
+        val indicatorPx = (cell - 2f * insetPx).coerceAtLeast(with(density) { 36.dp.toPx() })
+        val indicatorWidth = with(density) { indicatorPx.toDp() }
+        val indicatorInsetPx = (cell - indicatorPx) / 2f
 
-        // 圆球被按住时以中心为锚长大一圈（左缘也往胶囊靠 3dp），
-        // 再往左拖动就进一步缩小间隙，触发液态收腰
-        // 量化成 5 档：库的 ContactProfileCache 按 Size 精确匹配做缓存，
-        // 连续变化的尺寸会每帧淘汰缓存、重算整条接触路径。
+        // 量化成 5 档：避免按压动画每帧重建整条轮廓的 Shape 对象。
         val growth = growthPx * ((ballPress * 4).roundToInt() / 4f)
         val grownBallPx = ballPx + growth
         val ballLeft = pillPx + gapPx + ballDrag.value - growth / 2f
-        val capsule = LiquidContactCapsule(
-            size = Size(pillPx, barPx),
-            bounds = Rect(0f, (slotPx - barPx) / 2f, pillPx, (slotPx + barPx) / 2f),
+        val capsule = Rect(0f, (slotPx - barPx) / 2f, pillPx, (slotPx + barPx) / 2f)
+        val ball = Rect(
+            ballLeft,
+            (slotPx - grownBallPx) / 2f,
+            ballLeft + grownBallPx,
+            (slotPx + grownBallPx) / 2f,
         )
-        val ball = LiquidContactCapsule(
-            size = Size(grownBallPx, grownBallPx),
-            bounds = Rect(
-                ballLeft,
-                (slotPx - grownBallPx) / 2f,
-                ballLeft + grownBallPx,
-                (slotPx + grownBallPx) / 2f,
-            ),
-        )
-        val barShape: Shape = ContactOutlineShape(
-            delegate = liquidContactShape(
-                capsule,
-                ball,
-                contactDistance = contactPx,
-                includeDisconnected = true,
-            ) ?: FallbackShape,
-            capsuleBounds = capsule.bounds,
-            ballBounds = ball.bounds,
+        val barShape: Shape = BarShape(
+            capsule = capsule,
+            ball = ball,
+            contactPx = contactPx,
+            joinSpanPx = joinSpanPx,
+            neckInsetPx = neckInsetPx,
+            waistMinPx = waistMinPx,
+            waistMaxPx = waistMaxPx,
         )
 
         // 1) 整条底栏只有一块玻璃：常态两片各自完整，靠近时自动长颈部
@@ -331,23 +389,47 @@ fun GlassBottomNavigation(
             backdrop = backdrop,
         ) {}
 
-        // 2) 常态暗色选中范围：垫在图标文字下面，会随 value 滑动
+        // 2) 栏内图标文字的录制副本（不可见），供第 5 步的原生透镜折射
+        Row(
+            Modifier
+                .align(Alignment.CenterStart)
+                .width(pillWidth)
+                .height(BarHeight)
+                .alpha(0f)
+                .layerBackdrop(labelsBackdrop)
+                .drawWithContent {
+                    if (drawContext.graphicsLayer === labelsBackdrop.graphicsLayer) drawContent()
+                },
+        ) {
+            tabs.forEach { tab ->
+                TabCell(tab = tab, selected = tab == selected, modifier = Modifier.weight(1f))
+            }
+        }
+
+        // 3) 常态暗色选中范围：内缩一圈的圆角方块，随 value 滑动
         Box(
             Modifier
                 .align(Alignment.CenterStart)
-                .size(LensDiameter)
+                .width(indicatorWidth)
+                .height(IndicatorHeight)
                 .graphicsLayer {
-                    translationX = cellPx.floatValue * drag.value + lensInsetPx
+                    translationX = cellPx.floatValue * drag.value + indicatorInsetPx
                     scaleX = drag.scaleX
                     scaleY = drag.scaleY
                     alpha = 1f - drag.pressProgress
                 }
                 .drawBehind {
-                    drawCircle(darkInk.copy(alpha = 0.10f))
+                    drawRoundRect(
+                        color = darkInk.copy(alpha = 0.10f),
+                        cornerRadius = CornerRadius(
+                            IndicatorCorner.toPx(),
+                            IndicatorCorner.toPx(),
+                        ),
+                    )
                 },
         )
 
-        // 3) 三格：拖动手势由库的 DampedDragAnimation 统一接管（含点击定位）
+        // 4) 三格：拖动手势由库的 DampedDragAnimation 统一接管（含点击定位）
         Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -364,10 +446,11 @@ fun GlassBottomNavigation(
             }
         }
 
-        // 4) 抬起后的玻璃珠：盖在图标文字之上，跟着手指走，边缘有 Clear 材质的色散
+        // 5) 抬起的玻璃珠：原生控制透镜。liftedContent = 图标文字录制层，
+        //    所以珠子里面能看见被折弯放大的 house / 日历 / 搜索，而不是一块空白盘。
         if (lifted) {
-            GlassCirclePanel(
-                modifier = Modifier
+            Box(
+                Modifier
                     .align(Alignment.CenterStart)
                     .size(LensDiameter)
                     .graphicsLayer {
@@ -375,21 +458,34 @@ fun GlassBottomNavigation(
                         scaleX = drag.scaleX
                         scaleY = drag.scaleY
                         alpha = drag.pressProgress
-                    },
-                clear = true,
-                frostScale = BarFrostScale,
-                backdrop = backdrop,
-            ) {}
+                    }
+                    .drawPlainBackdrop(
+                        backdrop = lensBackdrop,
+                        shape = { CircleShape },
+                        effects = {
+                            nativeControlLens(
+                                style = NativeControlLensStyle.TabBarIndicator,
+                                liftProgress = drag.pressProgress,
+                                isDark = isDark,
+                                liftedContent = labelsBackdrop,
+                            )
+                        },
+                    ),
+            )
         }
 
-        // 5) 单独悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建
+        // 6) 单独悬浮的「＋」：按住拖动改变圆球位置 → 液态吸附；点击新建
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .size(BallDiameter)
-                .offset { IntOffset(ballDrag.value.roundToInt(), 0) }
+                .offset {
+                    IntOffset(
+                        (ballDrag.value - growth / 2f).roundToInt(),
+                        0,
+                    )
+                }
                 .drawBehind {
-                    // 图 2 里按住的那颗球会被按压高光刷白，只在按住期间出现
                     if (ballPress > 0.001f) {
                         drawCircle(Color.White.copy(alpha = 0.34f * ballPress))
                     }
@@ -411,7 +507,8 @@ fun GlassBottomNavigation(
                             scope.launch { ballDrag.animateTo(0f, spring(0.8f, 420f)) }
                         },
                         onDrag = { change, amount ->
-                            val next = (ballDrag.value + amount.x).coerceIn(-leftLimitPx, rightLimitPx)
+                            val next = (ballDrag.value + amount.x)
+                                .coerceIn(-leftLimitPx, rightLimitPx)
                             scope.launch { ballDrag.snapTo(next) }
                             change.consume()
                         },
