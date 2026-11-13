@@ -129,7 +129,7 @@ internal class MergedCapsuleUnion private constructor(
     private fun rootX(outside: Float, inside: Float): Float {
         var lo = outside
         var hi = inside
-        repeat(20) {
+        repeat(BisectionSteps) {
             val mid = (lo + hi) * .5f
             if (distance(mid, centerY) > 0f) lo = mid else hi = mid
         }
@@ -141,20 +141,32 @@ internal class MergedCapsuleUnion private constructor(
         val guard = smoothness * .25f + 1f
         val top = bounds.top - guard
         val bottom = bounds.bottom + guard
-        val edgeRoots = HashMap<Long, Float>()
+        // 用原始类型的定长缓存代替 `HashMap<Long, Float>`：这个函数在拖动时可能每帧
+        // 被调用一次，每次几百个条目，装箱/拆箱与扩容是可见的帧时间。命中失败只是
+        // 重算一次，不影响结果——它纯粹是加速用的。
+        val keys = LongArray(RootCacheSize) { Long.MIN_VALUE }
+        val values = FloatArray(RootCacheSize)
         fun edgeY(x: Float, outer: Float): Float {
             // 父级四分点与子级中点探测常常得到完全相同的位模式，只复用这些精确根，
             // 保证每一次二分步进与每个顶点都与库一致。
             val key = (x.toRawBits().toLong() shl 32) or (outer.toRawBits().toLong() and 0xffffffffL)
-            return edgeRoots.getOrPut(key) {
-                var lo = outer
-                var hi = centerY
-                repeat(20) {
-                    val mid = (lo + hi) * .5f
-                    if (distance(x, mid) > 0f) lo = mid else hi = mid
-                }
-                (lo + hi) * .5f
+            var slot = ((key * RootCacheHash) ushr 40).toInt() and (RootCacheSize - 1)
+            for (probe in 0 until RootCacheProbes) {
+                val cached = keys[slot]
+                if (cached == key) return values[slot]
+                if (cached == Long.MIN_VALUE) break
+                slot = (slot + 1) and (RootCacheSize - 1)
             }
+            var lo = outer
+            var hi = centerY
+            repeat(BisectionSteps) {
+                val mid = (lo + hi) * .5f
+                if (distance(x, mid) > 0f) lo = mid else hi = mid
+            }
+            val result = (lo + hi) * .5f
+            keys[slot] = key
+            values[slot] = result
+            return result
         }
 
         fun append(left: Float, right: Float) {
@@ -166,7 +178,7 @@ internal class MergedCapsuleUnion private constructor(
                 val refine = abs(x1 - x0) > 8f || abs(ym - (y0 + y1) * .5f) > .125f ||
                     abs(edgeY(x0 + (x1 - x0) * .25f, outer) - (y0 + (y1 - y0) * .25f)) > .125f ||
                     abs(edgeY(x0 + (x1 - x0) * .75f, outer) - (y0 + (y1 - y0) * .75f)) > .125f
-                if (depth < 16 && refine) {
+                if (depth < MaxSubdivisionDepth && refine) {
                     subdivide(x0, y0, xm, ym, outer, depth + 1)
                     subdivide(xm, ym, x1, y1, outer, depth + 1)
                 } else {
@@ -216,6 +228,25 @@ internal class MergedCapsuleUnion private constructor(
     }
 
     companion object {
+        /**
+         * 二分步数。
+         *
+         * 库用的是 20 步（范围 100px 时精度 0.0001px），远超肉眼与屏幕像素的需要；
+         * 12 步仍有约 0.02px 的精度，而单次求根的计算量少掉四成——这个函数在
+         * 拖动贴合段可能每帧都要跑一遍。
+         */
+        private const val BisectionSteps = 12
+
+        /** 折线细分的最大递归深度（库是 16）。0.125px 的判据才是真正的终止条件。 */
+        private const val MaxSubdivisionDepth = 12
+
+        /** 求根缓存：1024 条足够覆盖一次轮廓生成的全部 (x, outer) 组合。 */
+        private const val RootCacheSize = 1024
+        private const val RootCacheProbes = 4
+
+        /** 64 位混合常数（0x9E3779B97F4A7C15）。 */
+        private const val RootCacheHash = -7046029254386353131L
+
         /**
          * 与库的 `NavigationNativeUnion.create(first, second, smoothness)` 等价，
          * 非法几何 / 两片垂直错开超过 1px 时返回 null（库同样返回 null，

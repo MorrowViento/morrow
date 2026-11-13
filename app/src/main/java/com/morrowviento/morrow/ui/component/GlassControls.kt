@@ -200,9 +200,12 @@ fun SectionTitle(text: String) {
 
 /** 横向可滚动的 chips 容器。 */
 @Composable
-fun ChipRow(content: @Composable () -> Unit) {
+fun ChipRow(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

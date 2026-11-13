@@ -34,11 +34,17 @@ fun HomeBottomBar(
     onSearch: () -> Unit,
     onCreate: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 搜索页打开时选中第三格。它和日历互斥，两个都为 false 就是首页。 */
+    searchActive: Boolean = false,
     /** 壁纸 + 页面内容的合成采样层：底栏靠它透出背后的卡片边缘。 */
     backdrop: GlassContentBackdrop? = null,
 ) {
     GlassBottomNavigation(
-        selected = if (calendarActive) GlassTab.CALENDAR else GlassTab.HOME,
+        selected = when {
+            searchActive -> GlassTab.SEARCH
+            calendarActive -> GlassTab.CALENDAR
+            else -> GlassTab.HOME
+        },
         onSelected = { tab ->
             when (tab) {
                 GlassTab.HOME -> onHome()

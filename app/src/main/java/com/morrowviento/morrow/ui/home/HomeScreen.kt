@@ -1,12 +1,18 @@
 package com.morrowviento.morrow.ui.home
 
-import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -39,6 +45,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,7 +55,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +75,8 @@ import com.morrowviento.morrow.ui.event.EventEditSheet
 import com.morrowviento.morrow.ui.event.EventFormState
 import com.morrowviento.morrow.ui.event.HomeUiState
 import com.morrowviento.morrow.ui.event.UndoBar
+import com.morrowviento.morrow.ui.search.CategoryFilter
+import com.morrowviento.morrow.ui.search.SearchPage
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
@@ -130,7 +139,6 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     var editingForm by remember { mutableStateOf<EventFormState?>(null) }
     var detailId by remember { mutableStateOf<String?>(null) }
     var showCategories by remember { mutableStateOf(false) }
@@ -139,6 +147,14 @@ fun HomeScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+
+    // 搜索页与查询串：都存成可保存的状态，旋屏 / 系统回收后回到搜索页仍是原来那次搜索。
+    // 分类筛选用 Saver 存成短字符串，避免给密封接口加 Parcelable（它只是 UI 状态）。
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchFilter by rememberSaveable(stateSaver = CategoryFilterSaver) {
+        mutableStateOf<CategoryFilter>(CategoryFilter.All)
+    }
     val categoryNames = remember(categories) { categories.map { it.name } }
     // 退场动画期间 state.undo 已经清空，靠这份快照把撤销条画完。
     // 不能在组合里直接赋值（`if (state.undo != null) lastUndo = ...`）：
@@ -170,10 +186,14 @@ fun HomeScreen(
         showCalendar = false
         showReminders = false
         showSettings = false
+        showSearch = false
     }
 
     // 日历盖在首页之上，返回键应先关日历而不是退出应用
     BackHandler(enabled = showCalendar) { showCalendar = false }
+
+    // 搜索是首页的一种内容形态，返回键先退出搜索、回到列表
+    BackHandler(enabled = showSearch) { showSearch = false }
 
     // 详情页依赖最新卡片（每秒刷新会换新对象）；事件被删后自动失配 → 浮层自行关闭。
     // 用 remember 缓存：原来每帧都 `active + completed` 拼一次新列表再线性查找，
@@ -204,79 +224,116 @@ fun HomeScreen(
                     // sampledContent 的话，卡片再怎么从底栏背后滚过去也永远透不出来。
                     // 底栏与所有浮层都在这列之外，避免玻璃采到自己。
                     Column(Modifier.fillMaxSize().glassContentSource(contentBackdrop)) {
-                        HomeHeader(
-                            state = state,
-                            listState = listState,
-                            sortLabel = state.sortMode.label(),
-                            onCycleSort = { onSortChange(nextSort(state.sortMode)) },
-                            moreAction = {
-                                // 「⋯」既是按钮也是菜单的锚点：GlassMenu 从它身上液态展开，
-                                // 关闭时缩回按钮，不再是「遮罩 + 底部面板」那套动作表。
-                                GlassMenu(
-                                    expanded = showMoreMenu,
-                                    onExpandedChange = { showMoreMenu = it },
-                                    itemCount = 5,
-                                    anchor = { onClick -> MoreButton(onClick) },
-                                ) { backdrop, close ->
-                                    GlassMenuItem(
-                                        backdrop = backdrop,
-                                        title = "设置",
-                                        onClick = { close(); showSettings = true },
-                                    )
-                                    GlassMenuItem(
-                                        backdrop = backdrop,
-                                        title = "提醒",
-                                        onClick = { close(); showReminders = true },
-                                    )
-                                    GlassMenuItem(
-                                        backdrop = backdrop,
-                                        title = "清空已完成（${state.completed.size}）",
-                                        enabled = state.completed.isNotEmpty(),
-                                        onClick = {
-                                            close()
-                                            eventActions.clearCompleted()
-                                        },
-                                    )
-                                    GlassMenuItem(
-                                        backdrop = backdrop,
-                                        title = "清空全部（${state.totalCount}）",
-                                        enabled = state.totalCount > 0,
-                                        destructive = true,
-                                        onClick = {
-                                            close()
-                                            confirmClearAll = true
-                                        },
-                                    )
-                                    GlassMenuItem(
-                                        backdrop = backdrop,
-                                        title = "取消",
-                                        onClick = close,
-                                    )
+                        // 首页与搜索是**同一列里的两种内容**，不是盖在首页之上的浮层：
+                        // 这样搜索结果的卡片也在采样源里，滚到底栏背后时玻璃折的是它们。
+                        // 切换用推入 / 推回，与日历、设置同一族导航曲线；减弱动效时直接切。
+                        AnimatedContent(
+                            targetState = showSearch,
+                            modifier = Modifier.fillMaxSize(),
+                            transitionSpec = {
+                                if (appSettings.reduceMotion) {
+                                    EnterTransition.None togetherWith ExitTransition.None
+                                } else if (targetState) {
+                                    (slideInHorizontally(GlassMotion.navigationSlide) { it / 3 } +
+                                        fadeIn(GlassMotion.enterFade)) togetherWith fadeOut(tween(80))
+                                } else {
+                                    fadeIn(GlassMotion.enterFade) togetherWith
+                                        (slideOutHorizontally(GlassMotion.navigationSlide) { it / 3 } +
+                                            fadeOut(tween(80)))
                                 }
                             },
-                        )
-                        // 页面级回弹：内容被拉出一段再弹回（不是 Android 默认的整块拉伸）
-                        GlassOverscrollHost(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                        ) {
-                            when {
-                                state.error != null -> CenterState(
-                                    title = "读取事件失败",
-                                    detail = state.error,
+                            label = "homeSearch",
+                        ) { searching ->
+                            if (searching) {
+                                SearchPage(
+                                    active = state.active,
+                                    completed = state.completed,
+                                    categories = categories,
+                                    query = searchQuery,
+                                    onQueryChange = { searchQuery = it },
+                                    filter = searchFilter,
+                                    onFilterChange = { searchFilter = it },
+                                    onOpenEvent = { detailId = it },
+                                    onDismiss = { showSearch = false },
                                 )
+                            } else {
+                                Column(Modifier.fillMaxSize()) {
+                                    HomeHeader(
+                                        state = state,
+                                        listState = listState,
+                                        sortLabel = state.sortMode.label(),
+                                        onCycleSort = { onSortChange(nextSort(state.sortMode)) },
+                                        moreAction = {
+                                            // 「⋯」既是按钮也是菜单的锚点：GlassMenu 从它身上液态展开，
+                                            // 关闭时缩回按钮，不再是「遮罩 + 底部面板」那套动作表。
+                                            GlassMenu(
+                                                expanded = showMoreMenu,
+                                                onExpandedChange = { showMoreMenu = it },
+                                                itemCount = 5,
+                                                anchor = { onClick -> MoreButton(onClick) },
+                                            ) { backdrop, close ->
+                                                GlassMenuItem(
+                                                    backdrop = backdrop,
+                                                    title = "设置",
+                                                    onClick = { close(); showSettings = true },
+                                                )
+                                                GlassMenuItem(
+                                                    backdrop = backdrop,
+                                                    title = "提醒",
+                                                    onClick = { close(); showReminders = true },
+                                                )
+                                                GlassMenuItem(
+                                                    backdrop = backdrop,
+                                                    title = "清空已完成（${state.completed.size}）",
+                                                    enabled = state.completed.isNotEmpty(),
+                                                    onClick = {
+                                                        close()
+                                                        eventActions.clearCompleted()
+                                                    },
+                                                )
+                                                GlassMenuItem(
+                                                    backdrop = backdrop,
+                                                    title = "清空全部（${state.totalCount}）",
+                                                    enabled = state.totalCount > 0,
+                                                    destructive = true,
+                                                    onClick = {
+                                                        close()
+                                                        confirmClearAll = true
+                                                    },
+                                                )
+                                                GlassMenuItem(
+                                                    backdrop = backdrop,
+                                                    title = "取消",
+                                                    onClick = close,
+                                                )
+                                            }
+                                        },
+                                    )
+                                    // 页面级回弹：内容被拉出一段再弹回（不是 Android 默认的整块拉伸）
+                                    GlassOverscrollHost(
+                                        Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth(),
+                                    ) {
+                                        when {
+                                            state.error != null -> CenterState(
+                                                title = "读取事件失败",
+                                                detail = state.error,
+                                            )
 
-                                state.isLoading -> CenterState("载入中…", null)
+                                            state.isLoading -> CenterState("载入中…", null)
 
-                                state.isEmpty -> EmptyState()
+                                            state.isEmpty -> EmptyState()
 
-                                else -> EventList(
-                                    state = state,
-                                    listState = listState,
-                                    onToggleCompleted = onToggleCompleted,
-                                    onOpenDetail = { detailId = it },
-                                )
+                                            else -> EventList(
+                                                state = state,
+                                                listState = listState,
+                                                onToggleCompleted = onToggleCompleted,
+                                                onOpenDetail = { detailId = it },
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -328,16 +385,25 @@ fun HomeScreen(
                                 .padding(bottom = 10.dp),
                             backdrop = contentBackdrop,
                             calendarActive = showCalendar,
-                            // 搜索还是预留位：点一下给个提示，不做假界面
+                            searchActive = showSearch,
+                            // 再点一次「搜索」回到列表：底栏那格是开关，不是只能进不能出。
                             onSearch = {
-                                Toast.makeText(context, "搜索还在做，先把事件攒着", Toast.LENGTH_SHORT).show()
+                                showCalendar = false
+                                showSearch = !showSearch
                             },
-                            onHome = { showCalendar = false },
-                            onCalendar = { showCalendar = true },
+                            onHome = {
+                                showCalendar = false
+                                showSearch = false
+                            },
+                            onCalendar = {
+                                showSearch = false
+                                showCalendar = true
+                            },
                             onCreate = {
                                 categoryAliases = emptyMap()
+                                // 日历里按「＋」按选中日新建；搜索里新建用默认日期，
+                                // 否则会把用户上一次在日历里选的那天偷偷带进来
                                 editingForm = if (showCalendar) {
-                                    // 在日历里按「＋」按选中日新建，与日历页原有行为一致
                                     EventFormState.newEvent(
                                         date = calendar.current.selected ?: calendar.current.today,
                                     )
@@ -710,3 +776,26 @@ private fun SortMode.label(): String = when (this) {
     SortMode.TARGET_DATE -> "日期"
     SortMode.CREATED_AT -> "创建"
 }
+
+/**
+ * 分类筛选的持久化：编码成一个短字符串，避免给密封接口加 `Parcelable`。
+ *
+ * `""` = 全部，`"\u0000"` = 未分类，其余按分类名还原。用 NUL 当哨兵是因为它
+ * 不可能出现在分类名里（分类名会被 `CategoryRules` 规范化掉控制字符）。
+ */
+private val CategoryFilterSaver: Saver<CategoryFilter, String> = Saver(
+    save = { filter ->
+        when (filter) {
+            CategoryFilter.All -> ""
+            CategoryFilter.Uncategorized -> "\u0000"
+            is CategoryFilter.Named -> filter.name
+        }
+    },
+    restore = { raw ->
+        when (raw) {
+            "" -> CategoryFilter.All
+            "\u0000" -> CategoryFilter.Uncategorized
+            else -> CategoryFilter.Named(raw)
+        }
+    },
+)
