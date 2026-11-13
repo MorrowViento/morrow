@@ -129,10 +129,20 @@ fun SearchPage(
         }
 
         if (result.isEmpty) {
-            EmptyResult(query = query, hasAnyEvent = allCards.isNotEmpty())
+            EmptyResult(
+                query = query,
+                hasAnyEvent = allCards.isNotEmpty(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            )
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                // 用 weight 而不是 fillMaxSize：Column 给子项的是「整列高度」，
+                // fillMaxSize 会连同上方搜索框的高度一起占，列表底部被顶出屏幕。
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
                 // 与首页一致：底部留白让最后一张卡完整露出，中间的卡片能从底栏背后穿过去
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 94.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -301,8 +311,8 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun EmptyResult(query: String, hasAnyEvent: Boolean) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun EmptyResult(query: String, hasAnyEvent: Boolean, modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
         Text(
             text = when {
                 !hasAnyEvent -> "还没有事件可以搜索"
