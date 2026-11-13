@@ -57,6 +57,8 @@ data class SettingsActions(
     /** 页面重新可见时刷新系统权限状态（通知 / 精确闹钟只能在系统界面改）。 */
     val refresh: () -> Unit,
     val setTheme: (com.morrowviento.morrow.data.settings.ThemeMode) -> Unit,
+    /** 换主题色（强调色），全应用统一生效。 */
+    val setAccent: (com.morrowviento.morrow.data.settings.AccentColor) -> Unit,
     /** 切换玻璃厚度档位（写该档位的连续值）。 */
     val setGlassFrostLevel: (GlassFrostLevel) -> Unit,
     val setReduceMotion: (Boolean) -> Unit,

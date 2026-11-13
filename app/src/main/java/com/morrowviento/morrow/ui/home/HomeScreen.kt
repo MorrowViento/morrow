@@ -209,6 +209,7 @@ fun HomeScreen(
         reduceTransparency = appSettings.usesOpaqueGlass,
         reduceMotion = appSettings.reduceMotion,
         frost = appSettings.glassFrost,
+        accent = appSettings.accent,
     ) {
         GlassBackdropHost(
             modifier = Modifier.fillMaxSize(),

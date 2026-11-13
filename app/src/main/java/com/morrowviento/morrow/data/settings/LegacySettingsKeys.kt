@@ -22,6 +22,15 @@ object LegacySettingsKeys {
      */
     const val GLASS_MATERIAL = "glass_material"
     const val REDUCE_MOTION = "reduce_motion"
+
+    /**
+     * 主题色（[AccentColor] 的 `prefValue`）。
+     *
+     * 新键，旧版（Flutter）没有这一项：缺失时回落 [AccentColor.DEFAULT]，
+     * 也就是库原来那支蓝，老用户升级后观感不变。
+     */
+    const val ACCENT_COLOR = "accent_color"
+
     const val AUTO_CHECK_UPDATE = "auto_check_update"
     const val AVATAR_PATH = "avatar_path"
     const val ONBOARDING_COMPLETED = "onboarding_completed_v1"

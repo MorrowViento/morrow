@@ -3,6 +3,7 @@ package com.morrowviento.morrow.data.backup
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.AppSettings
 import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
 import com.morrowviento.morrow.data.settings.legacyGlassFrost
@@ -65,6 +66,11 @@ data class BackupSettings(
     val sortMode: String,
     val reduceTransparency: Boolean,
     val reduceMotion: Boolean,
+    /**
+     * 主题色（[AccentColor.prefValue]）。空串表示这份备份没有这个字段（alpha25 之前），
+     * 导入时回落默认蓝——旧备份不会把用户的主题色改成别的颜色。
+     */
+    val accent: String = "",
     /**
      * 玻璃厚度 0~1。**负数表示这份备份没有这个字段**（alpha7 及更早的备份），
      * 导入时依次按旧四档字符串、再按布尔反推，见 [BackupMapper.toSettings]。
@@ -165,6 +171,7 @@ object BackupCodec {
     private fun encodeSettings(settings: BackupSettings): JsonObject = JsonObject().apply {
         addProperty("themeMode", settings.themeMode)
         addProperty("sortMode", settings.sortMode)
+        addProperty("accent", settings.accent)
         // 新旧字段都写：新版本读 glassFrost，旧版本读 glassMaterial
         addProperty("glassFrost", settings.glassFrost)
         addProperty("glassMaterial", settings.glassMaterial)
@@ -285,6 +292,8 @@ object BackupCodec {
     private fun decodeSettings(obj: JsonObject): BackupSettings = BackupSettings(
         themeMode = obj.stringOrNull("themeMode") ?: ThemeMode.SYSTEM.prefValue,
         sortMode = obj.stringOrNull("sortMode") ?: SortMode.DISTANCE.prefValue,
+        // 旧备份没有 accent：留空串，由 toSettings 回落默认蓝
+        accent = obj.stringOrNull("accent").orEmpty(),
         // 旧备份没有 glassFrost：留 -1，交给 toSettings 按旧四档 / 布尔反推
         glassFrost = obj.floatOrNull("glassFrost") ?: -1f,
         glassMaterial = obj.stringOrNull("glassMaterial").orEmpty(),
@@ -427,6 +436,8 @@ object BackupMapper {
         return AppSettings(
             themeMode = ThemeMode.fromPref(backup.themeMode),
             sortMode = SortMode.fromPref(backup.sortMode),
+            // 旧备份没有这一项 → fromPref(null) 回落默认蓝，不会把用户的颜色改掉
+            accent = AccentColor.fromPref(backup.accent.ifBlank { null }),
             glassFrost = frost,
             reduceTransparency = frost >= 0.85f,
             reduceMotion = backup.reduceMotion,
@@ -436,6 +447,7 @@ object BackupMapper {
     fun ofSettings(settings: AppSettings): BackupSettings = BackupSettings(
         themeMode = settings.themeMode.prefValue,
         sortMode = settings.sortMode.prefValue,
+        accent = settings.accent.prefValue,
         glassFrost = settings.glassFrost,
         // 旧版本读的是这个字符串，写一个最接近的档位
         glassMaterial = when {

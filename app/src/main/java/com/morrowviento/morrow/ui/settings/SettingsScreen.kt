@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.backup.ImportMode
+import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.glass.GlassAlert
@@ -64,6 +65,7 @@ import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassSheet
+import com.morrowviento.morrow.ui.glass.LocalGlassDark
 import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -185,6 +187,17 @@ fun SettingsScreen(
                                     itemContent = { mode, selected ->
                                         ThemeGlyph(mode, alpha = if (selected) 1f else 0.55f)
                                     },
+                                )
+                            }
+                            Divider()
+                            SettingBlock(
+                                label = "主题色",
+                                hint = "底栏选中图标、分段控件、标签页、滚轮、弹层主按钮一起换色",
+                            ) {
+                                AccentSwatches(
+                                    selected = state.settings.accent,
+                                    isDark = LocalGlassDark.current,
+                                    onSelected = actions.setAccent,
                                 )
                             }
                             Divider()
@@ -462,6 +475,52 @@ private fun SettingBlock(
                 text = it,
                 style = TextStyle(fontSize = 11.sp, lineHeight = 15.sp, color = glassTextSecondary()),
             )
+        }
+    }
+}
+
+/**
+ * 主题色色板。
+ *
+ * 一排实心圆点，选中的那圈加一道描边——不用「打勾」：色板上一眼要读的是**颜色本身**，
+ * 勾号会把中间那块色盖掉一小半。
+ *
+ * 点一下就写设置，没有「确定」：主题色是即时可见的（底栏那格图标立刻换色），
+ * 多一步确认反而让用户先离开设置页才能看到效果。
+ */
+@Composable
+private fun AccentSwatches(
+    selected: AccentColor,
+    isDark: Boolean,
+    onSelected: (AccentColor) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val ring = glassTextPrimary()
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AccentColor.entries.forEach { color ->
+            val filled = Color(color.argb(isDark))
+            val active = color == selected
+            Canvas(
+                Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .clickable { onSelected(color) },
+            ) {
+                val stroke = 1.6.dp.toPx()
+                if (active) {
+                    // 描边贴着边缘画，圆点本身不动——换色时整排不会跳
+                    drawCircle(
+                        color = ring.copy(alpha = 0.80f),
+                        radius = size.minDimension / 2f - stroke / 2f,
+                        style = Stroke(width = stroke),
+                    )
+                }
+                drawCircle(color = filled, radius = size.minDimension * 0.32f)
+            }
         }
     }
 }

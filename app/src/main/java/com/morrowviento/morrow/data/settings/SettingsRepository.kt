@@ -48,6 +48,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     val reduceMotion: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false }
 
+    /** 主题色。旧版没有这一项，缺失时回落默认蓝，升级后观感不变。 */
+    val accentColor: Flow<AccentColor> =
+        store.data.map { AccentColor.fromPref(it.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)) }
+
     val onboardingCompleted: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.ONBOARDING_COMPLETED) ?: false }
 
     suspend fun setOnboardingCompleted() {
@@ -61,10 +65,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         sortMode,
         glassFrost,
         reduceMotion,
-    ) { theme, sort, frost, motion ->
+        accentColor,
+    ) { theme, sort, frost, motion, accent ->
         AppSettings(
             themeMode = ThemeMode.fromPref(theme),
             sortMode = SortMode.fromPref(sort),
+            accent = accent,
             glassFrost = frost,
             // 与厚度保持同步：达到最厚档时同时带上无障碍「降低透明度」语义
             reduceTransparency = frost >= 0.85f,
@@ -101,6 +107,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setReduceMotion(enabled: Boolean) =
         putBoolean(LegacySettingsKeys.REDUCE_MOTION, enabled)
 
+    suspend fun setAccentColor(color: AccentColor) =
+        putString(LegacySettingsKeys.ACCENT_COLOR, color.prefValue)
+
     /**
      * 一次性读出整组设置。
      *
@@ -113,18 +122,20 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         return AppSettings(
             themeMode = ThemeMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.THEME_MODE)),
             sortMode = SortMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE)),
+            accent = AccentColor.fromPref(prefs.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)),
             glassFrost = frost,
             reduceTransparency = frost >= 0.85f,
             reduceMotion = prefs.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
         )
     }
 
-    /** 备份导入用：一次 edit 写完四个键，避免四条 Flow 各触发一次重组。 */
+    /** 备份导入用：一次 edit 写完这几个键，避免几条 Flow 各触发一次重组。 */
     suspend fun applySettings(value: AppSettings) {
         val frost = value.glassFrost.coerceIn(0f, 1f)
         store.edit { prefs ->
             prefs[stringPreferencesKey(LegacySettingsKeys.THEME_MODE)] = value.themeMode.prefValue
             prefs[stringPreferencesKey(LegacySettingsKeys.EVENT_SORT_MODE)] = value.sortMode.prefValue
+            prefs[stringPreferencesKey(LegacySettingsKeys.ACCENT_COLOR)] = value.accent.prefValue
             prefs[floatPreferencesKey(LegacySettingsKeys.GLASS_FROST)] = frost
             prefs[stringPreferencesKey(LegacySettingsKeys.GLASS_MATERIAL)] = when {
                 frost < 0.14f -> "clear"

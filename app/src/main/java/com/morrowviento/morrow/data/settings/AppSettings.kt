@@ -82,6 +82,46 @@ fun legacyGlassFrost(raw: String?): Float? = when (raw) {
 }
 
 /**
+ * 主题色（强调色）。
+ *
+ * 应用里所有「选中 / 主操作」的颜色都来自一处（`glassAccent()`，底层是
+ * `GlasmioTheme.colors.accent`），所以只要在这里换一个值，底栏选中图标、分段控件的
+ * 指示器、chip、滚轮选中项、弹层主按钮、搜索框光标会一起变。
+ *
+ * 明暗两套值分开给：同一个色相在深底上要提亮一档才够清楚，直接把浅色那一支搬过去
+ * 会显得发闷（iOS 的系统色也是这么分两套的）。
+ *
+ * [DEFAULT] 不是「随便挑一支蓝」，而是**库自己那支默认蓝**
+ * （`glasmioColorScheme` 的 `#0088FF` / `#0091FF`）：老用户升级后不选任何主题色，
+ * 观感与之前逐像素一致。
+ */
+enum class AccentColor(
+    val prefValue: String,
+    val label: String,
+    /** 浅色主题下的强调色（ARGB，`0xAARRGGBB`）。 */
+    val light: Long,
+    /** 深色主题下的强调色（同色系提亮一档）。 */
+    val dark: Long,
+) {
+    DEFAULT("azure", "海蓝", 0xFF0088FF, 0xFF0091FF),
+    INDIGO("indigo", "靛蓝", 0xFF5856D6, 0xFF5E5CE6),
+    VIOLET("violet", "紫罗兰", 0xFFAF52DE, 0xFFBF5AF2),
+    ROSE("rose", "玫红", 0xFFFF2D55, 0xFFFF375F),
+    AMBER("amber", "暖橙", 0xFFFF9500, 0xFFFF9F0A),
+    JADE("jade", "青竹", 0xFF34C759, 0xFF30D158),
+    GRAPHITE("graphite", "石墨", 0xFF636366, 0xFFAEAEB2);
+
+    /** 取当前明暗下的 ARGB。 */
+    fun argb(isDark: Boolean): Long = if (isDark) dark else light
+
+    companion object {
+        /** 认不出的值（旧备份、被手工改过的偏好）一律回落默认蓝。 */
+        fun fromPref(raw: String?): AccentColor =
+            entries.firstOrNull { it.prefValue == raw } ?: DEFAULT
+    }
+}
+
+/**
  * 应用设置的领域快照。
  *
  * 之所以把四个分散的 DataStore 键合成一个对象：设置中心要一次性渲染整页，
@@ -93,6 +133,8 @@ fun legacyGlassFrost(raw: String?): Float? = when (raw) {
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val sortMode: SortMode = SortMode.DISTANCE,
+    /** 主题色（强调色），全应用统一读它。 */
+    val accent: AccentColor = AccentColor.DEFAULT,
     /**
      * 玻璃厚度，0~1 连续值。
      *

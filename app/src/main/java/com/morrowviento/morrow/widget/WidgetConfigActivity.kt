@@ -113,6 +113,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                 reduceTransparency = prefs.usesOpaqueGlass,
                 reduceMotion = prefs.reduceMotion,
                 frost = prefs.glassFrost,
+                accent = prefs.accent,
             ) {
                 GlassBackdropHost(
                     modifier = Modifier.fillMaxSize(),

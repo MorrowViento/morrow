@@ -1,5 +1,6 @@
 package com.morrowviento.morrow.data.backup
 
+import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
@@ -52,6 +53,7 @@ class BackupCodecTest {
             sortMode = "targetDate",
             reduceTransparency = true,
             reduceMotion = false,
+            accent = "violet",
         ),
         widgets = widgets,
     )
@@ -106,6 +108,19 @@ class BackupCodecTest {
         assertEquals("targetDate", settings.sortMode.prefValue)
         assertTrue(settings.reduceTransparency)
         assertTrue(!settings.reduceMotion)
+        assertEquals(AccentColor.VIOLET, settings.accent)
+    }
+
+    @Test
+    fun `旧备份没有 accent 字段时回落默认主题色`() {
+        // alpha25 之前的备份里没有 accent。导入不能把用户的主题色改成别的颜色，
+        // 也不能因为缺字段就整份设置不生效——只有这一项回默认。
+        val raw = BackupCodec.encode(document()).replace("\"accent\":\"violet\",", "")
+        val ok = BackupCodec.decode(raw) as BackupParse.Ok
+        assertEquals("", ok.document.settings.accent)
+        val settings = BackupMapper.toSettings(ok.document.settings)
+        assertEquals(AccentColor.DEFAULT, settings.accent)
+        assertEquals("dark", settings.themeMode.prefValue)
     }
 
     // ---------------------------------------------------------------- 容错

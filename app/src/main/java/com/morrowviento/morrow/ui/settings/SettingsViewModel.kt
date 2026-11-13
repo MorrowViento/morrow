@@ -15,6 +15,7 @@ import com.morrowviento.morrow.data.backup.BackupRepository
 import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.reminder.ReminderPermissions
 import com.morrowviento.morrow.data.reminder.ReminderScheduler
+import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.SettingsRepository
 import com.morrowviento.morrow.data.settings.ThemeMode
@@ -123,6 +124,9 @@ class SettingsViewModel(
     fun setReduceTransparency(enabled: Boolean) = persist { settings.setReduceTransparency(enabled) }
 
     fun setReduceMotion(enabled: Boolean) = persist { settings.setReduceMotion(enabled) }
+
+    /** 换主题色：一处写入，`appSettings` 一变，整棵树（含底栏与所有浮层）跟着重建。 */
+    fun setAccent(color: AccentColor) = persist { settings.setAccentColor(color) }
 
     // ---- 导出 / 导入 ----
 

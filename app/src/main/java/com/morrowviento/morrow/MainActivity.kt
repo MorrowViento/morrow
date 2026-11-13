@@ -167,6 +167,7 @@ class MainActivity : ComponentActivity() {
                 SettingsActions(
                     refresh = settingsViewModel::refreshPermissions,
                     setTheme = settingsViewModel::setTheme,
+                    setAccent = settingsViewModel::setAccent,
                     setGlassFrostLevel = settingsViewModel::setGlassFrostLevel,
                     setReduceMotion = settingsViewModel::setReduceMotion,
                     exportTo = settingsViewModel::exportTo,

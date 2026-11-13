@@ -25,10 +25,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
+import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
 import io.github.neoruaa.glasmio.core.GlassAppearance
 import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.core.LocalGlassDimensions
+import io.github.neoruaa.glasmio.core.defaultGlassColors
+import io.github.neoruaa.glasmio.core.glasmioColorScheme
 import io.github.neoruaa.glasmio.glass.GlassEmphasis
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlasmioBackdropHost
@@ -134,6 +137,12 @@ private val CLEAR_MATERIAL = NavigationGlassMaterial.Clear
  *   这里始终保持 `GlassAppearance()`（液态玻璃全开），只在玻璃面板内侧加一层
  *   柔和的同色纱（见 [glassVeil]）。
  * @param frost 玻璃厚度 0~1，透传给每一个玻璃面板。
+ * @param accent 主题色。它同时喂给两处，缺一不可：
+ *   1. `colors = defaultGlassColors(isDark, accent)` —— `glassAccent()` 读的就是它，
+ *      底栏选中图标、分段控件指示器、chip、滚轮、弹层主按钮、搜索框光标全走这里；
+ *   2. `colorScheme = glasmioColorScheme(isDark, accent)` —— Material3 的 `primary` 等角色，
+ *      任何依赖 `MaterialTheme.colorScheme` 的控件（以及库内建的按钮）跟着一起变。
+ *   两个都按**同一个 ARGB** 生成，所以玻璃上的强调色与 Material 层的强调色不会打架。
  */
 @Composable
 fun GlassTheme(
@@ -141,8 +150,11 @@ fun GlassTheme(
     reduceTransparency: Boolean = false,
     reduceMotion: Boolean = false,
     frost: Float = GLASS_FROST_DEFAULT,
+    accent: AccentColor = AccentColor.DEFAULT,
     content: @Composable () -> Unit,
 ) {
+    // 浅色 / 深色两套值：同一个色相在深底上要提亮一档才够清楚
+    val accentColor = Color(accent.argb(darkTheme))
     CompositionLocalProvider(
         LocalGlassDark provides darkTheme,
         LocalReduceMotion provides reduceMotion,
@@ -151,6 +163,8 @@ fun GlassTheme(
     ) {
         GlasmioTheme(
             isDark = darkTheme,
+            colorScheme = glasmioColorScheme(darkTheme, accentColor),
+            colors = defaultGlassColors(darkTheme, accentColor),
             appearance = GlassAppearance(),
         ) {
             // 明暗翻转时把整棵主题子树**重建**（不是只重组）。
@@ -167,7 +181,11 @@ fun GlassTheme(
             //
             // 弹层（现为同页浮层）与页面在同一条组合里，因此也一起重建。
             // 代价是切换那一帧重新测量一遍布局；主题切换是低频操作，可以接受。
-            key(darkTheme) {
+            //
+            // 主题色同理，而且理由更硬：`GlassSurface` 的 `prominent` 底色走的是
+            // `navigationSurfaceColor` 与色彩配方，配方的 `remember` 键里同样没有 accent。
+            // 不重建的话，换色后只有文字与小图标变，玻璃按钮要按一下才跟上。
+            key(darkTheme, accent) {
                 content()
             }
         }
