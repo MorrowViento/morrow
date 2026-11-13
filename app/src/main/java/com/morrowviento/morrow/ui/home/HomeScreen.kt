@@ -323,9 +323,9 @@ fun HomeScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(horizontal = 16.dp)
-                                // 底栏槽比栏体高 14dp（珠子上下各凸出 7dp），
-                                // 所以这里只留一半，栏体的视觉位置才和之前一致
-                                .padding(bottom = 7.dp),
+                                // 底栏槽 60dp（胶囊 52dp 居中，点击珠子 60dp 上下各凸 4dp），
+                                // 底下再留 10dp，槽顶距屏幕底 70dp
+                                .padding(bottom = 10.dp),
                             backdrop = contentBackdrop,
                             calendarActive = showCalendar,
                             // 搜索还是预留位：点一下给个提示，不做假界面
@@ -561,10 +561,10 @@ private fun EventList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        // 底部留白刚好让最后一条完整露出（底栏槽顶在 84dp），
+        // 底部留白刚好让最后一条完整露出（底栏槽顶在 70dp），
         // 又让滚动中的卡片能从底栏背后穿过去——不穿过去，玻璃就没有东西可折，
         // 看起来就是一块实色板
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 84.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "active-header") {
