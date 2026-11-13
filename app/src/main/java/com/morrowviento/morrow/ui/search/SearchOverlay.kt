@@ -103,9 +103,10 @@ fun SearchOverlay(
         GlassPanel(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                // padding 必须在 size 之前：反过来玻璃会铺到屏幕左右边缘，只是内容被缩进。
+                .padding(start = 10.dp, end = 10.dp, top = 6.dp)
                 .fillMaxWidth()
-                .fillMaxHeight(0.86f)
-                .padding(start = 10.dp, end = 10.dp, top = 6.dp),
+                .fillMaxHeight(0.86f),
             // 比卡片（26dp）更圆：它是一块「从顶上拉下来的面板」，不是列表里的一张卡
             cornerRadius = 30.dp,
             contentAlignment = Alignment.TopStart,
