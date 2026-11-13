@@ -1,10 +1,14 @@
 package com.morrowviento.morrow
 
 import android.content.Intent
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,6 +103,25 @@ class MainActivity : ComponentActivity() {
             val openDetail by pendingDetailId.collectAsStateWithLifecycle()
             val notificationEntry by notificationEntries.collectAsStateWithLifecycle()
             val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
+
+            // 系统栏图标跟着**应用内**的明暗走，不是跟着系统走。
+            // `enableEdgeToEdge()` 不带参数时按资源的 night 配置猜，用户在设置里强制
+            // 深色而系统是浅色时，状态栏会留下深色图标——在深色背景上直接看不见。
+            val darkTheme = settingsState.settings.isDark(isSystemInDarkTheme())
+            SideEffect {
+                enableEdgeToEdge(
+                    statusBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    },
+                    navigationBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    },
+                )
+            }
 
             // 回调集合只取决于 ViewModel 实例：避免每帧重组都新建 lambda
             val categoryActions = remember(categoryViewModel) {

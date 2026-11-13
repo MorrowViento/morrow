@@ -3,7 +3,6 @@ package com.morrowviento.morrow.ui.component
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,14 +25,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +38,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.domain.time.CalendarMath
+import com.morrowviento.morrow.ui.glass.GlassTile
+import com.morrowviento.morrow.ui.glass.glassAccent
 import com.morrowviento.morrow.ui.glass.LocalGlassDark
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -150,7 +148,7 @@ fun WheelColumn(
                         val scale = 0.90f + 0.10f * emphasis
                         scaleX = scale
                         scaleY = scale
-                        alpha = 0.62f + 0.38f * emphasis
+                        alpha = 0.55f + 0.45f * emphasis
                     },
                 contentAlignment = Alignment.Center,
             ) {
@@ -164,7 +162,7 @@ fun WheelColumn(
                         // 数字没有下伸部，字体自带的 descent 会把字形往上顶一截，
                         // 加上 Trim.Both 之后「数字行居中」才是真居中（图 2 那个偏高的观感）
                         lineHeight = 20.sp,
-                        color = if (selected) primary else secondary.copy(alpha = 0.72f),
+                        color = if (selected) primary else secondary.copy(alpha = 0.55f),
                     ),
                 )
             }
@@ -302,56 +300,46 @@ fun WheelDateTimePicker(
 /**
  * 滚轮中间的选中玻璃条。
  *
- * 不是一块纯色：自上而下四层——极淡的面、顶部镜面高光、底部内阴影、发丝描边，
- * 让数字看得出「压在一块玻璃下面」而不是「有一行被涂灰了」。
- * [activity]（有人正在滑）会把镜面与内阴影一起提亮再落回，就是那一下「流体」的感觉。
+ * 上一版是四层自绘（淡面 + 镜面 + 内阴影 + 白描边）。在深色底上它读起来是一块
+ * **发灰的圆角方块**，浅色底上又像一道脏印——「黑色框很丑」的反馈就是这么来的：
+ * 自绘只能模拟「有厚度」，做不出折射。
  *
- * 没有用 `GlassSurface`：那会去采样本层之外的 backdrop（弹层的跨窗口背景），
- * 折射出来的是这块条背后的**整个应用界面**，与眼前的数字毫无关系，反而更假。
+ * 现在交给 [GlassTile]：真 `GlassSurface`，边角折射、模糊、色纱都走和卡片同一套，
+ * 背后滚过去的数字会被它弯一下，这才是「通透玻璃」该有的样子。
+ * 色纱只加极薄一层（0.04 起），选中行的文字对比度由字号/浓淡负责，不靠压暗底。
+ *
+ * [activity]（有人正在滑）只把色纱提亮一点点：玻璃被手指带动时"亮一下"，
+ * 松手落回——不额外开动画，跟着滚动本身的进度走。
  */
 @Composable
 private fun WheelGlassBand(activity: Float, modifier: Modifier = Modifier) {
-    val ink = glassTextPrimary()
-    val dark = LocalGlassDark.current
-    val shape = RoundedCornerShape(11.dp)
-    // 镜面在深色底上要更亮才看得见；浅色底上用白色只会糊成一片，所以减半
-    val specular = if (dark) 0.16f + 0.16f * activity else 0.42f + 0.18f * activity
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .background(ink.copy(alpha = 0.07f + 0.02f * activity))
-            .drawBehind {
-                val radius = CornerRadius(11.dp.toPx(), 11.dp.toPx())
-                // 顶部镜面：从中段开始透明，边缘那圈亮光是玻璃的"折射边"
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = specular),
-                            Color.White.copy(alpha = specular * 0.25f),
-                            Color.Transparent,
+    // 镜面亮度按主题给：深色底上要白得收敛，浅色底上要更亮才看得见上缘
+    val specular = if (LocalGlassDark.current) 0.10f else 0.45f
+    // 色纱用强调色而不是中性白：玻璃面和弹层面板是同一档材质、同一档模糊，
+    // 只靠「面」是分不出选中行的——必须有一层不同的色相托住它。
+    val tint = glassAccent()
+    GlassTile(
+        modifier = modifier,
+        cornerRadius = 12.dp,
+        tint = tint.copy(alpha = 0.10f + 0.06f * activity),
+    ) {
+        // 顶部镜面：玻璃上缘的一条柔光，压在色纱之上、数字之下
+        Box(
+            Modifier
+                .matchParentSize()
+                .drawWithContent {
+                    drawContent()
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.White.copy(alpha = specular), Color.Transparent),
+                            startY = 0f,
+                            endY = size.height * 0.7f,
                         ),
-                        startY = 0f,
-                        endY = size.height * 0.72f,
-                    ),
-                    cornerRadius = radius,
-                )
-                // 底部内阴影：下边缘比上边缘暗，玻璃才有厚度
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.05f + 0.04f * activity)),
-                        startY = size.height * 0.45f,
-                        endY = size.height,
-                    ),
-                    cornerRadius = radius,
-                )
-                // 发丝描边：不加的话边缘会糊在底色里，看起来像一块脏印
-                drawRoundRect(
-                    color = Color.White.copy(alpha = if (dark) 0.10f else 0.55f),
-                    cornerRadius = radius,
-                    style = Stroke(width = 0.8.dp.toPx()),
-                )
-            },
-    )
+                        cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx()),
+                    )
+                },
+        )
+    }
 }
 
 @Composable

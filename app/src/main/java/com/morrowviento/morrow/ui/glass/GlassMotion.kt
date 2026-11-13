@@ -57,7 +57,7 @@ object GlassMotion {
      * 刚度 = (2π / 0.3441)² ≈ 333.5。这条曲线只用于我们自己的淡入/遮罩，弹层本身
      * 由 `GlasmioBottomSheet` 内部驱动，不经过这里。
      */
-    val sheet: AnimationSpec<Float>
+    val sheet: FiniteAnimationSpec<Float>
         get() = spring(dampingRatio = 1f, stiffness = 333.5f)
 
     /** 推入过程中的淡入：只走前 120ms，剩下的交给位移，避免整段发灰。 */

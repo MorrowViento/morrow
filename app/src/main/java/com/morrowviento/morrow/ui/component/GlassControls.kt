@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
+import com.morrowviento.morrow.ui.glass.glassAccent
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 
@@ -64,12 +67,26 @@ fun GlassTextField(
 ) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
+    val accent = glassAccent()
+    // 聚焦态必须看得见：之前输入框只有一层 6% 的白，点了和没点一模一样，
+    // 在深色玻璃上几乎找不到光标在哪个框里。现在聚焦时底色加深、边缘亮一圈强调色。
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Column(modifier = modifier) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(primary.copy(alpha = 0.06f))
+                .background(primary.copy(alpha = if (focused) 0.10f else 0.06f))
+                .drawBehind {
+                    if (focused) {
+                        drawRoundRect(
+                            color = accent.copy(alpha = 0.55f),
+                            cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx()),
+                            style = Stroke(width = 1.dp.toPx()),
+                        )
+                    }
+                }
                 .heightIn(min = minHeight)
                 .padding(horizontal = 12.dp, vertical = 12.dp),
         ) {
@@ -84,7 +101,8 @@ fun GlassTextField(
                 onValueChange = onValueChange,
                 singleLine = singleLine,
                 textStyle = TextStyle(fontSize = 15.sp, color = primary),
-                cursorBrush = SolidColor(primary),
+                cursorBrush = SolidColor(accent),
+                interactionSource = interaction,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -103,6 +121,10 @@ fun GlassTextField(
  * 这里只取它那两下「可感知」的部分——缩小 + 边缘高光 + 底色加深，用同一条弹簧：
  * 压下 0.94、松手弹回（`dampingRatio = 0.55` 会有一点点回弹，和库的按压曲线一致）。
  *
+ * **选中态必须一眼看得出来**：之前只是把底色从 6% 白提到 16% 白，深色玻璃上几乎
+ * 没有差别（「选中效果都不明显」）。现在选中是「强调色纱 + 强调色描边 + 加粗」，
+ * 未选中是中性薄底——两者的色相都不一样，扫一眼就能数出选了几个。
+ *
  * 不用默认 ripple：它只按布局边界裁，会在圆角胶囊外面留一圈方块（与底栏那次同一个坑）。
  */
 @Composable
@@ -114,6 +136,7 @@ fun ChoiceChip(
 ) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
+    val accent = glassAccent()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val press by animateFloatAsState(
@@ -121,7 +144,6 @@ fun ChoiceChip(
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 1200f, visibilityThreshold = 0.01f),
         label = "chipPress",
     )
-    val base = if (selected) 0.16f else 0.06f
     Box(
         modifier = modifier
             .graphicsLayer {
@@ -131,14 +153,24 @@ fun ChoiceChip(
                 scaleY = scale
             }
             .clip(RoundedCornerShape(50))
-            .background(primary.copy(alpha = base + 0.05f * press))
+            .background(
+                if (selected) {
+                    accent.copy(alpha = 0.20f + 0.08f * press)
+                } else {
+                    primary.copy(alpha = 0.06f + 0.05f * press)
+                },
+            )
             .drawWithContent {
                 drawContent()
-                // 边缘高光：按住时胶囊外圈亮一圈，像被光照到的玻璃边
-                if (press > 0.01f) {
+                // 选中：一圈强调色描边；按下：边缘再亮一层（玻璃被按下去的那道光）
+                if (selected || press > 0.01f) {
                     drawRoundRect(
-                        color = primary.copy(alpha = 0.18f * press),
-                        style = Stroke(width = 0.8.dp.toPx()),
+                        color = if (selected) {
+                            accent.copy(alpha = 0.55f)
+                        } else {
+                            primary.copy(alpha = 0.18f * press)
+                        },
+                        style = Stroke(width = 0.9.dp.toPx()),
                         cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
                     )
                 }

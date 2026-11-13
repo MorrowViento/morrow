@@ -1,30 +1,52 @@
 package com.morrowviento.morrow.ui.glass
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import io.github.neoruaa.glasmio.glass.BottomNavigationContact
-import io.github.neoruaa.glasmio.glass.GlassEmphasis
-import io.github.neoruaa.glasmio.glass.GlassSurface
-import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
-import io.github.neoruaa.glasmio.icons.SfSymbol
-import io.github.neoruaa.glasmio.ui.GlasmioNavigationBar
-import io.github.neoruaa.glasmio.ui.GlasmioTabItem
-import io.github.neoruaa.glasmio.ui.NavigationBarSurfaceHeight
+import androidx.compose.ui.unit.sp
 
 /**
  * 底栏的三个位置。
@@ -38,22 +60,34 @@ enum class GlassTab(val label: String) {
     SEARCH("搜索"),
 }
 
+/** 底栏高度与悬浮圆钮直径：两者必须一样，否则并排时基线会歪。 */
+private val BarHeight = 62.dp
+
+/** 悬浮圆钮与底栏之间的缝：和 iOS 26 一样，留一条能看见底色的缝。 */
+private val BarGap = 10.dp
+
+/** 胶囊形状：只在文件级建一次，避免每帧给每一格新建 Shape。 */
+private val BarShape = RoundedCornerShape(50)
+
 /**
  * 常驻底栏（首页 / 日历共用一条，切页面时它不重建、不换内容）。
  *
- * 结构完全照搬 Glasmio 示例里的「导航栏 + 悬浮搜索」：
+ * ## 为什么不再用 `GlasmioNavigationBar`
  *
- * - **一条胶囊玻璃栏**：`GlasmioNavigationBar`，图标 + 10sp 小字，选中格上有一块
- *   会滑动/拉伸的透镜指示器（拖动时指示器跟着手指、松手回弹到最近一格）；
- * - **右侧一颗独立圆钮**：和栏同高（62dp）、单独一片玻璃，压在栏的右边；
- * - 两者装在 `BottomNavigationContact` 里，于是**共用同一份材质上下文**：液面高度、
- *   折射、内阴影按两颗控件的并集算，圆钮按下去时高光也会从栏的边缘连过去（iOS 的
- *   「同一块玻璃分成两片」）。材质由宿主绘制，所以这里的透明度是库的原版值，
- *   不再经过本项目的色纱——**这是「底栏不透明」的修法**：之前每个格子各自
- *   `GlassSurface` + 内侧色纱，叠起来就是一块实心板。
+ * 库的导航栏有两个改不动的限制，正好对上「底栏完全不透明、且不跟随厚度」：
  *
- * 按压反馈不用自己写：`GlassSurface(onClick=)` 内部就是 `clickable(indication = null)`
- * 加材质高光采样，按下去是折射与光斑，不是 Material 的矩形涟漪。
+ * - 它由 `BottomNavigationContact` 统一画材质，材质是库内部按尺寸挑的
+ *   `NavigationGlassMaterial`（其中一档带三层不透明 `fills`），**没有**
+ *   `material` / `frostRadius` 参数可传——厚度滑块对它完全无效；
+ * - 选中格那块「透镜指示器」也只能由它自己画，外部拿不到。
+ *
+ * 现在就是一块普通玻璃：`GlassPanel(capsule = true)`——和卡片同一档 Clear 材质、
+ * 同一个 `frostRadius`（跟随厚度）、同一份色纱。整条底栏因此和卡片一样透，
+ * 也会被「通透 ↔ 厚重」改变。选中态是一块会滑过去的胶囊透镜：强调色纱 +
+ * 顶部镜面 + 发丝描边，走同一条弹簧。
+ *
+ * 三格的图标自己画（House / Calendar / Search）：库的 `SfSymbol` 只有十几个符号，
+ * 既没有日历也没有加号，之前日历只能拿 `Clock` 顶替，语义还是错的。
  */
 @Composable
 fun GlassBottomNavigation(
@@ -63,60 +97,196 @@ fun GlassBottomNavigation(
     modifier: Modifier = Modifier,
     createLabel: String = "新建",
 ) {
-    val items = remember {
-        listOf(
-            // 库只提供 House / Clock / Search 这几个符号；日历用 Clock 表示「还剩多久」，
-            // 文字标签已经把语义说清楚了。
-            GlasmioTabItem(GlassTab.HOME, GlassTab.HOME.label, SfSymbol.House),
-            GlasmioTabItem(GlassTab.CALENDAR, GlassTab.CALENDAR.label, SfSymbol.Clock),
-            GlasmioTabItem(GlassTab.SEARCH, GlassTab.SEARCH.label, SfSymbol.Search),
-        )
-    }
-    // 库的「分裂搜索」形变进度：底栏平时不收缩，所以恒为 0。
-    // 用一个稳定的 State 而不是每次组合新建，避免内部 derivedState 反复重建。
-    val noMorph = remember { mutableFloatStateOf(0f) }
-
-    BottomNavigationContact(
-        backdrop = LocalGlassBackdrop.current,
-        modifier = modifier,
+    val tabs = GlassTab.entries
+    Row(
+        modifier = modifier.height(BarHeight),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlasmioNavigationBar(
-            items = items,
-            selectedKey = selected,
-            onSelected = onSelected,
-            // 搜索还是预留位：不展开任何东西，保留形变入口不传 null。
-            onExpand = {},
-            compactProgress = noMorph,
-            compactSize = NavigationBarSurfaceHeight,
-            modifier = Modifier.weight(1f),
-        )
+        GlassPanel(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            capsule = true,
+        ) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                // 每格宽度 = 整条栏 / 3；透镜的位移与宽度都按它算，
+                // 因此改格数或改高度都不用再调常量。
+                val cell = maxWidth / tabs.size
+                val index = tabs.indexOf(selected).coerceAtLeast(0)
+                val slide by animateFloatAsState(
+                    targetValue = index.toFloat(),
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 620f, visibilityThreshold = 0.01f),
+                    label = "tabLensSlide",
+                )
+                TabLens(
+                    modifier = Modifier
+                        .offset { IntOffset((cell * slide).roundToPx(), 0) }
+                        .width(cell)
+                        .fillMaxHeight()
+                        .padding(horizontal = 5.dp, vertical = 6.dp),
+                )
+                Row(Modifier.fillMaxSize()) {
+                    tabs.forEach { tab ->
+                        TabCell(
+                            tab = tab,
+                            selected = tab == selected,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSelected(tab) },
+                        )
+                    }
+                }
+            }
+        }
         Spacer(Modifier.width(BarGap))
         FloatingCreateButton(onClick = onCreate, label = createLabel)
     }
 }
 
-/** 悬浮圆钮与底栏之间的间距：和 iOS 26 一样留一条能看见底色的缝。 */
-private val BarGap = 10.dp
-
 /**
- * 右侧独立的圆形按钮（球面玻璃里的「＋」）。
+ * 选中格的透镜。
  *
- * 关键是 `emphasis = Regular`：`GlassSurface` 只有在常规强调下才会把自己注册成
- * `BottomNavigationContact` 的成员、由宿主统一画材质；换成 `Prominent` 就退化成
- * 一片自己的玻璃，按下去那一下的光会断开。
+ * 不再嵌第二片 `GlassSurface`：一条底栏里再套一层玻璃就是两次采样、两次模糊，
+ * 两层糊在一起反而让「选中」糊掉。这里取它可感知的三件事：强调色纱、
+ * 顶部镜面、发丝描边——形状会滑、边缘会亮，读起来就是一块被打到光的玻璃。
  */
 @Composable
-private fun RowScope.FloatingCreateButton(onClick: () -> Unit, label: String) {
-    val ink = glassTextPrimary()
-    GlassSurface(
+private fun TabLens(modifier: Modifier = Modifier) {
+    val accent = glassAccent()
+    Box(
+        modifier
+            .clip(BarShape)
+            .background(accent.copy(alpha = 0.18f))
+            .drawWithContent {
+                drawContent()
+                // 顶部镜面：上缘一条柔光，玻璃的「折射边」
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.22f), Color.Transparent),
+                        startY = 0f,
+                        endY = size.height * 0.65f,
+                    ),
+                    cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                )
+                drawRoundRect(
+                    color = accent.copy(alpha = 0.42f),
+                    cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                    style = Stroke(width = 0.8.dp.toPx()),
+                )
+            },
+    )
+}
+
+/** 一格：图标 + 小字，按下缩小一档（和 chips、文字按钮同一条弹簧）。 */
+@Composable
+private fun RowScope.TabCell(
+    tab: GlassTab,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 1200f, visibilityThreshold = 0.01f),
+        label = "tabPress",
+    )
+    // 选中用强调色；未选中用二级文字色——浅色下也不会灰得看不见
+    val ink = if (selected) glassAccent() else glassTextSecondary()
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .graphicsLayer {
+                val scale = 1f - 0.05f * press
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(BarShape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .semantics { contentDescription = tab.label },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        TabGlyph(tab = tab, color = ink, glyphSize = 20.dp)
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = tab.label,
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = 10.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = ink,
+            ),
+        )
+    }
+}
+
+/** 三格的图标：都是自绘线条，不依赖字体字形。 */
+@Composable
+private fun TabGlyph(tab: GlassTab, color: Color, glyphSize: Dp) {
+    Canvas(Modifier.size(glyphSize)) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.6.dp.toPx()
+        when (tab) {
+            // 房子：屋顶两条斜线 + 墙体
+            GlassTab.HOME -> {
+                drawLine(color, Offset(w * 0.50f, h * 0.14f), Offset(w * 0.90f, h * 0.46f), stroke, StrokeCap.Round)
+                drawLine(color, Offset(w * 0.50f, h * 0.14f), Offset(w * 0.10f, h * 0.46f), stroke, StrokeCap.Round)
+                drawLine(color, Offset(w * 0.18f, h * 0.42f), Offset(w * 0.18f, h * 0.88f), stroke, StrokeCap.Round)
+                drawLine(color, Offset(w * 0.82f, h * 0.42f), Offset(w * 0.82f, h * 0.88f), stroke, StrokeCap.Round)
+                drawLine(color, Offset(w * 0.18f, h * 0.88f), Offset(w * 0.82f, h * 0.88f), stroke, StrokeCap.Round)
+            }
+            // 日历：外框 + 两个挂环 + 一条分隔线 + 两个日期点
+            GlassTab.CALENDAR -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.10f, h * 0.20f),
+                    size = Size(w * 0.80f, h * 0.72f),
+                    cornerRadius = CornerRadius(w * 0.16f, w * 0.16f),
+                    style = Stroke(width = stroke),
+                )
+                drawLine(color, Offset(w * 0.10f, h * 0.40f), Offset(w * 0.90f, h * 0.40f), stroke * 0.85f)
+                drawLine(color, Offset(w * 0.32f, h * 0.12f), Offset(w * 0.32f, h * 0.28f), stroke, StrokeCap.Round)
+                drawLine(color, Offset(w * 0.68f, h * 0.12f), Offset(w * 0.68f, h * 0.28f), stroke, StrokeCap.Round)
+                drawCircle(color, radius = w * 0.075f, center = Offset(w * 0.36f, h * 0.64f))
+                drawCircle(color, radius = w * 0.075f, center = Offset(w * 0.62f, h * 0.64f))
+            }
+            // 放大镜：圈 + 斜柄
+            GlassTab.SEARCH -> {
+                drawCircle(
+                    color = color,
+                    radius = w * 0.30f,
+                    center = Offset(w * 0.44f, h * 0.42f),
+                    style = Stroke(width = stroke),
+                )
+                drawLine(
+                    color,
+                    Offset(w * 0.66f, h * 0.64f),
+                    Offset(w * 0.88f, h * 0.86f),
+                    stroke,
+                    StrokeCap.Round,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 右侧独立的圆形按钮（玻璃里的「＋」）。
+ *
+ * 和底栏一样是 [GlassCirclePanel]：跟随厚度、跟随主题，按下时由材质自己画折射光斑，
+ * 不是 Material 的矩形涟漪。
+ */
+@Composable
+private fun FloatingCreateButton(onClick: () -> Unit, label: String) {
+    GlassCirclePanel(
         modifier = Modifier
-            .size(NavigationBarSurfaceHeight)
+            .size(BarHeight)
             .semantics { contentDescription = label },
-        shape = CircleShape,
-        emphasis = GlassEmphasis.Regular,
         onClick = onClick,
     ) {
-        PlusGlyph(ink, glyphSize = 22.dp)
+        PlusGlyph(glassTextPrimary(), glyphSize = 22.dp)
     }
 }
 

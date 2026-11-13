@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -146,7 +147,23 @@ fun GlassTheme(
             isDark = darkTheme,
             appearance = GlassAppearance(),
         ) {
-            content()
+            // 明暗翻转时把整棵主题子树**重建**（不是只重组）。
+            //
+            // 为什么非这样不可：库把「解析后的材质」缓存在 `remember` 里，而缓存键里
+            // 并没有 `isDark`。`GlassSurface` 的 `nativeSourceRecipe` 只认
+            // `navigationMaterial / material / emphasis / surfaceColor /
+            // navigationSurfaceColor / alphaMultiplier / darkFraction / appearance`，
+            // 面层颜色是由 `darkFraction`（背景亮度探针）算出来的，不跟随调色板。
+            // 于是切换主题后：背景是我们自己画的，立刻变；卡片足够大、又压着刚变色的
+            // 背景，看着也像变了；而按钮面积小、几乎只剩面层颜色，就会停在旧主题上，
+            // 直到用户按一下它——按压会换掉 `interactiveHighlight`，才把配方重建出来。
+            // 这正是「按钮要手动点一下才切换」的成因。
+            //
+            // 弹层（现为同页浮层）与页面在同一条组合里，因此也一起重建。
+            // 代价是切换那一帧重新测量一遍布局；主题切换是低频操作，可以接受。
+            key(darkTheme) {
+                content()
+            }
         }
     }
 }
@@ -382,6 +399,8 @@ fun GlassBackdropHost(
 fun GlassPanel(
     modifier: Modifier = Modifier,
     capsule: Boolean = false,
+    /** 显式圆角（弹层这类需要比 `regularCornerRadius` 更圆的面板用）。null 走 [glassPanelShape]。 */
+    cornerRadius: Dp? = null,
     tint: Color? = null,
     prominent: Boolean = false,
     accent: Color? = null,
@@ -391,7 +410,7 @@ fun GlassPanel(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val veil = glassVeil()
-    val shape = glassPanelShape(capsule)
+    val shape = glassShape(capsule, cornerRadius)
     GlassSurface(
         modifier = modifier,
         shape = shape,
@@ -497,8 +516,18 @@ fun GlassTile(
  * 而它们的圆角半径在一次主题里根本不会变。
  */
 @Composable
-fun glassPanelShape(capsule: Boolean = false): Shape {
-    val corner = LocalGlassDimensions.current.regularCornerRadius
+fun glassPanelShape(capsule: Boolean = false): Shape = glassShape(capsule, null)
+
+/**
+ * 形状取值的唯一实现（`glassPanelShape` 与带显式圆角的 [GlassPanel] 共用）。
+ *
+ * `LocalGlassDimensions` 的读取必须留在函数体里（不能写成默认参数：
+ * 默认参数不可调用 composable）。
+ */
+@Composable
+private fun glassShape(capsule: Boolean, cornerRadius: Dp?): Shape {
+    val base = LocalGlassDimensions.current.regularCornerRadius
+    val corner = cornerRadius ?: base
     return remember(capsule, corner) {
         if (capsule) Capsule() else ContinuousRoundedRectangle(corner)
     }
