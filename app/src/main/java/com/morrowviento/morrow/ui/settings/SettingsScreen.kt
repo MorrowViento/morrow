@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -191,13 +192,23 @@ fun SettingsScreen(
                             }
                             Divider()
                             SettingBlock(
-                                label = "主题色",
-                                hint = "底栏选中图标、分段控件、标签页、滚轮、弹层主按钮一起换色",
+                                label = "配色方案",
+                                hint = "背景、卡片、底栏、按钮一起换色，不只换图标",
                             ) {
                                 AccentSwatches(
                                     selected = state.settings.accent,
                                     isDark = LocalGlassDark.current,
                                     onSelected = actions.setAccent,
+                                )
+                                Spacer(Modifier.height(9.dp))
+                                Text(
+                                    // 让「点了会变什么」写清楚：这一项以前只作用于按钮图标，
+                                    // 用户点完发现整页没变，会以为没生效。
+                                    text = state.settings.accent.label,
+                                    style = TextStyle(
+                                        fontSize = 12.sp,
+                                        color = glassTextSecondary(),
+                                    ),
                                 )
                             }
                             Divider()
@@ -480,12 +491,16 @@ private fun SettingBlock(
 }
 
 /**
- * 主题色色板。
+ * 配色方案色板。
  *
- * 一排实心圆点，选中的那圈加一道描边——不用「打勾」：色板上一眼要读的是**颜色本身**，
+ * 每个圆点是这套配色的**缩影**：中心是强调色，边缘往它自己的壁纸色斑上过渡。
+ * 上一版是纯实心色点，只能看出「按钮会变蓝还是变紫」，看不出整页会变成什么样；
+ * 加上壁纸色之后，七套方案的冷暖差异一眼能分出来。
+ *
+ * 选中的那圈加一道描边——不用「打勾」：色板上一眼要读的是**颜色本身**，
  * 勾号会把中间那块色盖掉一小半。
  *
- * 点一下就写设置，没有「确定」：主题色是即时可见的（底栏那格图标立刻换色），
+ * 点一下就写设置，没有「确定」：换色是即时可见的（整页背景立刻变），
  * 多一步确认反而让用户先离开设置页才能看到效果。
  */
 @Composable
@@ -502,7 +517,9 @@ private fun AccentSwatches(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AccentColor.entries.forEach { color ->
-            val filled = Color(color.argb(isDark))
+            val accent = Color(color.argb(isDark))
+            // 用「冷」那团色斑做边缘：它在每套方案里都是最接近背景基调的一块
+            val rim = Color(color.blobs(isDark)[1])
             val active = color == selected
             Canvas(
                 Modifier
@@ -519,7 +536,15 @@ private fun AccentSwatches(
                         style = Stroke(width = stroke),
                     )
                 }
-                drawCircle(color = filled, radius = size.minDimension * 0.32f)
+                val center = Offset(size.width / 2f, size.height / 2f)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(accent, accent, rim),
+                        center = center,
+                        radius = size.minDimension * 0.34f,
+                    ),
+                    radius = size.minDimension * 0.34f,
+                )
             }
         }
     }

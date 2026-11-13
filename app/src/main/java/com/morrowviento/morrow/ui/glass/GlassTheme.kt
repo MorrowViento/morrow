@@ -83,6 +83,15 @@ val LocalReduceTransparency = staticCompositionLocalOf { false }
 val LocalGlassFrost = staticCompositionLocalOf { GLASS_FROST_DEFAULT }
 
 /**
+ * 当前主题配色方案。
+ *
+ * 与强调色分开暴露：强调色只是一个 ARGB（[glassAccent]），而整套配色还带着壁纸的
+ * 四团色斑。页面底色（[GlassBackdrop]）必须读这里，否则会出现「图标换了色、
+ * 整页还是原来的象牙白」——那正是「主题色只改了按钮图标」的观感来源。
+ */
+val LocalAccentPalette = staticCompositionLocalOf { AccentColor.DEFAULT }
+
+/**
  * 厚度 → 模糊半径（0.5dp → 25.5dp）。
  *
  * 这是库真正开放给调用方的连续光学参数（`GlassSurface(frostRadius = ...)` →
@@ -160,6 +169,7 @@ fun GlassTheme(
         LocalReduceMotion provides reduceMotion,
         LocalReduceTransparency provides reduceTransparency,
         LocalGlassFrost provides frost.coerceIn(0f, 1f),
+        LocalAccentPalette provides accent,
     ) {
         GlasmioTheme(
             isDark = darkTheme,
@@ -225,10 +235,14 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     val dark = LocalGlassDark.current
     val base = colors.groupedBackground
 
-    val warm = if (dark) Color(0xFF4E3820) else Color(0xFFF7DDB8)
-    val cool = if (dark) Color(0xFF25333F) else Color(0xFFAFC0D6)
-    val sky = if (dark) Color(0xFF18293C) else Color(0xFF9FB9D8)
-    val deep = if (dark) Color(0xFF28323E) else Color(0xFF7E8B9E)
+    // 四团色斑来自当前配色方案（见 `AccentColor.blobs`）。这是「换主题整页换色」的
+    // 落点：卡片、底栏、弹层都是玻璃，它们透出来的正是这几团色；只换强调色的话，
+    // 屏幕上只有图标与按钮变，底子还是同一片象牙白。
+    val blobs = LocalAccentPalette.current.blobs(dark)
+    val warm = Color(blobs[0])
+    val cool = Color(blobs[1])
+    val sky = Color(blobs[2])
+    val deep = Color(blobs[3])
     val sheen = Color.White.copy(alpha = if (dark) 0.20f else 0.60f)
     // 浅色下折痕的暗面用中性冷灰：白色在浅底上不可能更亮
     val shade = (if (dark) Color.Black else Color(0xFF3F4956))

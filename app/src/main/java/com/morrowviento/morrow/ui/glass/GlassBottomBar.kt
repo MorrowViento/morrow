@@ -124,30 +124,32 @@ private val BarGap = 12.dp
  * 之前轮廓走 `liquidContactShape`、光学场走 union shape，两套几何在贴合段各画各的，
  * 屏幕上就是「融合处一条分明的界线」，甚至会把胶囊自己的右端圆弧露在圆球里。
  *
- * 库默认 6dp，这里用到 10dp：贴合段会展开成一段圆润的腰，而不是两块玻璃硬碰。
- *
- * 融合半径 k 由**贴住之后的弹簧**驱动（0 → 满值连续长大），不跟着拖动位移逐帧变：
- * 库的 `BottomControlContact.createSurface()` 也是 `nativeSmoothness * mergedProgress`。
- * 常态 k = 0 → 并集退化成两条独立轮廓，＋ 仍是自己一颗玻璃；贴住之后颈部连续变粗。
+ * 库默认 6dp，这里用到 16dp：压到底时球与胶囊之间的腰要能长成一段明显的弧，
+ * 而不是两块玻璃碰在一起。上一版只给 10dp、而且拖动只有 12dp 行程，真机上
+ * 几乎看不出融合——用户反馈的「幅度太小，几乎融合不到一起」。
  */
-private val UnionSmoothness = 10.dp
+private val UnionSmoothness = 16.dp
 
 /**
- * 圆球最多能往左 / 右拖多远。
+ * 融合玻璃的入场距离。
  *
- * 往左的上限正好是**贴上胶囊**（缝 = 0），不再压进去：融合由 k 单独长大，
- * 不需要靠拖动去凑颈部。这样圆球在拖动全程都只是「一颗在滑动的独立玻璃」，
- * 位置由布局位移表达——与 alpha23 那版一样跟手，不依赖随帧变化的 Shape。
+ * 球缘离胶囊还有这么远时就换成并集玻璃，此时融合半径恰好是 0——并集的零等值线
+ * 就是两条独立轮廓，与「两块玻璃并排」逐像素重合，所以换渲染树这一帧看不出跳变。
+ * 之后越拖越近、越拖越深，颈部由位移连续变粗（不再是计时弹簧）。
  */
+private val SnapZone = 6.dp
+
+/**
+ * 圆球能压进胶囊多深。
+ *
+ * 这是「拖得动」的关键：上一版左拖上限正好是贴上（12dp 的常态缝），手指稍微一动
+ * 就到头，屏幕上只看到球滑了 12dp 就回弹。现在允许球压进胶囊 20dp，
+ * 整段行程 = 常态缝 + 20dp ≈ 32dp，融合的整个过程都在手指底下一段一段长出来。
+ */
+private val BallDragIn = 20.dp
+
+/** 圆球能往右拖多远（松手回弹）。 */
 private val BallDragRight = 8.dp
-
-/**
- * 判「已贴住」的容差（px）。
- *
- * 位移量化到整像素，贴住时 `gap` 可能落在 0~1px 之间；留半个像素的容差，
- * 否则用户拖到头却可能差 1px 没触发融合，看着像「吸不上」。
- */
-private const val ContactTolerancePx = 0.6f
 
 /**
  * 按住时圆球长大的量。
@@ -415,9 +417,11 @@ fun GlassBottomNavigation(
         val slotPx = with(density) { SlotHeight.toPx() }
         val gapPx = with(density) { BarGap.toPx() }
         val smoothnessPx = with(density) { UnionSmoothness.toPx() }
+        val snapZonePx = with(density) { SnapZone.toPx() }
         val insetPx = with(density) { IndicatorInsetX.toPx() }
-        // 往左的极限 = 常态缝：正好贴上胶囊，不再压进去。
-        val leftLimitPx = gapPx
+        // 往左的极限 = 常态缝 + 可压进胶囊的深度。
+        val dragInPx = with(density) { BallDragIn.toPx() }
+        val leftLimitPx = gapPx + dragInPx
         val rightLimitPx = with(density) { BallDragRight.toPx() }
         val growthPx = with(density) { BallPressGrowth.toPx() }
 
@@ -434,17 +438,16 @@ fun GlassBottomNavigation(
         val pressStep by remember { derivedStateOf { (ballPress * 3).roundToInt() / 3f } }
         val grownBallPx = ballPx + growthPx * pressStep
 
-        // 是否「已经贴住胶囊并且还按着」= 融合态。
+        // 是否已经进入融合区 = 球缘距胶囊小于 [SnapZone]。
         //
         // 必须走 `derivedStateOf` 并且只产出**布尔**：圆球位移每帧都在变，直接读它会让
-        // 整条栏（三格图标、透镜、录制层）跟着逐帧重组。这里只关心「有没有贴住」这一个
-        // 翻转，一次拖动最多触发两次重组。
-        val fused by remember(leftLimitPx) {
-            derivedStateOf {
-                ballDragging &&
-                    leftLimitPx > 0f &&
-                    ballOffset.floatValue <= -leftLimitPx + ContactTolerancePx
-            }
+        // 整条栏（三格图标、透镜、录制层）跟着逐帧重组。这里只关心「有没有进融合区」这
+        // 一个翻转，一次拖动最多触发两次重组。
+        //
+        // 判定看的是**距离**而不是「正在拖」：松手回弹时球从胶囊里退出来，经过 SnapZone
+        // 那一刻才切回两块玻璃，而那时融合半径本来就是 0，切换看不出痕迹。
+        val fused by remember(gapPx, snapZonePx) {
+            derivedStateOf { ballOffset.floatValue < snapZonePx - gapPx }
         }
 
         // 0) 抬起层：**不可见**的一份录制，只给透镜当 liftedContent。
@@ -505,9 +508,13 @@ fun GlassBottomNavigation(
                     pillPx = pillPx,
                     barPx = barPx,
                     slotPx = slotPx,
+                    restGapPx = gapPx,
+                    snapZonePx = snapZonePx,
+                    dragInPx = dragInPx,
                     ballPx = ballPx,
                     grownBallPx = grownBallPx,
                     smoothnessPx = smoothnessPx,
+                    offset = { ballOffset.floatValue },
                     backdrop = backdrop,
                 ) {
                     SelectionBlock(
@@ -707,15 +714,17 @@ fun GlassBottomNavigation(
  * 这一层（布局位移）在动，圆球那半边（绘制阶段的几何）看起来不动了——位移一旦离开
  * 布局层、交给逐帧重建的形状，就跟不上手。
  *
- * 现在圆球在分离态是**它自己的一块玻璃**（位移在布局层，必然跟手）；只有真的贴上之后
- * 才换成这块并集玻璃。切换发生在 `gap = 0`、融合半径 k 也从 0 起步，这一刻并集的
- * 零等值线与「两块玻璃贴在一起」完全重合——渲染树换了，画面没换。
+ * 现在圆球在分离态是**它自己的一块玻璃**（位移在布局层，必然跟手）；进入融合区之后
+ * 才换成这块并集玻璃。切换发生在 `gap = SnapZone`、融合半径也是 0 的那一刻，并集的
+ * 零等值线与「两块玻璃并排」完全重合——渲染树换了，画面没换。
  *
  * ## 颈部怎么长出来
  *
- * 贴住之后 k 由弹簧从 0 长到 [UnionSmoothness]（库的 `BottomControlContact` 也是
- * `nativeSmoothness * mergedProgress`）。圆球这时已经停在贴合位置不再移动，所以整段
- * 变形只有 k 一个自由度，不会出现「形状跟不上手指」。
+ * 圆球在融合态里**继续跟手**：球心仍然由 `pillPx + 缝 + 半径 + 位移` 算出来，与分离态
+ * 同一条公式，所以不会出现「球停住、加号继续走」的错位。
+ *
+ * 颈部的粗细由**手指位置**连续决定（不是计时弹簧）：压得越深，k 越大；松手回弹时
+ * k 跟着退回去，融合自然收拢成两颗，不需要额外的状态机。
  *
  * k = 0 时 smooth-min 退化成并集，零等值线是两条独立闭合轮廓，走纯 Compose Path；
  * 真的连通之后才生成 SDF 折线（[MergedCapsuleUnion]），一次融合只算一串。
@@ -725,28 +734,34 @@ private fun BottomBarUnionGlass(
     pillPx: Float,
     barPx: Float,
     slotPx: Float,
+    restGapPx: Float,
+    snapZonePx: Float,
+    dragInPx: Float,
     ballPx: Float,
     grownBallPx: Float,
     smoothnessPx: Float,
+    offset: () -> Float,
     backdrop: GlassContentBackdrop?,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    // 0 → 1 的融合进度。首帧就是 0（`animateFloatAsState` 会直接落到目标值，不会动画），
-    // 所以用 `Animatable` + `LaunchedEffect` 显式跑一段。
-    val merge = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        merge.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 240f))
-    }
-    val progress = merge.value
-    // 量化到 1/48：k 每帧都变一点点会让材质重建，0.2dp 的台阶看不出来。
-    val k = smoothnessPx * ((progress * 48f).roundToInt() / 48f)
-
-    // 贴合位置：圆球左缘正好落在胶囊右端。
+    // 球心与分离态**同一条公式**：常态 = 胶囊右端 + 缝 + 半径，再叠上拖动位移。
+    // 这是「球继续跟手」的全部秘密——不另算一个贴合位置，就不会出现球停在原地、
+    // 加号继续往前走。
     //
-    // 按**圆心**对齐「＋」那一层：那边是 `CenterEnd` 定位、扩张用 `graphicsLayer` 绕中心
-    // 缩放，按下长大时左右各涨 growth/2。这里同样以 `pillPx + ballPx / 2` 为圆心，
-    // 长大时左缘会探进胶囊 growth/2 —— 与缩放那一侧完全一致，不会错开半个增量。
-    val ballLeft = pillPx + ballPx / 2f - grownBallPx / 2f
+    // 量化到整 2px：拖动时每帧都会换一个 Shape，融合态还要按新几何重算一遍 SDF 折线。
+    // 2px 台阶在 3x 屏上约 0.67dp，人眼在「球已经压进胶囊」这段里看不出来，
+    // 而重建次数直接砍半——这是融合态不掉帧的关键。字形那一层（第 4 步）不量化，
+    // 仍然逐像素跟手，所以手指不会觉得有台阶。
+    val ballCenter = ((pillPx + restGapPx + ballPx / 2f + offset()) / 2f).roundToInt() * 2f
+    val ballLeft = ballCenter - grownBallPx / 2f
+    val gap = ballLeft - pillPx
+
+    // 融合进度：入场距离处为 0，压到最深处为 1。
+    // 再走一道平方缓出——刚碰到时颈部长得慢（还看得出是两颗），压进去之后迅速合拢。
+    val raw = ((snapZonePx - gap) / (snapZonePx + dragInPx)).coerceIn(0f, 1f)
+    val eased = 1f - (1f - raw) * (1f - raw)
+    // 量化到 1/32：k 每帧变一点点也会让材质重建，0.5dp 的台阶看不出来。
+    val k = smoothnessPx * ((eased * 32f).roundToInt() / 32f)
     val capsuleRect = Rect(0f, (slotPx - barPx) / 2f, pillPx, (slotPx + barPx) / 2f)
     val ballRect = Rect(
         ballLeft,

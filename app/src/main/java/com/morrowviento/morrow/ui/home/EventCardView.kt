@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.event.EventCardModel
 import com.morrowviento.morrow.ui.glass.GlassPanel
+import com.morrowviento.morrow.ui.glass.LocalAccentPalette
+import com.morrowviento.morrow.ui.glass.LocalGlassDark
 import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -55,8 +57,18 @@ fun EventCardView(
 ) {
     val primary = glassTextPrimary().dimBy(dim)
     val secondary = glassTextSecondary().dimBy(dim)
-    // 与背景同色的薄纱：盖在玻璃内侧，把整块面板的对比度压下去（深色下是 #1C1C1E）
-    val scrim = if (dim >= 1f) null else glassColors().elevatedBackground.copy(alpha = (1f - dim) * 0.55f)
+    // 主题色薄纱：压得很淡（浅色 5% / 深色 9%），只让卡片本身带一点当前配色，
+    // 不至于把玻璃透出来的壁纸盖成色块。
+    val palette = LocalAccentPalette.current
+    val dark = LocalGlassDark.current
+    val accentTint = Color(palette.argb(dark))
+        .copy(alpha = if (dark) 0.09f else 0.05f)
+    // 与背景同色的薄纱：已完成的事件再叠一层，把整块面板的对比度压下去
+    val scrim = if (dim >= 1f) {
+        accentTint
+    } else {
+        glassColors().elevatedBackground.copy(alpha = (1f - dim) * 0.55f)
+    }
 
     GlassPanel(
         modifier = modifier.fillMaxWidth(),

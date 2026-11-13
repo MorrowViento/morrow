@@ -102,17 +102,63 @@ enum class AccentColor(
     val light: Long,
     /** 深色主题下的强调色（同色系提亮一档）。 */
     val dark: Long,
+    /**
+     * 壁纸的四团色斑（暖 / 冷 / 天青 / 深），顺序与 `GlassBackdrop` 一一对应。
+     *
+     * 这是「整体换色」的真正来源：卡片、底栏、弹层全是玻璃，它们透出来的就是这四团色。
+     * 只换强调色的话，屏幕上只有图标和按钮变色，整页底色仍是同一片象牙白 + 钢蓝，
+     * 看起来就像「换了个开关颜色」。
+     */
+    val blobsLight: LongArray,
+    val blobsDark: LongArray,
 ) {
-    DEFAULT("azure", "海蓝", 0xFF0088FF, 0xFF0091FF),
-    INDIGO("indigo", "靛蓝", 0xFF5856D6, 0xFF5E5CE6),
-    VIOLET("violet", "紫罗兰", 0xFFAF52DE, 0xFFBF5AF2),
-    ROSE("rose", "玫红", 0xFFFF2D55, 0xFFFF375F),
-    AMBER("amber", "暖橙", 0xFFFF9500, 0xFFFF9F0A),
-    JADE("jade", "青竹", 0xFF34C759, 0xFF30D158),
-    GRAPHITE("graphite", "石墨", 0xFF636366, 0xFFAEAEB2);
+    DEFAULT(
+        "azure", "海蓝", 0xFF0088FF, 0xFF0091FF,
+        longArrayOf(0xFFF7DDB8, 0xFFAFC0D6, 0xFF9FB9D8, 0xFF7E8B9E),
+        longArrayOf(0xFF4E3820, 0xFF25333F, 0xFF18293C, 0xFF28323E),
+    ),
+    INDIGO(
+        "indigo", "靛蓝", 0xFF5856D6, 0xFF5E5CE6,
+        // 淡紫 + 钢蓝 + 薰衣草 + 石板：冷静、偏书卷气
+        longArrayOf(0xFFE9E3F8, 0xFFC2CBE9, 0xFFB6AFDF, 0xFF8D89A7),
+        longArrayOf(0xFF3A3050, 0xFF232A3F, 0xFF201C3A, 0xFF2A2733),
+    ),
+    VIOLET(
+        "violet", "紫罗兰", 0xFFAF52DE, 0xFFBF5AF2,
+        // 藕粉 + 蓝紫 + 淡紫 + 灰紫：比靛蓝更暖、更甜
+        longArrayOf(0xFFF4DCF2, 0xFFD9C6EE, 0xFFC8B5E7, 0xFF9A87AE),
+        longArrayOf(0xFF43284A, 0xFF2C2440, 0xFF2A1D3D, 0xFF33293A),
+    ),
+    ROSE(
+        "rose", "玫瑰", 0xFFFF2D55, 0xFFFF375F,
+        // 蜜桃 + 玫瑰粉 + 藕荷 + 暖灰：暖调，卡片像糖霜
+        longArrayOf(0xFFFBDED7, 0xFFF0C1CB, 0xFFE7B5C3, 0xFF9E8590),
+        longArrayOf(0xFF4A2A2C, 0xFF35232B, 0xFF331F2A, 0xFF382A30),
+    ),
+    AMBER(
+        "amber", "暖橙", 0xFFFF9500, 0xFFFF9F0A,
+        // 奶油 + 杏橙 + 沙金 + 暖褐：黄昏 / 落日
+        longArrayOf(0xFFFBE0B2, 0xFFF0CFA6, 0xFFE8C79A, 0xFF9C8B74),
+        longArrayOf(0xFF4E3A1C, 0xFF3A2E1E, 0xFF34281A, 0xFF3A3128),
+    ),
+    JADE(
+        "jade", "青竹", 0xFF34C759, 0xFF30D158,
+        // 米白 + 薄荷 + 湖绿 + 苔藓：清晨的植物园
+        longArrayOf(0xFFDCEDD8, 0xFFC0DCC8, 0xFFA9D3C4, 0xFF7E9689),
+        longArrayOf(0xFF24382A, 0xFF1E2E2C, 0xFF17302E, 0xFF22302C),
+    ),
+    GRAPHITE(
+        "graphite", "石墨", 0xFF636366, 0xFFAEAEB2,
+        // 中性四团，几乎无彩：给「不想要颜色」的人一个安静的底
+        longArrayOf(0xFFE4E4E6, 0xFFD2D4D8, 0xFFC4C7CD, 0xFF8C8F96),
+        longArrayOf(0xFF2E2E30, 0xFF26282C, 0xFF212326, 0xFF2A2C30),
+    );
 
     /** 取当前明暗下的 ARGB。 */
     fun argb(isDark: Boolean): Long = if (isDark) dark else light
+
+    /** 壁纸四团色斑（已按明暗选好）。 */
+    fun blobs(isDark: Boolean): LongArray = if (isDark) blobsDark else blobsLight
 
     companion object {
         /** 认不出的值（旧备份、被手工改过的偏好）一律回落默认蓝。 */

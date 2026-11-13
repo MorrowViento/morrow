@@ -59,4 +59,52 @@ class AccentColorTest {
         assertEquals(color.light, color.argb(isDark = false))
         assertEquals(color.dark, color.argb(isDark = true))
     }
+
+    @Test
+    fun `每套配色都有四团壁纸色斑`() {
+        AccentColor.entries.forEach { color ->
+            // 顺序是「暖 / 冷 / 天青 / 深」，GlassBackdrop 按下标取；
+            // 少一个就会越界，多一个则永远用不到。
+            assertEquals("${color.label} 浅色色斑数量", 4, color.blobsLight.size)
+            assertEquals("${color.label} 深色色斑数量", 4, color.blobsDark.size)
+        }
+    }
+
+    @Test
+    fun `壁纸色斑都是不透明 ARGB`() {
+        AccentColor.entries.forEach { color ->
+            (color.blobsLight.toList() + color.blobsDark.toList()).forEach { argb ->
+                assertTrue("${color.label} 的色斑越界: $argb", argb in 0xFF000000..0xFFFFFFFF)
+            }
+        }
+    }
+
+    @Test
+    fun `blobs 按明暗取对应的那一组`() {
+        val color = AccentColor.JADE
+        assertTrue(color.blobs(isDark = false).contentEquals(color.blobsLight))
+        assertTrue(color.blobs(isDark = true).contentEquals(color.blobsDark))
+        // 深色那组必须整组更暗，否则夜里会把页面刷亮
+        color.blobsLight.indices.forEach { i ->
+            assertTrue(
+                "${color.label} 第 $i 团色斑的深色版本没有变暗",
+                color.blobsDark[i] < color.blobsLight[i],
+            )
+        }
+    }
+
+    @Test
+    fun `默认配色的色斑保持原有那幅丝缎壁纸`() {
+        // 老用户升级后背景必须逐像素不变——和强调色的默认值同理。
+        assertTrue(
+            AccentColor.DEFAULT.blobsLight.contentEquals(
+                longArrayOf(0xFFF7DDB8, 0xFFAFC0D6, 0xFF9FB9D8, 0xFF7E8B9E),
+            ),
+        )
+        assertTrue(
+            AccentColor.DEFAULT.blobsDark.contentEquals(
+                longArrayOf(0xFF4E3820, 0xFF25333F, 0xFF18293C, 0xFF28323E),
+            ),
+        )
+    }
 }
