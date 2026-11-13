@@ -1,6 +1,7 @@
 package com.morrowviento.morrow.widget
 
 import android.graphics.Bitmap
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -29,7 +30,9 @@ import com.morrowviento.morrow.data.settings.AccentColor
  * |---|---|
  * | `GlassBackdrop` 的四团径向色斑 | 同 `AccentColor.blobs(dark)`，同相对位置 |
  * | 斜向光带（布料折了一下） | 一条对角 LinearGradient |
- * | 玻璃边缘高光 + 内阴影 | 顶部 1.5dp 白渐变 + 一圈描边 |
+ * | 玻璃上沿收光 | 顶部 34% 高度的白色柔光 + 1.5dp 发丝高光 |
+ * | 玻璃有厚度 | 底部 24% 的暗渐变（内阴影） |
+ * | 边缘折射出一圈亮 | 沿圆角画模糊描边（只留内侧那半，见 [render] 第 6 步） |
  * | 卡片圆角 22dp | 同 22dp，位图外圈透明 |
  *
  * 位图按小部件实际尺寸生成（见 [render]），圆角不会被拉伸成椭圆。
@@ -73,26 +76,29 @@ internal object WidgetAppearance {
         canvas.save()
         canvas.clipPath(clip)
 
-        // 1) 底色。玻璃档用中性底（深色 #1A1A20 / 浅色 #F7F6FC），
-        //    主题色档把强调色压到很暗 / 提到很浅，好让上面的白字或黑字站得住。
+        // 1) 底色。上一版压得太深（深色 #1A1A20、主题色档压到只剩 38% 强调色），
+        //    在桌面上看着像一块黑色板子——玻璃本身是「浅而透」的，底色一黑，
+        //    上面的色斑与高光就全浮不出来。这里整体抬亮一档。
         val accentArgb = accent.argb(dark).toInt()
         val base = when {
-            vivid && dark -> blend(accentArgb, BLACK, 0.62f)
-            vivid -> blend(accentArgb, WHITE, 0.52f)
-            dark -> rgb(26, 26, 32)
-            else -> rgb(247, 246, 252)
+            vivid && dark -> blend(accentArgb, BLACK, 0.40f)
+            vivid -> blend(accentArgb, WHITE, 0.74f)
+            dark -> rgb(42, 42, 52)
+            else -> rgb(250, 250, 253)
         }
         canvas.drawColor(base)
 
-        // 2) 四团色斑。半径给到长边的 0.62，与小部件尺寸无关——色块够大才像「一片光」，
-        //    太小会变成四个圆点。
+        // 2) 四团色斑。半径给到长边的 0.70，几团光连成一片才像「被模糊过的壁纸」，
+        //    小一点就退化成四个彩色圆点。深色下先把色斑往白里提一档：
+        //    暗色斑铺在暗底上等于没有颜色。
         val blobs = accent.blobs(dark)
-        val blobRadius = maxOf(w, h) * 0.62f
-        val blobAlpha = if (dark) 190 else 225
+        val blobRadius = maxOf(w, h) * 0.70f
+        val blobAlpha = if (dark) 205 else 215
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         BlobCenters.forEachIndexed { index, (fx, fy) ->
             val raw = blobs[index].toInt()
-            val tint = if (vivid) blend(accentArgb, raw, 0.40f) else raw
+            val lifted = if (dark) blend(raw, WHITE, 0.24f) else raw
+            val tint = if (vivid) blend(accentArgb, lifted, 0.40f) else lifted
             paint.shader = RadialGradient(
                 w * fx,
                 h * fy,
@@ -107,7 +113,7 @@ internal object WidgetAppearance {
 
         // 3) 斜向光带：一条亮面接一条暗面，位置与应用内那条折痕一致（斜 18°，
         //    屏幕上大约落在 46% 高度处）。小部件矮，所以直接用对角渐变近似。
-        val sheen = if (dark) 0.14f else 0.42f
+        val sheen = if (dark) 0.17f else 0.46f
         val shade = if (dark) 0.16f else 0.10f
         paint.shader = LinearGradient(
             0f, 0f, w.toFloat(), h.toFloat(),
@@ -123,24 +129,67 @@ internal object WidgetAppearance {
         canvas.drawRect(rect, paint)
         paint.shader = null
 
-        // 4) 顶部内高光：玻璃上沿被光擦亮的那一条，1.5dp 就够，再宽就像贴了张白纸。
+        // 4) 顶部柔光 + 底部内阴影。
+        //
+        //    这两条是「玻璃有厚度」最省事也最有效的表达：上沿把环境光收进来，
+        //    下沿压一点暗，中间就鼓起来了。只画一条 1.5dp 的发丝线是不够的——
+        //    远看那只是一个白边，读不出体积。
+        val topGlow = h * 0.34f
+        paint.shader = LinearGradient(
+            0f, 0f, 0f, topGlow,
+            withAlpha(WHITE, if (dark) 50 else 100),
+            withAlpha(WHITE, 0),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawRect(0f, 0f, w.toFloat(), topGlow, paint)
+        paint.shader = null
+
+        val bottomShade = h * 0.24f
+        paint.shader = LinearGradient(
+            0f, h.toFloat(), 0f, h - bottomShade,
+            withAlpha(BLACK, if (dark) 70 else 26),
+            withAlpha(BLACK, 0),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawRect(0f, h - bottomShade, w.toFloat(), h.toFloat(), paint)
+        paint.shader = null
+
+        // 5) 顶部发丝高光：玻璃上沿被光擦亮的那一条，1.5dp 就够，再宽就像贴了张白纸。
         val highlight = 1.5f * density
         paint.shader = LinearGradient(
             0f, 0f, 0f, highlight,
-            withAlpha(WHITE, if (dark) 70 else 150),
+            withAlpha(WHITE, if (dark) 90 else 180),
             withAlpha(WHITE, 0),
             Shader.TileMode.CLAMP,
         )
         canvas.drawRect(0f, 0f, w.toFloat(), highlight, paint)
         paint.shader = null
 
+        // 6) 内发光：沿圆角画一圈**模糊的**亮边，一半被裁剪掉，只剩内侧那圈柔光。
+        //    这是玻璃「边缘在折射光」的替身——静态位图做不了真折射，但一圈柔光
+        //    足以让边缘看起来是有厚度的弧面，而不是一条 1px 的线。
+        val glowWidth = 3f * density
+        val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = glowWidth
+            color = if (dark) withAlpha(WHITE, 64) else withAlpha(WHITE, 150)
+            maskFilter = BlurMaskFilter(glowWidth * 0.9f, BlurMaskFilter.Blur.NORMAL)
+        }
+        val glowInset = glowWidth / 2f
+        canvas.drawRoundRect(
+            RectF(glowInset, glowInset, w - glowInset, h - glowInset),
+            radius,
+            radius,
+            glow,
+        )
+
         canvas.restore()
 
-        // 5) 一圈描边：浅色壁纸上没有它，小部件会与桌面糊在一起。
+        // 7) 一圈描边：浅色壁纸上没有它，小部件会与桌面糊在一起。
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = 1f * density
-            color = if (dark) withAlpha(WHITE, 40) else withAlpha(BLACK, 20)
+            color = if (dark) withAlpha(WHITE, 56) else withAlpha(BLACK, 30)
         }
         val inset = stroke.strokeWidth / 2f
         canvas.drawRoundRect(

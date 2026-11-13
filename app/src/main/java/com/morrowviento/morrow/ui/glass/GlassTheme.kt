@@ -15,13 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
@@ -43,6 +41,7 @@ import io.github.neoruaa.glasmio.glass.render.backdrops.LayerBackdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.rememberCombinedBackdrop
 import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import io.github.neoruaa.glasmio.glass.trackBackdropPosition
+import kotlin.math.roundToInt
 
 /**
  * Glasmio API 隔离层（重构计划决策 D3）。
@@ -227,7 +226,9 @@ fun GlassTheme(
  * 渐变一律淡到「同色 alpha=0」而不是 `Color.Transparent`：Compose 的渐变按非预乘
  * 插值，淡向黑色透明会在色斑边缘留一圈脏灰。
  *
- * 绘制走 `drawWithCache`：brush 只在尺寸变化时重建，滚动时零分配。
+ * 绘制走 `drawWithCache` + **预渲染**：整幅图按屏幕尺寸与配色只画一次（见
+ * `GlassWallpaper`），之后每帧只是一次 `drawImage`。壁纸是静态的，没有任何理由
+ * 每帧重跑六层渐变——那正是列表滚动与页面切换时卡顿的填充率来源。
  */
 @Composable
 fun GlassBackdrop(modifier: Modifier = Modifier) {
@@ -239,82 +240,29 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     // 落点：卡片、底栏、弹层都是玻璃，它们透出来的正是这几团色；只换强调色的话，
     // 屏幕上只有图标与按钮变，底子还是同一片象牙白。
     val blobs = LocalAccentPalette.current.blobs(dark)
-    val warm = Color(blobs[0])
-    val cool = Color(blobs[1])
-    val sky = Color(blobs[2])
-    val deep = Color(blobs[3])
-    val sheen = Color.White.copy(alpha = if (dark) 0.20f else 0.60f)
-    // 浅色下折痕的暗面用中性冷灰：白色在浅底上不可能更亮
-    val shade = (if (dark) Color.Black else Color(0xFF3F4956))
-        .copy(alpha = if (dark) 0.70f else 0.35f)
-    // 发丝线在浅色下走暗色，白线在 #F2F2F7 上等于隐形
-    val edge = if (dark) sheen else shade.copy(alpha = 0.30f)
 
     Box(
         modifier
             .fillMaxSize()
             .drawWithCache {
-                val w = size.width
-                val h = size.height
-                // 定长数组而不是 listOf：绘制时按下标遍历，不产生迭代器对象
-                val blobs = arrayOf(
-                    Brush.radialGradient(
-                        listOf(warm, warm.copy(alpha = 0f)),
-                        center = Offset(w * 0.08f, h * 0.05f),
-                        radius = h * 0.55f,
-                    ),
-                    Brush.radialGradient(
-                        listOf(cool, cool.copy(alpha = 0f)),
-                        center = Offset(w * 0.98f, h * 0.30f),
-                        radius = h * 0.62f,
-                    ),
-                    Brush.radialGradient(
-                        listOf(sky, sky.copy(alpha = 0f)),
-                        center = Offset(w * 0.18f, h * 0.90f),
-                        radius = h * 0.65f,
-                    ),
-                    Brush.radialGradient(
-                        listOf(deep, deep.copy(alpha = 0f)),
-                        center = Offset(w * 0.92f, h * 1.00f),
-                        radius = h * 0.55f,
-                    ),
+                // 整幅壁纸**预渲染成一张位图**，之后每帧只贴一次图。
+                //
+                // 之前这里在 `onDrawBehind` 里每帧重跑 4 个径向渐变 + 2 个铺在 3 倍面积
+                // 矩形上的渐变（还带 18° 旋转），玻璃面板再从这层采样一遍做模糊——同一批
+                // 像素被算两遍，滚动、切页、拖底栏时全压在填充率上。壁纸是静态的，
+                // 按屏幕尺寸与配色渲染一次就够（详见 `GlassWallpaper`）。
+                val image = GlassWallpaper.image(
+                    widthPx = size.width.roundToInt(),
+                    heightPx = size.height.roundToInt(),
+                    base = base,
+                    dark = dark,
+                    blobs = blobs,
                 )
-                // 光带画在「3 倍屏幕大小、以屏幕为中心」的一块矩形上（旋转后仍能盖满四角），
-                // 所以屏幕上的 0..1 只落在这块矩形的中间三分之一：
-                // bandY(p) = (p + 1) / 3。写死 0..1 的话光带会整条跑到屏幕外。
-                fun bandY(p: Float): Float = (p + 1f) / 3f
-                // 宽光带：一条柔和的亮面 + 一条相邻的暗面，形成「布料折了一下」的体积
-                val broad = Brush.verticalGradient(
-                    bandY(0.00f) to sheen.copy(alpha = 0f),
-                    bandY(0.26f) to sheen.copy(alpha = 0f),
-                    bandY(0.33f) to sheen.copy(alpha = sheen.alpha * 0.62f),
-                    bandY(0.40f) to sheen.copy(alpha = 0f),
-                    bandY(0.56f) to shade.copy(alpha = shade.alpha * 0.75f),
-                    bandY(0.63f) to shade.copy(alpha = 0f),
-                    bandY(0.80f) to sheen.copy(alpha = sheen.alpha * 0.30f),
-                    bandY(0.88f) to sheen.copy(alpha = 0f),
-                )
-                // 发丝高光：屏幕上只有一两个像素宽，模糊一开就整条化掉——
-                // 「通透」和「厚重」的差别，一半是靠它被看清 / 被糊掉
-                val hairline = Brush.verticalGradient(
-                    bandY(0.000f) to edge.copy(alpha = 0f),
-                    bandY(0.462f) to edge.copy(alpha = 0f),
-                    bandY(0.4655f) to edge,
-                    bandY(0.469f) to edge.copy(alpha = 0f),
-                    bandY(0.700f) to edge.copy(alpha = 0f),
-                    bandY(0.7030f) to edge.copy(alpha = edge.alpha * 0.8f),
-                    bandY(0.7060f) to edge.copy(alpha = 0f),
-                )
-                val bandLeft = Offset(-w, -h)
-                val bandSize = Size(w * 3f, h * 3f)
+                // 位图按整像素生成，而 `size` 常带小数（dp→px 的余数）：
+                // 贴图时显式给 dstSize，否则右 / 下边缘会留一条 1px 没盖住的缝。
+                val dst = IntSize(size.width.roundToInt(), size.height.roundToInt())
                 onDrawBehind {
-                    drawRect(base)
-                    for (index in blobs.indices) drawRect(blobs[index])
-                    // 倾斜 18°：光带斜穿屏幕，不会被卡片整块盖住而失去参照
-                    rotate(-18f, pivot = Offset(w * 0.5f, h * 0.5f)) {
-                        drawRect(broad, topLeft = bandLeft, size = bandSize)
-                        drawRect(hairline, topLeft = bandLeft, size = bandSize)
-                    }
+                    drawImage(image, dstOffset = IntOffset.Zero, dstSize = dst)
                 }
             },
     )

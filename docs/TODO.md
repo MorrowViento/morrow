@@ -28,9 +28,11 @@ M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分�
 
 **m6 的「打开即闪退」已结案**：根因是 `MorrowApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.morrowviento.morrow/startup.log` 可确认是哪个自愈步骤失败。
 
-仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.0.0-alpha9 (48)`**（本地构建；线上仍是最新 Release `v4.0.0-alpha2-41`，资产 `morrow-41-4.0.0-alpha2-debug.apk`，debug 签名，可直接覆盖现有的 debug 安装）
+2026-11-14 完成**首个正式版 4.0.0 (68) 发布**：壁纸从「每帧 6 层渐变」改成**预渲染位图**（`GlassWallpaper`，单槽缓存，观感逐像素不变）；小部件底色抬亮 + 补齐顶部柔光 / 底部内阴影 / 圆角内侧柔光，玻璃体积感做出来；生成项目自有发布密钥（RSA 4096，密钥与密码只在用户目录，不在仓库），`assembleRelease` 走 R8 + 资源裁剪，安装包 80 MB → **4.8 MB**；`scripts/release.sh` 一条命令完成建 Release 与回填 `update/manifest.json`。**换签名发版，旧 debug 包不能覆盖安装。**
 
-M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，并已发布首个 GitHub Release，见 `docs/CHANGELOG.md`。**尚未完成**：正式签名密钥注入（用户自有密钥，见 `docs/SIGNING.md`）、真机走完「检查→下载→安装→升级」全流程（N1–N9）、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
+仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.0.0 (68)`**（线上 Release `v4.0.0-68`，资产 `morrow-68-4.0.0-release.apk`，**正式签名**——与此前的 debug 包签名不同，不能互相覆盖）
+
+M7 的工程部分已全部落地并发出第一个**正式签名**的 Release（`v4.0.0-68`），见 `docs/CHANGELOG.md`。**尚未完成的部分只能在真机上做**：走完「检查→下载→断点续传→安装→升级后数据保留」全流程（N1–N9）、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
 
 ## 移植范围（2026-11-11 二次定稿）
 
@@ -66,8 +68,8 @@ M7 第一批（检查 / 下载 / 安装 / UI / 工程配置）已落地，并已
   剩余验收项（只能在真机做）：锁屏与 Doze 下准时触发、通知「完成」「稍后 10 分钟」动作生效、重启后闹钟自动重建、跨年重复事件落点正确、时间/时区变更后不漂移、诊断页条目与实际闹钟一致。
 - [x] **M5 桌面小部件** —— 已完成（未迁移旧 Kotlin 实现，按裁剪范围重写）：总览 + 单事件两个 provider、`MidnightRefreshScheduler` 跨天刷新、进程内只读快照替代 method channel；配置台保留样式预设 + 字号 + 配色 + 元素显隐 + 单事件绑定。验收项（显示/跨天刷新/点击跳转/旧样式映射）待真机确认。
 - [x] **M6 设置中心** —— 已完成：外观（主题三态 / 减弱透明 / 减弱动效，键名沿用 Flutter 原始键）+ 数据（导出/导入备份、清空全部，SAF 免权限）+ 提醒（通知与精确闹钟状态跳转）+ 关于（版本 / 开源许可 / 项目主页）。设置行自绘而非 `glasmio-preference`（理由见 HANDOFF 决策表）。备份为单文件 JSON，含事件/分类/外观/小部件样式，导入分「合并 / 覆盖」两档。验收项待真机确认。
-- [ ] **M7 更新与发布（收尾中）** —— 已完成：GitHub Releases 检查（三路并发 + 可选镜像测速）、断点续传下载、`PackageInstaller` 会话安装 + 系统安装页兜底、更新面板与进度 UI、`INTERNET`/安装权限/FileProvider、`lint.abortOnError = true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 清单、`UpdatePolicyTest`/`ReleaseJsonTest`、**首个 GitHub Release `v4.0.0-alpha2-41`**、**发版脚本 `scripts/release.sh`（见 `docs/RELEASE.md`）**。**不引 WorkManager**（更新由用户主动发起且全程可见，协程取消即停、靠 `.part` 续传即可）。  
-  仍待（用户侧）：注入正式签名密钥、真机走完 N1–N9、Android 13/14/15/16 全量回归、旧用户升级后数据与小部件无感迁移确认。
+- [x] **M7 更新与发布** —— 已完成：GitHub Releases 检查（三路并发 + 可选镜像测速）、断点续传下载、`PackageInstaller` 会话安装 + 系统安装页兜底、更新面板与进度 UI、`INTERNET`/安装权限/FileProvider、`lint.abortOnError = true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 清单、`UpdatePolicyTest`/`ReleaseJsonTest`、**首个 GitHub Release `v4.0.0-alpha2-41`**、**发版脚本 `scripts/release.sh`（见 `docs/RELEASE.md`）**、**正式签名密钥已注入**（RSA 4096 / `CN=Chaoxi, O=MorrowViento`，密钥与密码只在用户目录，见 `docs/SIGNING.md`）、**首个正式签名 Release `v4.0.0-68`**（R8 开启，4.8 MB）。**不引 WorkManager**（更新由用户主动发起且全程可见，协程取消即停、靠 `.part` 续传即可）。  
+  仍待（真机侧）：走完 N1–N9、Android 13/14/15/16 全量回归、从 debug 包迁移到正式包的升级路径确认（签名不同，必须卸载重装）。
 - [ ] **M0 遗留（可选）** —— 计划里承诺的 ktlint/detekt 尚未接入；做法：加 `spotless` 或 `ktlint` Gradle 插件并接入 CI；验收：CI 增一步静态检查且不阻断当前代码。建议在 M2 结束、代码量上来之前做。
 
 ## 涉及文件
