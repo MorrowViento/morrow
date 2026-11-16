@@ -1,118 +1,82 @@
-# 签名与发版
+# SIGNING — 发布签名与安装路径
 
-> 一句话：**密钥在你手里，仓库里什么都没有。** 构建时用 `~/.gradle/gradle.properties`（本地）或环境变量（CI）把四个参数喂给 Gradle，`assembleRelease` 自动签名；没喂参数时 release 保持未签名，debug 完全不受影响。
+> 更新：2026-11-16。涉及签名/安装时才读；发布操作看 RELEASE，当前任务看 HANDOFF / TODO。
+> **沿用原发布密钥，不重新生成。** 密钥与密码只在用户目录或 CI Secrets，不进仓库、聊天或日志。
 
-## 为什么必须换成自己的密钥
+## 当前状态与不可混淆项
 
-- 仓库里的 debug keystore 是 Android SDK 自动生成的，路径随机器变、卸载重装就可能换一份。用它发的包，**以后同一个应用装不上去**（签名不一致会被系统拒绝），也无法在应用商店上架。
-- 换密钥的代价是**不可逆**的：已发布版本的签名一旦变了，老用户只能卸载重装（应用数据随卸载清空）。所以密钥要在第一次对外发版前定下来。
-- 这次同时改了 `applicationId`（`com.jiuxina.ying` → `com.morrowviento.morrow`），旧「萤」和新「朝夕」在系统里是两个独立应用。真机上装新包前**先卸载旧的「萤」**，旧数据用「设置 → 数据 → 导出备份」先存一份，新包再用「导入」恢复。
+- 2026-11-16 已沿用现有配置与原 RSA 4096 发布密钥构建 4.1.0 (69) release；没有读取/输出密钥或实际密码，没有生成新密钥。
+- 本批最终 debug / release 均经 output-metadata 与 aapt2 核实为 **4.1.0 (69)**；上级交付 `morrow-69-4.1.0-release-feature-update.apk` 和 debug-feature-update 包，大小/摘要见 HANDOFF。code-review 历史包未覆盖；release 是本地待验包，不是已发布证明。
+- 对正式 68、新 release 和新 debug 分别执行 apksigner verify：v2 校验通过；**新版 release 与正式 68 的证书 SHA-256 一致**，debug 不同。具备同签名原位升级条件，但实际安装与保数据仍待真机。证书 CN 仅元数据，不能替代摘要比较。
+- Gradle 未提供 keystore 时 `assembleRelease` 保持未签名，debug 不受影响；发版脚本缺密钥则改选 debug。这两种行为不同，发布前必须人工确认。
 
-## 一、生成密钥
+## 安装/迁移路径
 
-### 推荐：用仓库里的脚本
+| 已安装 → 目标 | 正确路径 |
+|---|---|
+| 朝夕正式 68 → 同包名同签名正式 69 | 验证后原位升级；更高 code，不应要求卸载，数据/提醒/小部件需按 N 组回归 |
+| 朝夕 debug ↔ 朝夕 release | 签名不同不能覆盖；先导出备份、卸载、安装、导入，重新检查提醒并添加小部件 |
+| 旧「萤」→ 新「朝夕」 | 包名不同，是独立沙盒，不能自动读取旧私有数据；先从旧应用导出，按用户迁移流程安装/导入 |
+| 换机导入备份 | widgetId 不同，使用 default_style 兜底后重加小部件；4.1 备份不含背景图片本体，须重选图 |
 
-```bash
-cd morrow
-export JAVA_HOME="/c/Users/yunbo.wang/WorkBuddy/2026-11-09-15-57-01/.toolchain/jdk/jdk-21.0.13+9"
-./scripts/create-keystore.sh
-```
+旧包 `com.jiuxina.ying` 与新包 `com.morrowviento.morrow` 不共享应用数据。
+卸载清空私有数据（包括自定义背景图片），先完成备份并保留原图；不要将 debug→release 重装算作 N7 的保数据升级通过。
+PackageInstaller 会话安装仍弹系统确认，不承诺免确认静默安装。
 
-脚本会：
+## 签名参数（现有密钥配置）
 
-1. 在 `~/.morrow/morrow-release.jks` 生成 RSA 4096、有效期 10000 天的密钥；
-2. 密码由你输入两次、不回显、不写进任何文件；
-3. 打印要追加到 `~/.gradle/gradle.properties` 的四行配置。
+环境变量优先，其次用户级 Gradle properties：
 
-想换位置就传参数：`./scripts/create-keystore.sh ~/keys/chaoxi.jks`。
-
-### 手动（效果一样）
-
-```bash
-keytool -genkeypair -v \
-  -keystore ~/.morrow/morrow-release.jks \
-  -alias morrow \
-  -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=Chaoxi, OU=Mobile, O=MorrowViento, C=CN"
-```
-
-`-alias`、`-dname` 只是元数据，写什么不影响安装；**密码、别名、keystore 文件三者必须记住**。
-
-## 二、把参数交给 Gradle
-
-四个键，环境变量优先，其次用户级 `gradle.properties`：
-
-| 环境变量 | gradle.properties | 含义 |
+| 环境变量 | 用户级属性 | 含义 |
 |---|---|---|
-| `MORROW_KEYSTORE` | `morrow.keystore` | keystore 文件绝对路径，支持 `~/` |
+| `MORROW_KEYSTORE` | `morrow.keystore` | keystore 绝对路径，支持 `~/` |
 | `MORROW_KEYSTORE_PASSWORD` | `morrow.storePassword` | keystore 密码 |
-| `MORROW_KEY_ALIAS` | `morrow.keyAlias` | 密钥别名，脚本默认 `morrow` |
-| `MORROW_KEY_PASSWORD` | `morrow.keyPassword` | 密钥密码（用同一个密码即可） |
+| `MORROW_KEY_ALIAS` | `morrow.keyAlias` | 现有密钥别名，脚本默认 morrow |
+| `MORROW_KEY_PASSWORD` | `morrow.keyPassword` | 密钥密码 |
 
-本地推荐写 **用户级** 文件 `~/.gradle/gradle.properties`（Windows 是 `C:\Users\<你>\.gradle\gradle.properties`）：
+本地文件为 `C:/Users/<用户>/.gradle/gradle.properties`，不是仓库根的同名文件。Windows 属性路径使用真正的 Windows 绝对路径，不能填 Git Bash 的 `/c/...`：
 
 ```properties
-morrow.keystore=/c/Users/yunbo.wang/.morrow/morrow-release.jks
-morrow.storePassword=你的密码
+morrow.keystore=C:/Users/<用户>/.morrow/morrow-release.jks
+morrow.storePassword=<现有密码，仅在用户级文件填写>
 morrow.keyAlias=morrow
-morrow.keyPassword=你的密码
+morrow.keyPassword=<现有密钥密码，仅在用户级文件填写>
 ```
 
-> 不要写进仓库根目录的 `gradle.properties`。`.gitignore` 虽然忽略了 `*.jks`，但**不会忽略属性文件里的明文密码**。
+`.gitignore` 忽略 jks 不能保护写进仓库属性文件的明文密码。不要输出整个用户属性文件、凭据或开启会泄露签名信息的调试日志。
 
-只想临时用一次，也可以：
+## 构建与核验（Windows PowerShell，从仓库根）
 
-```bash
-export MORROW_KEYSTORE="$HOME/.morrow/morrow-release.jks"
-export MORROW_KEYSTORE_PASSWORD='...'
-export MORROW_KEY_ALIAS='morrow'
-export MORROW_KEY_PASSWORD='...'
+```powershell
+$env:JAVA_HOME = (Resolve-Path '../.toolchain/jdk/jdk-21.0.13+9').Path
+& '../.toolchain/gradle-9.6.0/bin/gradle.bat' -p . :app:assembleRelease --console=plain
+# 构建成功后确认输出元数据中的 versionCode / versionName
+& '../.toolchain/sdk/build-tools/37.0.0/apksigner.bat' verify --print-certs 'app/build/outputs/apk/release/app-release.apk'
 ```
 
-## 三、构建并验证
+SDK 不在该路径时按本机实际 SDK 路径定位 apksigner，不猜安装目录。
+对已知 4.0.0 正式 APK 与新 APK **分别**执行 apksigner，确认签名验证通过、证书 SHA-256 一致，并查新包版本确实高于安装端。
+`keytool -printcert -jarfile` 依赖 JAR/v1 签名，只有 v2/v3 签名的 APK 不能可靠用它核验；不要据此误判未签名或重新生成密钥。
+ABI 拆分默认关闭，标准产物是 `app/build/outputs/apk/release/app-release.apk`；开启拆分后需核对每份实际资产。
 
-```bash
-export JAVA_HOME="/c/Users/yunbo.wang/WorkBuddy/2026-11-09-15-57-01/.toolchain/jdk/jdk-21.0.13+9"
-../.toolchain/gradle-9.6.0/bin/gradle :app:assembleRelease --console=plain
-```
+## 新环境与密钥备份
 
-产物：`app/build/outputs/apk/release/app-release.apk`（开了 `-Pmorrow.abiSplit=true` 时还会有按 ABI 拆分的几个包）。
+- **续接/换开发机优先恢复原密钥与配置**，不是再运行生成脚本。备份 keystore 与密码分开保存，恢复后先比对旧正式 APK 的证书。
+- 只有从未发版的新应用或经明确批准建立新签名身份，才使用 `scripts/create-keystore.sh`；这是 Bash 脚本，需支持的 Bash 环境，不能通过 PowerShell 启动另一 shell 绕过工具限制。
+- 生成脚本默认在 `~/.morrow/morrow-release.jks` 建 RSA 4096、有效期 10000 天、别名 morrow；需交互输入密码，不在非交互工具中运行。当前应用已发布，**此流程不是当前待办**。
+- 丢失原密钥会使现有签名链更新受阻，先查备份/已有签名管理方案，不通过随意换包名或换签名规避；如确需改变身份，另行明确用户数据迁移与发布方案。
 
-验证签名：
+## CI 与常见故障
 
-```bash
-"$JAVA_HOME/bin/keytool" -printcert -jarfile app/build/outputs/apk/release/app-release.apk
-# 或者用 build-tools 里的 apksigner
-$ANDROID_HOME/build-tools/37.0.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
-```
+CI 签名方案可使用 Secrets `MORROW_KEYSTORE_BASE64` / `MORROW_KEYSTORE_PASSWORD` / `MORROW_KEY_ALIAS` / `MORROW_KEY_PASSWORD`，构建时还原原 keystore 并注入对应参数；这是配置方案，不代表当前 CI 已产出并发布签名正式包。修改 CI/Secrets 需单独授权。
 
-输出里的 `CN=Chaoxi, O=MorrowViento` 与 SHA-256 指纹就是你的密钥，记下来，以后每次发版都该是同一枚指纹。
+| 症状 | 检查 / 处理 |
+|---|---|
+| keystore 找不到 | Windows 真正绝对路径、文件是否存在；不要用 /c/ 路径 |
+| 密码或别名错误 | 核对原配置，不打印值、不重新生成 |
+| release 构建成功但未签名 | keystore 未注入；用 apksigner 验证，不能只看构建成功 |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 证书不同；确认是否装了 debug。需要重装时先备份，不默认删用户数据 |
+| 版本比预期低 | APK 是旧产物，查 output-metadata 并重建；目录/文件名不是版本证明 |
+| 证书 CN 一样仍不能升级 | 名称可相同，比较证书 SHA-256 与实际已装包签名 |
 
-## 四、CI（GitHub Actions）
-
-在仓库 Secrets 里加四个：`MORROW_KEYSTORE_BASE64`（把 `.jks` 做 base64）、`MORROW_KEYSTORE_PASSWORD`、`MORROW_KEY_ALIAS`、`MORROW_KEY_PASSWORD`，构建前还原成文件并导出同名环境变量即可。**不要把 `.jks` 或密码提交进仓库**，即使是私有仓库。
-
-## 五、换签名 / 换包名之后
-
-1. 手机上先**导出备份**（设置 → 数据 → 导出），再卸载旧的「萤」。
-2. 安装新「朝夕」，用「导入」把事件恢复回来；小部件样式会随备份一起导入（按 `widget.default_style` 兜底）。
-3. 如果之前用 debug 包装过同名新包，也必须先卸载：debug 与 release 签名不同，覆盖安装会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。
-4. 重新排期提醒、重新添加桌面小部件（`applicationId` 变了，旧的 PendingIntent / widgetId 都不再属于新应用）。
-
-## 六、备份密钥（最重要的一步）
-
-- 把 `morrow-release.jks` 与密码分开存两处（例如密码管理器 + 离线介质）。
-- 丢了密钥 = 永远无法给已发布版本发更新，只能换 `applicationId` 重新上架，老用户数据无法继承。
-- 不要把密钥提交到 Git、网盘公开链接、聊天记录或 CI 日志里。
-
-## 七、常见报错
-
-| 报错 | 原因 | 处理 |
-|---|---|---|
-| `找不到 keystore：...` | 路径写错，或用了 `~` 但指向了别的用户 | 用绝对路径；脚本生成时打印的就是绝对路径 |
-| `Keystore was tampered with, or password was incorrect` | 密码不对 | 核对 `morrow.storePassword` / `MORROW_KEYSTORE_PASSWORD` |
-| `Cannot recover key` | `keyPassword` 与 `storePassword` 不一致 | 用同一个密码，或填生成时设置的 key 密码 |
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 设备上已有不同签名的同包名应用 | 先卸载旧包（数据先导出） |
-| 构建通过但 APK 未签名 | 没提供 `morrow.keystore`，走了「未签名 release」分支 | 按第二节配置四项参数 |
-
-安全提示：Gradle 的 `signingConfigs` 在配置期就会读取密码，构建日志里不要开 `--info` 之外的调试输出，也不要把密码 echo 到终端。
+核验结果写入 HANDOFF / CHANGELOG 时只记录「与发布基线一致/不一致」和验证来源；不复制密钥或密码。发布状态另按 RELEASE 核对远端。

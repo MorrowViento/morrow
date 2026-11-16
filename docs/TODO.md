@@ -1,105 +1,89 @@
-# TODO — 朝夕 · Kotlin 重构
+# TODO — 朝夕 · 当前待办
 
-## 项目概述
+> 更新：2026-11-16。续接先读 [HANDOFF](HANDOFF.md)，再读本文件；历史实现见 CHANGELOG。
 
-用 Kotlin + Jetpack Compose + Glasmio（Liquid Glass）重写倒数日应用「朝夕」（Android 13+），取代 Flutter 主线。
+## 目标与当前完成度
 
-## 当前阶段
+以 ying 原版功能/数据语义为基础，用 Kotlin + Compose + Glasmio 0.1.3 重写 Android 13+「朝夕」，不并行维护 Flutter 主线。
+M0–M6 核心及 M7 更新/发布工程已落地；M2a–M6 有 2026-11-12 用户「基本通过」反馈，仍有未验细项。
+**本批事件类型/重复与界面改进六阶段实现、本地验证和测试包已完成；用户已授权提交/推送，功能提交 `4bfc12b` 已同步 GitHub main 并回读核验，文档收尾独立提交。不重做旧里程碑，下一步为用户真机测试。**
 
-M0 工程基建、M1 数据层、M2a 首页列表、M2b 新建表单、M2b2 分类管理、M2c 详情与撤销、M2d 日历三视图、M4 提醒通知、M5 桌面小部件、M6 设置中心与备份已完成，**M2a–M6 真机验收基本通过（2026-11-12 用户确认）**。本地 `assembleDebug + testDebugUnitTest + lintDebug` 通过：**234 项单测全绿、lint 0 errors / 10 warnings**（`abortOnError=true`，其中 7 条是依赖有新版本的提示类），debug APK 约 76 MB。当前处于 **M7 应用内更新与发布**，第一批已落地。
+- 本批最新全量 **338 项单测通过**（40 份 XML），0 failures/errors/skipped；lint **0 errors / 13 warnings**；debug / 原签名 release 构建成功。
+- 上级 `morrow-69-4.1.0-release-feature-update.apk`（5,110,088 B）优先测试；证书 SHA-256 与 68 正式包一致。另有 debug-feature-update 包（80,818,980 B），不能覆盖正式安装。版本/摘要/报告位置集中见 HANDOFF；code-review 是上一批历史包，不含本批全部功能。
+- 发布清单仍 `v4.0.0-68`；已核对并推送 GitHub main，但未查询最新 Release、修改清单、上传 APK 或公开发布。adb 无设备，未安装/卸载或测真机性能；MANUAL-TEST 的 301 条 checkbox / 72 条历史勾选本批未改，不是新版通过证明；该文件已有本地修改未纳入本次提交。
 
-2026-11-13 完成**底栏换 Glasmio 导航栏 + 厚度改图标四档 + 编辑面板补动效**：底栏改为 `GlasmioNavigationBar`（三格：主页 / 日历 / 搜索预留）+ 右侧同高的独立悬浮圆钮做「新建」，两者装在 `BottomNavigationContact` 里共用一份材质（折射 / 液面 / 按压高光连成一体），删掉每格各自的 `GlassSurface` + 色纱（"完全不透明"的根因）；玻璃厚度从连续滑块改回图标分段控件 `GlassFrostLevel` 四档（通透 / 轻盈 / 标准 / 厚重），图标画「玻璃卡遮住背后的圆点」，色纱曲线调为 `0.72·t^1.25`，默认 0.62；`ChoiceChip` 与弹层文字按钮加按压缩放 / 高光弹簧；日期滚轮选中条改四层流体玻璃（面 + 镜面 + 内阴影 + 发丝边），滑动时提亮，数字改缩放不换字号；修「数字不在暗框里居中」（高亮条与滚轮同处一个 Box）与「跨零点新建表单日期错位」（`newEvent` 日期从同一个 `now` 推导）。版本号 `4.0.0-alpha9 (48)`。
+## 本批功能（已批准，六阶段实现与本地验证完成）
 
-2026-11-12 完成**玻璃厚度无极调节 + 底栏重排**：查明「四档没区别」的根因——`NavigationGlassMaterial` 只有四个值，且 `RegularMedium` 与 `RegularLarge` 的五个构造参数完全一致，四档里只有「Clear ↔ 其余」可分辨；改为 0~1 连续滑块（`GlasmioAdaptiveSlider`），落点是 `GlassSurface(frostRadius=)` 的模糊半径 2→24dp 与内侧色纱 0→0.78（1.15 次幂），材质枚举退化为 Clear/RegularSmall/RegularMedium 三档，`RegularLarge` 弃用；拖动实时预览（`SettingsUiState.effectiveSettings` + 2% 台阶），松手才落盘；`glass_frost` 新键三级回落旧四档字符串 / 旧布尔。底栏改为「首页 / ＋ / 日历」，中央去掉蓝色圆底，新增房子图标；排序挪到大标题右侧的玻璃胶囊。版本号 `4.0.0-alpha8 (47)`。
+用户确认：旧事件全部按待办保留原状态；新建默认待办、不重复；图片裁剪固定实际背景窗口比例。
+以下勾选只表示实现、本地回归与打包完成，不代表真机视觉/触摸/系统提醒/升级保数据/性能通过或公开发布；真机事项留在下一节。
 
-2026-11-12 完成**配色回默认 + 材质四档 + 控件统一**：整页配色从自定义蓝紫粉渐变换成 Glasmio 默认色板（`groupedBackground` + `elevatedBackground` 径向光），文字与强调色改读 `GlassColors`；新增 `GlassMaterialLevel` 四档（通透/轻盈/标准/厚重 = 库的 Clear/RegularSmall/Medium/Large），经 `LocalGlassMaterial` 注入所有玻璃面板，取代布尔「减弱透明」；设置页分组卡片从 `GlasmioGroupedList`（55% 不透明纯色）换成真 `GlassSurface`，行改为自绘（说明文字两行、无 ripple）；主题改成图标分段控件（Canvas 手画字形），小部件配置页三组单选 chip 改成分段控件。版本号 `4.0.0-alpha7 (46)`。
+- [x] **#7 类型/重复/兼容**：纪念日与待办、NONE/MONTHLY/YEARLY、原日期锚点与已处理周期游标、Room 1→2、备份/ying/Undo、提醒/部件一致性；编辑合并最新完成/置顶；旧闹钟缺动作字段兼容修补及接收器处理链路回归。
+- [x] **#8 详情/选择**：置顶图标—大主动作—删除图标；按类型显示完成/恢复/下一月/下一年，纪念日不能完成；强化二级选中反馈。
+- [x] **#9 首页搜索栏**：不再弹完整搜索界面，结果复用首页卡片；实现键盘/返回处理与普通、搜索列表独立滚动状态，实际交互待真机。
+- [x] **#10 年历**：十二个月小日历、今天/事件标记、日期与标题摘要、按宽度/字体缩放适配；统计按落点次数，大字体/窄屏效果待真机。
+- [x] **#11 图片裁剪**：准备/预览/平移缩放/重置/确认/取消，确认后才提交图片和最终画面取色，失败保留旧图；几何/像素/设置提交回归通过，手势/配置变化待真机。
+- [x] **#12 回归与测试包**：阶段进度回填；最终 338 项全量单测、lint 0 errors / 13 warnings、debug/原签名 release 成功；内部版本/签名及源包与副本摘要已核验，独立 feature-update 包不覆盖历史交付包，路径见 HANDOFF。
 
-2026-11-12 完成**界面效果与动效整体移植 Glasmio**（分支 `feat/glasmio-motion`，`archive/4.0.0-alpha2` 留档 alpha2）：页面切换改为 iOS 导航弹簧推入（`GlassPage`）；七个弹层全部换成 `GlasmioBottomSheet`（下拉关闭 / detent / 跨窗口采样）；「⋯」换成 `GlasmioMenu` 液态形变；确认框换成 `GlasmioAlertDialog`；设置页换成 `GlasmioGroupedList` + `GlasmioListRow` + `GlasmioSwitch`；日历视图换成 `GlasmioSegmentedControl`；首页与设置页包进 `GlasmioOverscrollHost`。版本号 `4.0.0-alpha6 (45)`。
+当前结果是 338 项全量通过与最终 feature-update APK，不再沿用前次 334 项/11 失败或“最终构建进行中”的状态。搜索/年历阶段 328 项、上一批 313 项与 code-review 仅为历史记录；先前 Native ZIP/Windows 文件占用异常未确证根因，复发继续查生命周期，不削弱测试。用户已追加本批代码/工程文档提交推送授权；MANUAL-TEST 的本地修改排除，仍不发布、改清单/CI/密钥、安装/卸载或代勾真机记录。
 
-2026-11-12 完成**按压交回 Glasmio + 底栏常驻**：删除自绘的 `GlassPress.kt`，`GlassPanel`/`GlassCirclePanel` 直接透出 `GlassSurface(onClick=)`（库内已含 `clickable(indication = null)` + 按压高光采样，无 Material ripple）；底栏改为 `GlasmioToolbarActionHost(Merged)` + 三个 `GlassSurface` 成员，由库合并材质并绘制按压折射；底栏从 `CalendarScreen` 移出、放到首页层级最后一层，跨页面常驻，视图切换与「今天」回到日历头部。版本号 `4.0.0-alpha5 (44)`。
+## 真机与发布待办（按前提推进）
 
-2026-11-12 完成**按压光晕 + 日历底栏**：`Modifier.glassPressHalo()` 在元素轮廓之外画一圈径向白光 + 外扩后的折射亮边，配 `glassPressFeedback(lift=)` 的放大上浮与 Glasmio shader 光斑，按下即「玻璃被顶起来」；新增 `glassPressClick()` 一条链封装。日历页撤掉顶部「月｜年｜列表」分段控件与右下角悬浮 ＋，换成与首页同构的底栏（视图循环 / ＋ / 今天），头部圆钮与列表行同步去掉 Material ripple。版本号 `4.0.0-alpha4 (43)`。
+### 1. 4.1.0 真机验收与反馈修复
 
-2026-11-12 完成**底栏改版 + Glasmio 0.1.3**：排序 / 新建 / 日历收进一条底部胶囊玻璃栏（`HomeBottomBar`），首页标题区只留「⋯」，`CreateFab` 从首页移除；顺带修掉「点排序胶囊里冒出方形高亮」——根因是 `Modifier.clickable` 的 Material ripple 只按布局边界裁剪，现改为 `ui/glass/GlassPress.kt` 的手势 + `InteractiveHighlight` 液体光斑，事件卡片与日历页 `＋` 同步切换。Glasmio 升到 0.1.3（`GlassSurface` 自带 `onClick` 按压光学、渲染性能更新），封装层新增 `GlassPanel(capsule=, tint=)` / `glassPanelShape()`。版本号 `4.0.0-alpha3 (42)`。
+- [ ] 本批类型/动作：详情置顶/删除图标与大按钮；待办完成/恢复、纪念日不完成；每月/月末/闰日推进、撤销与旧已完成重复事件恢复。
+- [ ] 本批选择/提醒：二级控件选中反馈、旧闹钟、重复通知动作与过期“稍后”；处理器回归不等同系统广播/闹钟端到端验收。
+- [ ] 本批搜索/年历：搜索栏输入/IME/返回/详情保持/普通滚动恢复；十二个月摘要、窄屏/大字体与实际滑动表现。
+- [ ] 本批裁剪：移动/双指缩放/重置/取消/确认、取最终画面颜色、配置变化与保存失败保旧图；备份不含图片本体，原图另留。
+- [ ] **AL1–AL15**：明暗/缓存、相册/持久化、玻璃可读性、取色/灰图、备份不含图片、搜索栏/详情跳转、部件亮度/分隔线；旧搜索浮层样例已被 SearchBar 取代。
+- [ ] **A–D、AI5、AJ1、AK2**：启动/数据、撤销、底栏融合、配色联动、滚动；旧编号适用版本以 MANUAL-TEST 顶部为准。
+- [ ] 核心回归：同色换图立即生效、关闭取色后换图、编辑/分类修改后旧撤销作废、删除/撤销/导入连击、显式 COUNTDOWN 过期展示及跨日进度。
+- [ ] 用户按编号报告设备/版本/步骤/现象后复现、定位、修复并补回归；不凭自动测试或旧勾选认定新版真机通过。
 
-2026-11-12 完成**品牌重塑**：应用名「萤」→「**朝夕**」，工程 / 目录 / Gradle 根名 → `morrow`，`applicationId` / Kotlin 包 → `com.morrowviento.morrow`，`Ying*` 类与 `Theme.Ying` → `Morrow*`，内部数据标识（`morrow.db`、`morrow_settings`、`morrow://`、action 前缀）同步；新增自适应图标（晨昏渐变 + 日轮），此前没有 `android:icon`。**破坏性变更**：旧「萤」不能覆盖升级到新包，需先导出备份、卸载、装新包后导入；自有签名密钥的生成与注入见 `docs/SIGNING.md`。
+完成条件：新增功能和核心回归有明确真机结果，无未解决阻塞缺陷。
 
-真机首轮反馈的两个运行时问题已修：日历整页覆盖缺底色导致与首页重叠、日期滚轮所在的 `verticalScroll` 表单里 `LazyColumn` 无界高导致点 + 号闪退（详见 `docs/CHANGELOG.md` 同名条目）。
+### 2. 同签名升级与应用内更新
 
-**m6 的「打开即闪退」已结案**：根因是 `MorrowApp` 冷启动自愈链无异常兜底，协程内未捕获异常直接杀进程；现改为 `warmStart()` + 逐步 `step()` 隔离，真机确认不再闪退。诊断设施 `util/StartupTrace` 已收敛为仅 debug 包落盘、正式包不接管崩溃处理器。**遗留**：被吞掉的具体异常尚未归因，若取得 `Android/media/com.morrowviento.morrow/startup.log` 可确认是哪个自愈步骤失败。
+- [x] 原发布密钥构建 4.1.0 release，APK 内部元数据为 69 / 4.1.0；apksigner 校验通过且证书 SHA-256 与正式 68 一致。
+- [ ] 正式 68 → 新 release 的实际原位升级、事件/设置/提醒/小部件保留；先备份，不要求用户直接卸载正式版。
+- [ ] **N1–N9**：检查/无更新/断网、发现高 code、下载/续传、系统确认、升级保数据、选包/校验失败。
+- [ ] debug ↔ release 的用户备份/卸载/安装/导入路径单独确认，不能算成同签名升级；背景原图另留。
 
-2026-11-14 完成 **4.1.0 (69)**：**自定义图片背景**（`data/backdrop/BackdropImage`，相册选择器 → 复制进私有目录 → 按长边 2400 px 重编码，绘制 cover + 底色纱；图片档不再白渲染丝缎壁纸）；**从图取色**（`PaletteExtractor` 按色相分 24 桶 + 近无彩桶、权重 `s^1.2×(0.3+l)`，`AccentPalette.fromSeed` 只借色相与彩度、亮度自定；色板多一颗「取色」圆点，手动点预设会自动关掉取色；种子进 DataStore 与备份，图片本体不进备份）；**搜索改浮层**（`ui/search/SearchOverlay.kt`，从顶部展开 86% 高的玻璃面板 + 遮罩，首页与滚动位置保留，不再是整页横向推入）；**修切明暗僵帧**（`GlassWallpaper` 渲染移到 `Dispatchers.Default`，缓存扩到 3 槽，冷启动第一张仍同步）；**小部件再提亮**（深色底 `#3E3E4A`、主题色档压黑 0.40→0.24、底部内阴影 70→44）并**给每行加 0.6dp 分隔线**（必须用 `ImageView`，裸 `<View>` 不在 RemoteViews 允许清单里）。单测 277 全绿、lint 0 error。
+前提：更新端 code 大于安装端，保数据安装同包名同签名。当前 69 对清单 68 无更新正常；隔离测试源需授权，不为测试发布假摘要/改线上清单。
+Robolectric 已验证提交后 READY/系统确认提示/可关闭，不代表真机安装成功。安装仍有系统确认。
+定位：`service/update/` / `ui/update/`；安装和发布先按 SIGNING / RELEASE。
 
-2026-11-14 完成**首个正式版 4.0.0 (68) 发布**：壁纸从「每帧 6 层渐变」改成**预渲染位图**（`GlassWallpaper`，单槽缓存，观感逐像素不变）；小部件底色抬亮 + 补齐顶部柔光 / 底部内阴影 / 圆角内侧柔光，玻璃体积感做出来；生成项目自有发布密钥（RSA 4096，密钥与密码只在用户目录，不在仓库），`assembleRelease` 走 R8 + 资源裁剪，安装包 80 MB → **4.8 MB**；`scripts/release.sh` 一条命令完成建 Release 与回填 `update/manifest.json`。**换签名发版，旧 debug 包不能覆盖安装。**
+### 3. 系统、数据与性能剩余覆盖
 
-仓库 `https://github.com/MorrowViento/morrow` · 分支 `main` · 版本 **`4.1.0 (69)`**（线上最新 Release 仍是 `v4.0.0-68`，资产 `morrow-68-4.0.0-release.apk`；4.1.0 目前只有 debug 包，待真机验收后再发正式版。正式签名与此前的 debug 包不同，不能互相覆盖）
+- [ ] **G/H**：锁屏/Doze/重启、时间/时区/重复事件、远期排期、通知完成/稍后、跨零点。广播路径尚无端到端自动测试。
+- [ ] **J**：云盘 SAF、合并不改外观、覆盖导出无尾部、坏备份不清数据、导入残留提醒取消。Room/DataStore 分开提交，不承诺跨存储原子性。
+- [ ] **L/M**：极端日期/连点、大字体/返回/分屏/权限、省电；Android 13/14/15/16 与低端机玻璃性能。窗口宽度、系统 dataExtractionRules 的现有 lint 警告结合实际行为核对，不盲目改策略。
+- [ ] 真机阻塞网络读取消时延；磁盘 close 故障和 REPLACE 空分类分支的直接故障/专用断言覆盖仍缺失。已有 loopback HTTP/仓库回归不能扩称覆盖所有网络/取消时点。
+- [ ] 旧 Flutter 迁移幂等仅在可读取旧数据的沙盒验证；不同包私有目录不可自动互读，真实迁移用旧应用导出后导入。
 
-M7 的工程部分已全部落地并发出第一个**正式签名**的 Release（`v4.0.0-68`），见 `docs/CHANGELOG.md`。**尚未完成的部分只能在真机上做**：走完「检查→下载→断点续传→安装→升级后数据保留」全流程（N1–N9）、Android 13/14/15/16 全量回归。其中 M4 与小部件的「跨零点刷新」、备份的云盘读写、M7 的 N 组仍必须真机才能验证。**逐项清单见 `docs/MANUAL-TEST.md`**（按 P0/P1/P2 分级，反馈时按编号报）；该文件目前有用户勾选的 40 项真机验收记录，**按用户要求暂不提交、不推送**，提交其他文档时不要 `git add -A`。
+完成条件：适用编号有设备/版本/结果。性能优化目前有代码与自动回归证据，无真机 FPS/耗电/启动测量结论；不代勾用户记录。
 
-## 移植范围（2026-11-11 二次定稿）
+### 4. 正式发布（未授权）
 
-只保留下面这些裁剪，**未列出的模块一律按原计划全量实现**。
+- [ ] 真机达到发布要求后，如代码有变更重跑全量单测/lint/debug/release，重核最终版本/签名/大小/摘要。
+- [ ] 核对本地/远端 main、标签和最新 code；69 未发布可用 69，已被使用再递增，不无条件加一或复用已发布 code。
+- [ ] 获授权后按 RELEASE 提交/同步待发代码、建正式 Release、传标准命名资产、回读并更新/推送真实 manifest。当前 feature-update APK 仅本地待验包，code-review 为上一批历史包。
+- [ ] 发布后回填 HANDOFF / TODO / CHANGELOG 的远端真实结果；MANUAL-TEST 提交仍须用户逐次授权，禁用 git add -A。
 
-| 模块 | 结论 |
+本轮已获代码修复/优化、本地构建、文档回填及本批代码/工程文档提交推送授权。**未获 MANUAL-TEST 提交、公开发布、改线上清单、安装/卸载、换密钥或改 CI 授权**；用户手工验收记录继续保留本地。
+
+### 5. 可选工程项
+
+- [ ] ktlint/detekt 未接入，仅另行确定范围时实施，CI 修改先确认，不沿用旧 M2 排期。
+
+## 范围边界
+
+| 功能 | 现状 / 边界 |
 |---|---|
-| 小部件应用内配置台 | **适度精简**：保留样式预设 + 字号 + 配色 + 元素显隐；逐元素对齐/壁纸取色联动不做 |
-| 壁纸取色 / 节日皮肤 | **取色已做（4.1.0）**，节日皮肤仍延后 |
-| 字体库（在线 + 本地导入） | 延后 v4.1，本期用系统字体 |
-| 相册背景服务 | **已做（4.1.0）**：自定义图片背景 + 从图取色 |
-| 头像 / Emoji / 单位文案 | 删除，不做 |
-| 赞助页 | 取消（关于页保留） |
-| 单事件小部件 / 年视图 / 农历 / 提醒诊断页 | **保留**（不砍） |
-| 应用内更新 | **全量**：Releases 检查 + 镜像测速 + 断点续传 + PackageInstaller 静默安装 |
-| 分类体系 | **全量**：预置分类 + 自定义增删改，不做「只用固定分类」的简化 |
-| 滚轮日期选择器 / 搜索筛选排序栏 / 已完成折叠 / 6 秒撤销 | 保留（按原计划） |
+| 分类、日历/农历、提醒诊断、部件、搜索、滚轮、撤销、备份、更新 | 已实现，继续验收/修复，不重做 |
+| 图片背景 / 取色 | 4.1.0 已实现并修换图边界，待 AL；图片本体不备份 |
+| 部件配置 | 保留预设/字号/配色/显隐/绑定，不扩逐元素对齐或直接壁纸取色 |
+| 字体库、节日皮肤 | 延后，无新实施授权 |
+| 头像 / Emoji / 单位文案、赞助页 | 不做，保留关于页 |
+| ColorOS 私有服务卡片 | 不做；标准 pin 无法指定桌面坐标 |
 
-> 估算随之回到约 62–72 人日（12–14 周）。
-
-## 待办任务
-
-按执行顺序排列；`[ ]` 前的编号即依赖顺序，`→` 表示串行前置。
-
-- [x] **T0 推送一致性核对** —— 已完成（2026-11-11）：复核确认差异仅为 README 换行符（`git diff --ignore-all-space` 为空），根因是 `core.autocrlf=true`；新增 `.gitattributes`（`* text=auto eol=lf`）后 `git reset --mixed origin/main`（工作区零损失），拆两次提交（`c02adc9` 行尾统一 / `548edad` M2a+M2b+docs）并 `push -u origin main`。验收结果：`git status -sb` 为 `## main...origin/main`（无 ahead/behind），CI run 42983525295 全绿。
-- [x] **M2a 首页事件列表** —— 已实现：`EventViewModel`（Room Flow + 排序偏好 + 每秒时间源 combine）、`EventPresentation`（纯函数排序：置顶优先 / 距离（已过沉底且刚过优先）/ 日期 / 创建时间倒序）、`HomeScreen`（折叠标题、排序 chip、进行中与已完成分区、空态/加载/错误态）、`EventCardView`（天数徽章 + 进度环 + 今日剩余 `HH:mm:ss`）。验收：三种排序与置顶单测通过（10 项），`assembleDebug + testDebugUnitTest + lintDebug` 通过；**真机视觉待验**（见下条）。
-- [x] **M2a/M2b 真机验收** —— 2026-11-12 用户确认基本通过（逐项见 `docs/MANUAL-TEST.md`）。原验收要求：安装 `app/build/outputs/apk/debug/app-debug.apk`（本机无设备/模拟器，未经实机确认）；验收：① 卡片玻璃材质正常、倒计时逐秒跳动、今日事件显示剩余时分秒、排序 chip 循环三档且杀进程后保持、已完成折叠、空库空态；② 点 + 打开表单，滚轮年/月/日/时/分能选中并吸附居中（`itemHeight` 34dp 与实际行高需实机校准），空标题点保存有红字提示，保存后列表立即可见，杀进程重启仍在，全天事件提醒锚点为 09:00。
-- [x] **M2b 事件新建/编辑表单** —— 已实现：`EventFormState`（纯函数：校验/落库映射/日期夹取/提醒增删去重上限/快捷日期）、`WheelDateTimePicker`（年/月/日/时/分五列滚轮 + snap fling，全天隐藏时间列）、`EventEditSheet`（同页面浮层而非 ModalBottomSheet，避免 backdrop 断裂导致玻璃失效；标题/滚轮/全天/方向/每年重复/快捷日期/分类 chips/提醒 chips/备注）、`EventViewModel.save`、首页 FAB 接入。验收：9 项表单单测 + 41 项总计全绿，`assembleDebug + lintDebug` 通过；真机交互待上条验收。
-- [x] **M2b2 分类管理** —— 已实现：`EventCategory`（预置 7 类）+ `CategoryRules` 纯函数（归一化/合并孤儿/增删改校验/至少保留一项/12 字上限）+ `CategoryCodec`（DataStore `category_list_v1` 存 JSON）+ `CategoryRepository` + `CategorySheet` 浮层（列表、行内重命名、删除迁移确认）；表单 chips 改读仓库并新增「管理分类…」入口。**策略已定**：分类以名字为身份，重命名级联更新事件（历史事件显示新名）；删除被占用分类必须先选迁移目标，不做静默丢弃。验收：规则层 15 项 + 编解码 6 项单测通过；`assembleDebug + lintDebug` 通过；**浮层交互待真机**。
-- [x] **M2c 详情页与 6 秒撤销** —— 已实现：`UndoOperation` + `UndoCodec` + `UndoRepository`（5 类操作统一为事件快照，`expiresAt` 持久化，重启后按剩余时间恢复）；`EventDetailScreen` 浮层（全字段 + 完成/置顶/编辑/删除）；`UndoBar` 倒计时复用每秒时间源；「⋯」菜单提供清空已完成/清空全部（后者二次确认）。**与原文的偏差**：改为「立即落库 + 快照回填」，而非「窗口内不真正落库」——延迟删除在进程被杀后无法重建意图，而快照 + 到期时刻可以持久化，且删除与状态切换能共用同一条回滚路径。验收：72 项单测 0 失败；删除/批量清理/状态切换均入队，新操作顶替旧操作不叠加；`assembleDebug + lintDebug` 通过；**真机交互待验**。
-- [x] **M2d 日历视图** —— 已实现：`LunarCalendar`（自实现 1900–2100 压缩年表，零依赖零包体增量）+ `ui/calendar/`（月视图 42 格 / 年视图 12 月卡片 / 按月分组列表）；农历与星期副标题、节日优先显示；首页标题栏新增日历入口，日历整页覆盖且与首页共用同一个 `EventViewModel` 与 backdrop。**与原文的偏差**：农历不引库而自实现——`android.icu.util.ChineseCalendar` 无法在纯 JVM 单测里跑，第三方库为这点功能要带上整套干支表；年表仅 201 个 int，并已用 2019–2031 春节日期与 6 个闰月年份交叉校验。验收：101 项单测 0 失败（农历 13 + 日历 16）；重复事件按当年周年落位（2 月 29 日平年夹到 28 日、不早于首次目标）已单测锁定；**农历与系统日历的人工比对、三视图视觉待真机**。
-- [x] **M4 提醒通知** —— 已完成。`ReminderPlan` 纯函数排期（全天锚点 09:00；年度重复按当次周年；单事件 2 次落点 × 5 条提醒 = 10 个闹钟上限）+ `AlarmReminderScheduler`（槽位 requestCode + `Intent.data` 区分事件，`setExactAndAllowWhileIdle`，无精确权限时退化不精确）+ `ReminderReceiver`（触发 / 完成 / 稍后 10 分钟）+ `ReminderBootReceiver`（开机、覆盖安装、时间与时区变更全量对账）+ `ReminderNotifier`（高优先级渠道、日期取当次落点）+ `ReminderPermissions`（两项权限探测与跳转）+ 提醒诊断页（权限状态 / 排期列表 / 测试通知 / 手动重排期）；`EventViewModel` 在保存、删除、完成、批量清理、撤销后同步闹钟；冷启动全量对账。**未真机验收。**
-  剩余验收项（只能在真机做）：锁屏与 Doze 下准时触发、通知「完成」「稍后 10 分钟」动作生效、重启后闹钟自动重建、跨年重复事件落点正确、时间/时区变更后不漂移、诊断页条目与实际闹钟一致。
-- [x] **M5 桌面小部件** —— 已完成（未迁移旧 Kotlin 实现，按裁剪范围重写）：总览 + 单事件两个 provider、`MidnightRefreshScheduler` 跨天刷新、进程内只读快照替代 method channel；配置台保留样式预设 + 字号 + 配色 + 元素显隐 + 单事件绑定。验收项（显示/跨天刷新/点击跳转/旧样式映射）待真机确认。
-- [x] **M6 设置中心** —— 已完成：外观（主题三态 / 减弱透明 / 减弱动效，键名沿用 Flutter 原始键）+ 数据（导出/导入备份、清空全部，SAF 免权限）+ 提醒（通知与精确闹钟状态跳转）+ 关于（版本 / 开源许可 / 项目主页）。设置行自绘而非 `glasmio-preference`（理由见 HANDOFF 决策表）。备份为单文件 JSON，含事件/分类/外观/小部件样式，导入分「合并 / 覆盖」两档。验收项待真机确认。
-- [x] **M7 更新与发布** —— 已完成：GitHub Releases 检查（三路并发 + 可选镜像测速）、断点续传下载、`PackageInstaller` 会话安装 + 系统安装页兜底、更新面板与进度 UI、`INTERNET`/安装权限/FileProvider、`lint.abortOnError = true`、可选 release 签名与 ABI 拆分（默认关闭）、`update/manifest.json` 清单、`UpdatePolicyTest`/`ReleaseJsonTest`、**首个 GitHub Release `v4.0.0-alpha2-41`**、**发版脚本 `scripts/release.sh`（见 `docs/RELEASE.md`）**、**正式签名密钥已注入**（RSA 4096 / `CN=Chaoxi, O=MorrowViento`，密钥与密码只在用户目录，见 `docs/SIGNING.md`）、**首个正式签名 Release `v4.0.0-68`**（R8 开启，4.8 MB）。**不引 WorkManager**（更新由用户主动发起且全程可见，协程取消即停、靠 `.part` 续传即可）。  
-  仍待（真机侧）：走完 N1–N9、Android 13/14/15/16 全量回归、从 debug 包迁移到正式包的升级路径确认（签名不同，必须卸载重装）。
-- [ ] **M0 遗留（可选）** —— 计划里承诺的 ktlint/detekt 尚未接入；做法：加 `spotless` 或 `ktlint` Gradle 插件并接入 CI；验收：CI 增一步静态检查且不阻断当前代码。建议在 M2 结束、代码量上来之前做。
-
-## 涉及文件
-
-| 任务 | 主要文件 / 目录 |
-|---|---|
-| T0 | 仅 git 操作，无文件改动 |
-| M2a | `ui/event/{HomeUiState,EventViewModel}.kt`、`ui/home/{HomeScreen,EventCardView}.kt`、`domain/model/SortMode.kt`、`ui/glass/GlassTheme.kt`、`MainActivity.kt` |
-| M2b | `ui/event/EventEditSheet.kt`、`ui/component/WheelDateTimePicker.kt`（新建）、`data/EventRepository.kt` |
-| M2b2 | `ui/category/{CategorySheet,CategoryViewModel}.kt`（新建）、`data/category/{CategoryRepository,CategoryRules,CategoryCodec}.kt`（新建）、`domain/model/EventCategory.kt`（新建）、`ui/component/GlassControls.kt`（新建，两个浮层共用）、`data/db/{EventDao,CategoryUsage}.kt`、`ui/event/EventEditSheet.kt` |
-| M2c | `ui/event/{EventDetailScreen,UndoBar,EventActions,EventViewModel,HomeUiState}.kt`、`data/undo/{UndoRepository,UndoCodec}.kt`（新建）、`domain/model/UndoOperation.kt`（新建）、`ui/home/{HomeScreen,EventCardView}.kt` |
-| M2d | `ui/calendar/{CalendarUiState,CalendarActions,CalendarScreen}.kt`（新建）、`domain/time/LunarCalendar.kt`（新建）、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt`、`MainActivity.kt` |
-| M4 | `domain/time/ReminderPlan.kt`、`data/reminder/{ReminderScheduler,AlarmReminderScheduler,ReminderPermissions}.kt`、`reminder/{ReminderNotifier,ReminderReceiver,ReminderBootReceiver}.kt`、`ui/reminder/{ReminderUiState,ReminderViewModel,ReminderSheet}.kt`、`AndroidManifest.xml`（权限 + 两个 receiver）、`res/drawable/ic_notification.xml`、`MorrowApp.kt`、`MainActivity.kt`、`ui/event/EventViewModel.kt`、`ui/home/HomeScreen.kt` |
-| M5 | `widget/`、`service/widget/`（均由旧工程迁移） |
-| M6 | `ui/settings/`、`data/settings/SettingsRepository.kt`、`service/backup/` |
-| M7 | `service/update/`、`ui/update/`、`ui/settings/`、`ui/component/WheelPicker.kt`、`domain/time/CalendarMath.kt`、`app/build.gradle.kts`、`AndroidManifest.xml`、`res/xml/file_paths.xml`、`update/manifest.json` |
-| 全局 | `gradle/libs.versions.toml`（每步先补依赖）、`.github/workflows/android-ci.yml` |
-
-## 优先级与依赖
-
-```
-T0 → M2a → M2b → M2b2 → M2c → M2d
-                       ↘ M4（依赖 M2b 的提醒字段）
-                       ↘ M5（可与 M4 并行，数据源同为 M1）
-                       ↘ M6（可与 M4/M5 并行）
-                                 ↘ M7（最后，需全量回归）
-```
-
-- 阻塞：`M2a` 是后续所有页面的地基；`M2b2` 依赖 `M2b` 的表单分类入口；`M4` 依赖 `M2b` 产生的提醒数据；`M7` 必须最后。
-- 可并行：`M5` 与 `M6` 互不依赖（均只依赖已完成的 M1）。
-- 顺序铁律：**先补依赖再写页面**（`androidx.navigation:navigation-compose`、`material-icons-extended` 目前均未引入）。`work-runtime-ktx` 经 M4 评估后确认**不需要**：WorkManager 同样排不出精确闹钟，重建改由「冷启动 + 开机 + 时间/时区变更」三处对账承担。
+后续只更新对应待办，区分代码、本地验证、真机通过、远端发布；约束/构建/摘要集中 HANDOFF，避免多份漂移。

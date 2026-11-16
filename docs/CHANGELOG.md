@@ -1,6 +1,49 @@
 # CHANGELOG
 
 > 倒序排列，最新在上。一行结论优先，细节看提交。
+> 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
+
+## [2026-11-16] 4.1.0 (69)：代码同步 GitHub（未发布）
+
+- 用户追加提交/推送授权；通过 WorkBuddy 自带 PortableGit 2.55.0.windows.3 查询工作区与真实远端，main 原有 3 个相关提交尚未推送，远端无新增提交（0 behind / 3 ahead）。
+- 新功能提交 `4bfc12b04fadcf035f6c37ff3e46d766b7a68657`：63 个实现/测试/schema 文件；包含本批功能及此前审核回归。普通非强制推送 main 成功，GitHub refs/heads/main 回读与本地功能提交一致，原有 3 个提交一并同步。
+- 五份工程文档独立提交同步，记录测试包、338 项全量/lint 13 warnings 与代码推送结果；未修改生产代码或重建 APK，既有测试包摘要保持不变。
+- MANUAL-TEST 已有本地修改保持未暂存/未提交；未纳入 APK、密钥、更新清单或无关文件，未跳过 hooks、强推、改 CI/签名、上传资产或发布 Release。GitHub 代码同步不等于真机验收或正式发布。
+
+## [2026-11-16] 4.1.0 (69)：类型/重复、首页搜索、年历与裁剪功能包（未发布）
+
+- 按已批准六阶段实现本批需求：TODO/ANNIVERSARY、NONE/MONTHLY/YEARLY；详情置顶图标—大主动作—删除图标；选中反馈加强；首页只展开 SearchBar 并用原卡片展示结果；年视图十二个月小日历/日期标题摘要；固定实际背景窗口比例的裁剪确认流程。
+- 旧事件默认待办，保留日期/完成/置顶；旧已完成重复事件停用，恢复后继续。新建默认待办、不重复。重复推进只写 lastHandledOccurrence、不改 targetDate；月末/闰日保留原锚点，历史日历不受游标过滤，未来卡片/提醒/部件使用统一未来周期。纪念日不完成，重复待办不永久完成整个系列。
+- Room schema 1→2 非破坏性迁移，新增 kind 默认 TODO 与 epochDay 游标；原生备份写 v2/接受 v1，ying/Undo 保留 ISO 日期与默认兼容。编辑锁内合并最新完成/置顶/游标，非锚点修改保留周期，已删除事件不被旧表单复活。
+- FIRE/COMPLETE/SNOOZE 核验准确目标/已处理周期与动作；通知 PendingIntent 身份带目标/动作。收尾修复旧闹钟缺新增动作字段时误取消合法通知：从当前记录补齐内容，过期周期仍取消。重复 COMPLETE 只推进一次/保留 Undo，旧 SNOOZE 不取消当前通知，合法 SNOOZE 保留周期。
+- 背景选图先有界解码到 pending，不发文件/写设置；浮点选区支持平移、双指缩放、8 倍上限、重置、缩放按钮/无障碍移动。确认才 Matrix 绘制并取最终画面主色、JPEG 90 发布独立文件/提交；取消或提交失败保旧图，不 recycle UI 借用图。保留 2400 长边/EXIF/取色开关/缓存身份，无新裁剪依赖。
+- 本批累计新增 25 项回归（313→338）：类型/重复/旧库迁移/编解码/提醒/年历，裁剪几何与像素取色/取消，真实 EventViewModel 的推进幂等/Undo/编辑/删除/批量取消/部件目标，以及接收器 suspend 处理链路集成。接收器用真实 Room/DataStore/NotificationManager、排期 fake，不等同 onReceive/goAsync 或系统投递端到端验收。
+- 曾有联合运行 334 项/11 失败（Native 字体 ZIP 文件系统重复创建、Windows DataStore 临时文件 AccessDenied，另有 SQLite CloseGuard）；修改前独立重跑已 334 全过。强化出错设置测试的 Application 隔离与 cancelAndJoin 清理，保留 Native 测试/全部断言/依赖/并行设置；后续 334 联合与独立、最终 338 联合均通过，未确证原生 ZIP/Windows 占用根因，不宣称永久消除。
+- 最终强制全量单测 + lint + debug/release 成功：40 份 XML、**338 tests / 0 failures / 0 errors / 0 skipped**；lint **0 errors / 13 warnings**（7 版本提示、4 KTX、窗口宽度/dataExtractionRules 各 1）；R8/资源裁剪/lintVital 成功。删除确实无引用的旧完成按钮字符串，不 suppress 或升级依赖消警告。
+- 最终上级 `morrow-69-4.1.0-release-feature-update.apk`：5,110,088 B，SHA-256 `3932EF2C6321497D9BB6C933DE2BADA5B4CA3188FDC887FC2479C44B0F147CEA`；debug-feature-update：80,818,980 B，SHA-256 `234C5953048A31702863CC7320DF89B5CF582B26B26D6313677848EEF6967D88`。对应源/副本摘要一致；本会话未交付的中间副本在摘要保护检查后更新，code-review 历史包未覆盖。
+- metadata/aapt2 均为包 com.morrowviento.morrow / 4.1.0 (69) / minSdk33 / targetSdk37；apksigner v2 验证通过，release 证书 SHA-256 与正式 68 一致、debug 不同。未生成/换密钥，未查远端/改 manifest/CI/提交/推送/公开发布。adb 无设备，MANUAL-TEST 未修改/代勾，视觉/触摸/系统提醒/性能/真机升级仍待用户验收。
+
+## [2026-11-16] 4.1.0 (69)：代码审核修复、效率优化与测试包交付（未发布）
+
+- 保留 ying 旧数据/日期/枚举语义、Kotlin + Compose + Glasmio 0.1.3；不另起工程，不升级依赖、改包名/schema/CI/密钥或实现延期功能。
+- 数据/撤销：REPLACE 接入 Room 事务，MERGE 只写导入行；导入/彻底清空前严格删除内存与持久撤销，失败阻止破坏性写入。事件写入、撤销恢复/执行、分类修改、启动/广播/手动提醒对账共用操作锁，导入回调在锁内取消消失 id 后重排。Room/DataStore 仍非跨存储原子提交。
+- 设置/性能：完整 AppSettings 从单份 Preferences 映射，避免混合快照；首页/日历/部件共享事件上游；时钟只复制变化卡片并更新量化进度，系统栏仅随明暗更新，滚轮用 derivedStateOf。显式 COUNTDOWN 过期不再强制 COUNTUP，首页/部件方向一致。
+- 图片：独立 UUID 文件名兼容 custom.jpg，ImageDecoder 有界软件解码/EXIF，一次解码用于取色与缓存；提交失败删新图保留旧图，成功再清旧图、不 recycle UI 借用位图；换图尊重关闭取色的选择，部件刷新异常不回滚已保存设置。保持真实玻璃采样/三槽丝缎缓存。
+- 更新/提醒：连接成功/异常/取消均释放，分片绑定资产/摘要/镜像，校验 200/206/Content-Range；可信短读保留，协议/摘要错误丢弃，磁盘错误不换镜像，取消显式传播。安装请求提交后回 READY，可关闭并提示仍需系统确认。提醒快速通知后查库，缺失/完成事件清通知与排期，通知完成主动刷新部件。
+- 新增 36 项回归（277 → 313），覆盖真实 Room/DataStore 事务与撤销隔离、事件单订阅/错误传播、原生图片/EXIF、loopback HTTP 续传/身份/取消、设置提交/安装状态及方向/引用复用。修复测试环境缺 Robolectric 与安装测试非 void 返回引发的 JUnit4 初始化错误，未删除断言。
+- 实际运行 `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease` 成功；38 份 XML 合计 **313 tests / 0 failures / 0 errors / 0 skipped**，不是局部结果拼数。lint **0 errors / 12 warnings**（7 版本提示、3 KTX、窗口宽度/dataExtractionRules 各 1），release lintVital/R8/资源裁剪成功。
+- 上级交付 `morrow-69-4.1.0-release-code-review.apk`，5,061,324 B，SHA-256 `A5DFB58F93F22ECF67EBBC17F3470D737482C8941448C4E3A90190CAE8E6F5B9`；debug-code-review 包 80,803,508 B，SHA-256 `1727F19687D76C98A9149FC54E3AA41AD6773BCE98068A487237633714CD7EEF`。复制后摘要一致，历史交付包未覆盖。
+- 两个新 APK 的 aapt2/metadata 均为 4.1.0 (69)；apksigner v2 校验通过，release 证书 SHA-256 与 68 正式包一致，debug 不同。原位升级具备签名条件，实际保数据升级仍待真机。
+- adb 无设备，未安装/卸载，未测真机性能；广播端到端/真机阻塞取消等覆盖仍需补。MANUAL-TEST 与 manifest 摘要保持不变，清单仍 68；未查询远端、提交、推送或发布。HANDOFF/TODO/SIGNING/RELEASE 已回填本地事实和下一步验收边界。
+
+## [2026-11-16] 文档续接整理（不改变应用版本）
+
+- HANDOFF 从旧 alpha6 快照重写为短入口：目标、当前版本/产物、待办前提、现行约束、Windows 构建方式与按需文件索引；TODO 改为当前验收/修复/发布待办，不再重复 M0–M7 历史全文。
+- 本地核对为 `main` / 4.1.0 (69)，debug 元数据 69、release 元数据仍 68；发布清单仍 `v4.0.0-68`。没有查询远端，不能据此断言线上最新或已同步。
+- 读取现存结果：277 项单测、0 failures/errors/skipped；lint **0 errors / 13 warnings**，更正旧快照的 10 warnings。验收清单为 301 条 checkbox / 72 条已勾选（含历史与取代项），不等于当前版本全部通过。
+- MANUAL-TEST 只更新标题与顶部适用提示，正文编号、条目与勾选原样保留；明确 AL 是当前新增验收、N 组使用实际安装端与更新端 code、同签名才可保数据升级、旧 UI/迁移样例不能照搬。
+- RELEASE / SIGNING 补充已发布正式签名基线、旧产物识别、脚本发布到 main 的前提、原密钥沿用与 apksigner 核验，纠正将会话安装称为免确认静默安装的理解。
+- 本次仅改六份 docs；没有重新构建、修改代码/清单、生成密钥、提交、推送或发布。当前 PowerShell 未定位到 Git，工作区与远端状态待后续具备工具时核对。
 
 ## [2026-11-14] 4.1.0 (69)：自定义图片背景 + 从图取色、搜索改浮层、明暗切换不再僵帧
 
