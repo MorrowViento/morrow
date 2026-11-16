@@ -47,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -73,7 +74,11 @@ import com.morrowviento.morrow.ui.event.EventFormState
 import com.morrowviento.morrow.ui.event.HomeUiState
 import com.morrowviento.morrow.ui.event.UndoBar
 import com.morrowviento.morrow.ui.search.CategoryFilter
-import com.morrowviento.morrow.ui.search.SearchOverlay
+import com.morrowviento.morrow.ui.search.SearchBar
+import com.morrowviento.morrow.ui.search.EventSearch
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
@@ -135,6 +140,7 @@ fun HomeScreen(
      */
     closeOverlaysRequest: Long = 0L,
 ) {
+    var backdropSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var editingForm by remember { mutableStateOf<EventFormState?>(null) }
@@ -146,14 +152,29 @@ fun HomeScreen(
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
 
-    // 搜索页与查询串：都存成可保存的状态，旋屏 / 系统回收后回到搜索页仍是原来那次搜索。
-    // 分类筛选用 Saver 存成短字符串，避免给密封接口加 Parcelable（它只是 UI 状态）。
-    var showSearch by remember { mutableStateOf(false) }
+    // 搜索复用首页卡片；分别保存两种列表的滚动位置，过滤不改动普通首页位置。
+    val searchListState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchFilter by rememberSaveable(stateSaver = CategoryFilterSaver) {
         mutableStateOf<CategoryFilter>(CategoryFilter.All)
     }
     val categoryNames = remember(categories) { categories.map { it.name } }
+    val searchResult = remember(state.active, state.completed, searchQuery, searchFilter, showSearch) {
+        if (showSearch) EventSearch.apply(state.active, state.completed, searchQuery, searchFilter) else null
+    }
+    val shownState = searchResult?.let {
+        state.copy(active = it.active, completed = it.completed, completedExpanded = true)
+    } ?: state
+    val shownListState = if (showSearch) searchListState else listState
+    LaunchedEffect(showSearch) {
+        if (!showSearch) { keyboard?.hide(); focusManager.clearFocus() }
+    }
+    LaunchedEffect(searchQuery, searchFilter) {
+        if (showSearch) searchListState.scrollToItem(0)
+    }
     // 退场动画期间 state.undo 已经清空，靠这份快照把撤销条画完。
     // 不能在组合里直接赋值（`if (state.undo != null) lastUndo = ...`）：
     // 组合期写状态会让 Compose 再跑一轮组合，撤销条每出现一次就多重组一帧。
@@ -212,7 +233,7 @@ fun HomeScreen(
     ) {
         CompositionLocalProvider(LocalBackdropSettings provides appSettings.backdrop) {
             GlassBackdropHost(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().onSizeChanged { backdropSize = it },
                 sampledContent = { GlassBackdrop() },
                 overlayContent = { contentBackdrop ->
                 Box(
@@ -225,13 +246,10 @@ fun HomeScreen(
                     // sampledContent 的话，卡片再怎么从底栏背后滚过去也永远透不出来。
                     // 底栏与所有浮层都在这列之外，避免玻璃采到自己。
                     //
-                    // 首页始终在这里：搜索不再是「同一列里的另一种内容」，而是盖在上面的
-                    // 一层玻璃面板（见 SearchOverlay）。于是关掉搜索时列表的滚动位置、
-                    // 分组展开状态原样还在，不需要重新回到原位。
-                    Column(Modifier.fillMaxSize().glassContentSource(contentBackdrop)) {
+                    Column(Modifier.fillMaxSize().imePadding().glassContentSource(contentBackdrop)) {
                         HomeHeader(
                             state = state,
-                            listState = listState,
+                            listState = shownListState,
                             sortLabel = state.sortMode.label(),
                             onCycleSort = { onSortChange(nextSort(state.sortMode)) },
                             moreAction = {
@@ -280,6 +298,15 @@ fun HomeScreen(
                                 }
                             },
                         )
+                        if (showSearch) {
+                            SearchBar(
+                                active = state.active, completed = state.completed, categories = categories,
+                                query = searchQuery, onQueryChange = { searchQuery = it },
+                                filter = searchFilter, onFilterChange = { searchFilter = it },
+                                onDismiss = { showSearch = false },
+                            )
+                            SectionLabel("找到 ${shownState.totalCount} 个事件")
+                        }
                         // 页面级回弹：内容被拉出一段再弹回（不是 Android 默认的整块拉伸）
                         GlassOverscrollHost(
                             Modifier
@@ -294,13 +321,20 @@ fun HomeScreen(
 
                                 state.isLoading -> CenterState("载入中…", null)
 
+                                showSearch && shownState.isEmpty -> CenterState(
+                                    if (state.isEmpty) "还没有事件可以搜索" else "没有匹配的事件", null,
+                                )
+
                                 state.isEmpty -> EmptyState()
 
                                 else -> EventList(
-                                    state = state,
-                                    listState = listState,
-                                    onToggleCompleted = onToggleCompleted,
-                                    onOpenDetail = { detailId = it },
+                                    state = shownState,
+                                    listState = shownListState,
+                                    onToggleCompleted = if (showSearch) ({}) else onToggleCompleted,
+                                    onOpenDetail = {
+                                        keyboard?.hide(); focusManager.clearFocus(); detailId = it
+                                    },
+                                    searching = showSearch,
                                 )
                             }
                         }
@@ -336,15 +370,17 @@ fun HomeScreen(
                         SettingsScreen(
                             state = settings,
                             actions = settingsActions,
-                            onDismiss = { showSettings = false },
+                            onDismiss = { settingsActions.cancelBackdrop(); showSettings = false },
+                            backgroundAspectRatio = if (backdropSize.height > 0) {
+                                backdropSize.width.toFloat() / backdropSize.height
+                            } else 1f,
                         )
                     }
 
                     // 常驻底栏：唯一的一条，画在首页 / 日历 / 设置之上。
                     // 切页面时它不重建也不换内容，只是选中格会滑动过去——
                     // 之前每个页面各放一条，进日历底栏就变成另一套按钮，看起来像换了个应用。
-                    // 搜索浮层打开时整块底栏被遮罩盖住、也点不到，索性不画。
-                    if (!showSettings && !showSearch) {
+                    if (!showSettings) {
                         HomeBottomBar(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -380,40 +416,6 @@ fun HomeScreen(
                                     EventFormState.newEvent()
                                 }
                             },
-                        )
-                    }
-
-                    // 搜索浮层：从顶部展开的一块玻璃面板，**盖在首页之上**而不是替换它。
-                    // 关掉就回到原处，滚动位置与分组状态都还在（上一版是整页横向推入，
-                    // 一次搜索要付两次页面转场，还让人以为跳进了另一个功能）。
-                    AnimatedVisibility(
-                        visible = showSearch,
-                        modifier = Modifier.fillMaxSize(),
-                        enter = if (appSettings.reduceMotion) {
-                            EnterTransition.None
-                        } else {
-                            (slideInVertically(GlassMotion.navigationSlide) { height -> -height / 4 } +
-                                fadeIn(GlassMotion.enterFade))
-                        },
-                        exit = if (appSettings.reduceMotion) {
-                            ExitTransition.None
-                        } else {
-                            fadeOut(GlassMotion.enterFade)
-                        },
-                    ) {
-                        SearchOverlay(
-                            active = state.active,
-                            completed = state.completed,
-                            categories = categories,
-                            query = searchQuery,
-                            onQueryChange = { searchQuery = it },
-                            filter = searchFilter,
-                            onFilterChange = { searchFilter = it },
-                            onOpenEvent = {
-                                showSearch = false
-                                detailId = it
-                            },
-                            onDismiss = { showSearch = false },
                         )
                     }
 
@@ -627,6 +629,7 @@ private fun EventList(
     listState: LazyListState,
     onToggleCompleted: () -> Unit,
     onOpenDetail: (String) -> Unit,
+    searching: Boolean = false,
 ) {
     LazyColumn(
         state = listState,
@@ -642,7 +645,7 @@ private fun EventList(
         }
         if (state.active.isEmpty()) {
             item(key = "active-empty") {
-                SectionHint("暂无进行中的事件，点下方 ＋ 新建")
+                SectionHint(if (searching) "没有匹配的进行中事件" else "暂无进行中的事件，点下方 ＋ 新建")
             }
         }
         items(state.active, key = { it.id }) { card ->
@@ -650,7 +653,8 @@ private fun EventList(
         }
         if (state.completed.isNotEmpty()) {
             item(key = "completed-header") {
-                CompletedHeader(state.completed.size, state.completedExpanded, onToggleCompleted)
+                if (searching) SectionLabel("已完成 · ${state.completed.size}")
+                else CompletedHeader(state.completed.size, state.completedExpanded, onToggleCompleted)
             }
             if (state.completedExpanded) {
                 items(state.completed, key = { "done-${it.id}" }) { card ->

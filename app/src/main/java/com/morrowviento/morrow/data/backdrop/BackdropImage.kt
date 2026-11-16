@@ -2,7 +2,10 @@ package com.morrowviento.morrow.data.backdrop
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.net.Uri
 import android.util.Log
 import com.morrowviento.morrow.data.settings.argbToHsl
@@ -90,10 +93,38 @@ object PaletteExtractor {
  * 相册 uri 的读权限是**临时授予**的：进程重启、用户清理缓存、系统回收授权之后，
  * 同一个 uri 就再也打不开了。如果直接存 uri，用户会遇到「某天打开 App，背景变回纯色
  * 而且怎么都恢复不了」——这种 bug 极难自查。选图当下就复制到
- * `filesDir/backdrop/custom.jpg`，之后只认这个副本，跟相册、跟授权都没关系。
+ * `filesDir/backdrop/`，之后只认这个副本，跟相册、跟授权都没关系。
  *
- * 文件名固定（不按时间戳累加）：用户换图时旧图会被覆盖，不会在私有目录里越积越多。
+ * 每次使用唯一文件名驱动 UI 换图；设置提交成功后清理旧图，失败时仍保留旧背景。
+ * 旧版 custom.jpg 继续可读。
  */
+data class BackdropCrop(val left: Float, val top: Float, val width: Float, val height: Float) {
+    fun transform(
+        imageWidth: Int, imageHeight: Int, aspectRatio: Float,
+        focusX: Float, focusY: Float, panX: Float, panY: Float, zoom: Float,
+    ): BackdropCrop {
+        val base = centered(imageWidth, imageHeight, aspectRatio)
+        val nextWidth = (width / zoom).coerceIn(base.width / 8f, base.width)
+        val nextHeight = nextWidth / aspectRatio
+        return BackdropCrop(
+            (left + focusX * (width - nextWidth) - panX * nextWidth)
+                .coerceIn(0f, (imageWidth - nextWidth).coerceAtLeast(0f)),
+            (top + focusY * (height - nextHeight) - panY * nextHeight)
+                .coerceIn(0f, (imageHeight - nextHeight).coerceAtLeast(0f)),
+            nextWidth, nextHeight,
+        )
+    }
+
+    companion object {
+        fun centered(imageWidth: Int, imageHeight: Int, aspectRatio: Float): BackdropCrop {
+            require(imageWidth > 0 && imageHeight > 0 && aspectRatio.isFinite() && aspectRatio > 0f)
+            val width = minOf(imageWidth.toFloat(), imageHeight * aspectRatio)
+            val height = minOf(imageHeight.toFloat(), width / aspectRatio)
+            return BackdropCrop((imageWidth - width) / 2f, (imageHeight - height) / 2f, width, height)
+        }
+    }
+}
+
 object BackdropImage {
 
     private const val TAG = "MorrowBackdrop"
@@ -116,49 +147,71 @@ object BackdropImage {
 
     fun dir(context: Context): File = File(context.filesDir, "backdrop").apply { mkdirs() }
 
-    fun file(context: Context, name: String? = FILE_NAME): File = File(dir(context), name ?: FILE_NAME)
+    fun file(context: Context, name: String? = FILE_NAME): File {
+        val safeName = name ?: FILE_NAME
+        require(safeName != "." && safeName != ".." && safeName.matches(Regex("[A-Za-z0-9._-]+"))) { "无效的背景文件名" }
+        return File(dir(context), safeName)
+    }
 
     /**
-     * 把相册里的图复制进来，返回文件名。
+     * 把相册里的图复制进来，返回独立文件名与同次解码的取色结果。
      *
      * 解码时按 [MAX_SIDE] 采样，再以 JPEG 90 重编码：现代手机拍的原图动辄 4000×3000、
      * 8 MB，直接存下来既占空间，每次首帧解码也要几十毫秒（进桌面/切页都会掉帧）。
      */
-    fun import(context: Context, uri: Uri): String {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri).use { stream ->
-            requireNotNull(stream) { "无法打开所选图片" }
-            BitmapFactory.decodeStream(stream, null, bounds)
-        }
-        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "这张图读不出来，换一张试试" }
+    data class Imported(val name: String, val seed: Long)
 
-        val sample = sampleSize(bounds.outWidth, bounds.outHeight)
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = context.contentResolver.openInputStream(uri).use { stream ->
-            requireNotNull(stream) { "无法打开所选图片" }
-            BitmapFactory.decodeStream(stream, null, options)
-        } ?: error("这张图读不出来，换一张试试")
+    fun prepare(context: Context, uri: Uri): Bitmap =
+        decode(ImageDecoder.createSource(context.contentResolver, uri))
 
-        val target = File(dir(context), FILE_NAME)
-        val temp = File(dir(context), "$FILE_NAME.tmp")
+    fun import(context: Context, uri: Uri): Imported = publish(context, prepare(context, uri))
+
+    fun importCropped(context: Context, source: Bitmap, crop: BackdropCrop): Imported {
+        require(listOf(crop.left, crop.top, crop.width, crop.height).all { it.isFinite() })
+        require(crop.left >= 0f && crop.top >= 0f && crop.width > 0f && crop.height > 0f)
+        require(crop.left + crop.width <= source.width + 0.01f && crop.top + crop.height <= source.height + 0.01f)
+        val bitmap = Bitmap.createBitmap(
+            crop.width.toInt().coerceAtLeast(1), crop.height.toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888,
+        )
         try {
-            temp.outputStream().use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            val matrix = android.graphics.Matrix().apply {
+                setRectToRect(
+                    RectF(crop.left, crop.top, crop.left + crop.width, crop.top + crop.height),
+                    RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()),
+                    android.graphics.Matrix.ScaleToFit.FILL,
+                )
             }
-            if (!temp.renameTo(target)) {
-                // 某些机型 rename 跨目录/覆盖会失败，退化成「复制 + 删临时文件」
-                temp.copyTo(target, overwrite = true)
-                temp.delete()
-            }
-        } finally {
+            Canvas(bitmap).drawBitmap(source, matrix, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        } catch (error: Exception) {
             bitmap.recycle()
-            if (temp.exists()) temp.delete()
+            throw error
         }
-        synchronized(this) {
-            cachedKey = null
-            cachedBitmap = null
+        return publish(context, bitmap)
+    }
+
+    private fun publish(context: Context, bitmap: Bitmap): Imported {
+        val target = File(dir(context), "backdrop-${java.util.UUID.randomUUID()}.jpg")
+        val temp = File(dir(context), "${target.name}.tmp")
+        var published = false
+        try {
+            val seed = PaletteExtractor.dominantSeed(bitmap)
+            temp.outputStream().use { out ->
+                check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)) { "无法保存所选图片" }
+            }
+            check(temp.renameTo(target)) { "无法保存所选图片" }
+            synchronized(this) {
+                cachedKey = cacheKey(target)
+                cachedBitmap = bitmap
+            }
+            published = true
+            return Imported(target.name, seed)
+        } finally {
+            temp.delete()
+            if (!published) {
+                target.delete()
+                bitmap.recycle()
+            }
         }
-        return FILE_NAME
     }
 
     /**
@@ -166,29 +219,20 @@ object BackdropImage {
      *
      * 走进程内缓存：`GlassBackdrop` 每次重组都会问一次，而它只在换图 / 重启后失效。
      */
-    fun load(context: Context, name: String?): Bitmap? {
+    fun load(context: Context, name: String?): Bitmap? = runCatching {
         val file = file(context, name)
         if (!file.isFile) return null
-        val key = "${file.absolutePath}:${file.lastModified()}:${file.length()}"
+        val key = cacheKey(file)
         synchronized(this) {
             cachedBitmap?.let { if (key == cachedKey && !it.isRecycled) return it }
         }
-        return runCatching {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.absolutePath, bounds)
-            val options = BitmapFactory.Options().apply {
-                inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight)
-            }
-            val bitmap = BitmapFactory.decodeFile(file.absolutePath, options)
-            if (bitmap != null) {
-                synchronized(this) {
-                    cachedBitmap = bitmap
-                    cachedKey = key
-                }
-            }
-            bitmap
-        }.onFailure { Log.w(TAG, "读背景图失败 ${file.name}", it) }.getOrNull()
-    }
+        val bitmap = decode(ImageDecoder.createSource(file))
+        synchronized(this) {
+            cachedBitmap = bitmap
+            cachedKey = key
+        }
+        bitmap
+    }.onFailure { Log.w(TAG, "读背景图失败", it) }.getOrNull()
 
     /** 取主色。失败返回 0（调用方保留原配色）。 */
     fun seedOf(context: Context, name: String?): Long {
@@ -204,19 +248,32 @@ object BackdropImage {
         }
     }
 
-    /**
-     * 解码采样倍率：让解码结果的长边**不超过** [MAX_SIDE]。
-     *
-     * 上一版写成了「长边减半后仍不小于 MAX_SIDE 才继续」——4000×3000 的原图会算出
-     * `inSampleSize = 1`，直接解出 48 MB 的位图，低端机上很可能 OOM。
-     * 现在的条件是「结果还超就继续减半」，4000 → 2（2000），12000 → 8（1500）。
-     */
-    private fun sampleSize(width: Int, height: Int): Int {
-        var sample = 1
-        val longest = maxOf(width, height)
-        while (longest / sample > MAX_SIDE && sample < 32) {
-            sample *= 2
+    fun remove(context: Context, name: String) {
+        file(context, name).delete()
+        synchronized(this) {
+            if (cachedKey?.startsWith(file(context, name).absolutePath + ":") == true) {
+                cachedKey = null
+                cachedBitmap = null
+            }
         }
-        return sample
+    }
+
+    /** 设置提交成功后才回收旧文件，不 recycle 已借给 UI 的位图。 */
+    fun retain(context: Context, name: String) {
+        dir(context).listFiles()?.filter { it.name != name }?.forEach { it.delete() }
+    }
+
+    private fun cacheKey(file: File) = "${file.absolutePath}:${file.lastModified()}:${file.length()}"
+
+    private fun decode(source: ImageDecoder.Source): Bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        val longest = maxOf(info.size.width, info.size.height)
+        if (longest > MAX_SIDE) {
+            val ratio = MAX_SIDE.toDouble() / longest
+            decoder.setTargetSize(
+                (info.size.width * ratio).toInt().coerceAtLeast(1),
+                (info.size.height * ratio).toInt().coerceAtLeast(1),
+            )
+        }
     }
 }

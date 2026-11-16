@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import com.morrowviento.morrow.domain.model.RepeatType
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -265,9 +267,9 @@ private fun CalendarHeader(
             )
             Text(
                 text = if (isMonthView) {
-                    "本月 ${state.monthEventCount} 个事件"
+                    "本月 ${state.monthEventCount} 次事件"
                 } else {
-                    "全年 ${state.yearEventCount} 个事件"
+                    "全年 ${state.yearEventCount} 次事件"
                 },
                 style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
             )
@@ -499,36 +501,16 @@ private fun SelectedDaySection(
 
 @Composable
 private fun YearView(state: CalendarUiState, actions: CalendarActions) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            // 底部留出底栏高度：年视图是滚动的，不给空间最后一排会被底栏压住
-            .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 96.dp),
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(160.dp * fontScale),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (state.yearEventCount == 0) {
-            Text(
-                text = "这一年还没有事件",
-                modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
-                style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
-            )
-        }
-        for (row in 0 until 4) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                for (col in 0 until 3) {
-                    val summary = state.monthSummaries.getOrNull(row * 3 + col) ?: continue
-                    MonthCard(
-                        summary = summary,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 5.dp),
-                        onClick = { actions.openMonth(summary.month) },
-                    )
-                }
-            }
+        items(state.monthSummaries, key = { it.month.toString() }) { summary ->
+            MonthCard(summary, Modifier.fillMaxWidth()) { actions.openMonth(summary.month) }
         }
     }
 }
@@ -537,34 +519,52 @@ private fun YearView(state: CalendarUiState, actions: CalendarActions) {
 private fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () -> Unit) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
-    GlassPanel(
-        modifier = modifier.height(84.dp),
-        onClick = onClick,
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+    val accent = glassAccent()
+    GlassPanel(modifier = modifier, onClick = onClick) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${summary.month.monthValue}月",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = primary),
-                )
+                Text("${summary.month.monthValue}月", style = TextStyle(fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold, color = primary))
                 Spacer(Modifier.weight(1f))
-                Text(
-                    text = if (summary.eventCount == 0) "—" else "${summary.eventCount}",
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (summary.eventCount == 0) secondary.copy(alpha = 0.5f) else primary,
-                    ),
-                )
+                Text("${summary.eventCount} 次", style = TextStyle(fontSize = 11.sp, color = secondary))
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth()) {
+                CalendarPresentation.WEEKDAY_LABELS.forEach { label ->
+                    Text(label, Modifier.weight(1f), textAlign = TextAlign.Center,
+                        style = TextStyle(fontSize = 9.sp, color = secondary))
+                }
             }
             Spacer(Modifier.height(4.dp))
-            summary.sampleTitles.take(2).forEach { title ->
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 9.5.sp, color = secondary),
-                )
+            for (row in 0 until 6) {
+                Row(Modifier.fillMaxWidth()) {
+                    for (col in 0 until 7) {
+                        val cell = summary.cells[row * 7 + col]
+                        Box(Modifier.weight(1f).height(24.dp), contentAlignment = Alignment.Center) {
+                            if (cell.inMonth) {
+                                if (cell.isToday) Canvas(Modifier.matchParentSize()) {
+                                    drawCircle(accent.copy(alpha = 0.24f), radius = size.minDimension * 0.43f)
+                                    drawCircle(accent, radius = size.minDimension * 0.43f, style = Stroke(1.dp.toPx()))
+                                }
+                                Text(cell.date.dayOfMonth.toString(), style = TextStyle(fontSize = 10.sp,
+                                    fontWeight = if (cell.isToday) FontWeight.Bold else FontWeight.Normal, color = primary))
+                                if (cell.eventCount > 0) Canvas(Modifier.align(Alignment.BottomCenter).size(3.dp)) {
+                                    drawCircle(accent)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            if (summary.sampleEntries.isEmpty()) {
+                Text("本月暂无事件", style = TextStyle(fontSize = 10.sp, color = secondary))
+            } else summary.sampleEntries.forEach { entry ->
+                Text("${entry.date.dayOfMonth}日 · ${entry.title}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 10.sp, color = secondary))
+            }
+            if (summary.eventCount > summary.sampleEntries.size) {
+                Text("另 ${summary.eventCount - summary.sampleEntries.size} 次事件", style = TextStyle(fontSize = 10.sp, color = secondary))
             }
         }
     }
@@ -613,7 +613,7 @@ private fun MonthGroupHeader(group: MonthGroup) {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "${group.entries.size} 个事件",
+            text = "${group.entries.size} 次事件",
             style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
         )
     }
@@ -684,7 +684,7 @@ private fun entryMeta(entry: CalendarEntry): String {
     val parts = mutableListOf(entry.category)
     lunar?.let { parts += "农历$it" }
     if (entry.isAllDay) parts += "全天"
-    if (entry.repeatsYearly) parts += "每年"
+    if (entry.repeatType != RepeatType.NONE) parts += entry.repeatType.label
     return parts.joinToString(" · ")
 }
 

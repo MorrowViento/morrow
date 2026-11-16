@@ -13,6 +13,8 @@ import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
+import com.morrowviento.morrow.domain.model.EventKind
+import java.time.LocalDate
 import com.morrowviento.morrow.domain.model.RepeatType
 import com.morrowviento.morrow.domain.model.SortMode
 import java.time.LocalDateTime
@@ -55,6 +57,8 @@ data class BackupEvent(
     val repeatMonth: Int?,
     val repeatDay: Int?,
     val createdAt: String,
+    val kind: String = EventKind.TODO.name,
+    val lastHandledOccurrence: String? = null,
 )
 
 data class BackupReminder(
@@ -110,7 +114,7 @@ object BackupCodec {
     const val FORMAT = "morrow-backup"
 
     /** 当前写入的版本。读到更高的版本说明备份来自更新的 App，拒绝而不是猜测。 */
-    const val CURRENT_VERSION = 1
+    const val CURRENT_VERSION = 2
 
     // ---------------------------------------------------------------- 编码
 
@@ -160,6 +164,8 @@ object BackupCodec {
         addProperty("isAllDay", event.isAllDay)
         addProperty("isCompleted", event.isCompleted)
         addProperty("isPinned", event.isPinned)
+        addProperty("kind", event.kind)
+        event.lastHandledOccurrence?.let { addProperty("lastHandledOccurrence", it) }
         addProperty("repeatType", event.repeatType)
         event.repeatMonth?.let { addProperty("repeatMonth", it) }
         event.repeatDay?.let { addProperty("repeatDay", it) }
@@ -287,6 +293,8 @@ object BackupCodec {
             repeatMonth = obj.intOrNull("repeatMonth"),
             repeatDay = obj.intOrNull("repeatDay"),
             createdAt = createdAtRaw,
+            kind = obj.stringOrNull("kind") ?: EventKind.TODO.name,
+            lastHandledOccurrence = obj.stringOrNull("lastHandledOccurrence")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
         )
     }
 
@@ -427,6 +435,8 @@ object BackupMapper {
         repeatMonth = event.repeatMonth,
         repeatDay = event.repeatDay,
         createdAt = event.createdAt.toString(),
+        kind = event.kind.name,
+        lastHandledOccurrence = event.lastHandledOccurrence?.toString(),
     )
 
     fun toDomain(backup: BackupEvent): CountdownEvent? {
@@ -453,6 +463,8 @@ object BackupMapper {
             repeatMonth = backup.repeatMonth,
             repeatDay = backup.repeatDay,
             createdAt = created,
+            kind = enumOrDefault(backup.kind, EventKind.TODO),
+            lastHandledOccurrence = backup.lastHandledOccurrence?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         )
     }
 

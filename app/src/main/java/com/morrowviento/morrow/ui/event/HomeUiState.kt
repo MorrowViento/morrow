@@ -33,7 +33,7 @@ data class EventCardModel(
     val isPinned: Boolean,
     val isAllDay: Boolean,
     val isCompleted: Boolean,
-    val repeatsYearly: Boolean,
+    val repeatType: com.morrowviento.morrow.domain.model.RepeatType,
     /** 创建→目标的进度，0f..1f；仅非重复事件有效（重复事件恒为 0f）。 */
     val progress: Float,
     /** 目标就在今天且未到时，形如 `03:24:15`；否则为 null。 */
@@ -45,6 +45,8 @@ data class EventCardModel(
      * 滚列表时每帧每张卡各来两遍，是最容易看见的掉帧来源之一。
      */
     val meta: String,
+    val kind: com.morrowviento.morrow.domain.model.EventKind = com.morrowviento.morrow.domain.model.EventKind.TODO,
+    val primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.COMPLETE,
 ) {
     val days: Int get() = abs(dayDelta)
 }
@@ -94,7 +96,7 @@ object EventPresentation {
     fun toCard(event: CountdownEvent, today: LocalDate, now: LocalDateTime): EventCardModel {
         val target = RepeatRule.upcomingTarget(event, today)
         val dayDelta = com.morrowviento.morrow.domain.time.CalendarMath.daysUntil(target.toLocalDate(), today)
-        val progress = if (event.repeatsYearly) 0f else progressOf(event.createdAt, target, now)
+        val progress = if ((event.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE)) 0f else progressOf(event.createdAt, target, now)
         return EventCardModel(
             id = event.id,
             title = event.title,
@@ -103,15 +105,32 @@ object EventPresentation {
             target = target,
             createdAt = event.createdAt,
             dayDelta = dayDelta,
-            isCountingUp = event.direction == CountDirection.COUNTUP || dayDelta < 0,
+            isCountingUp = event.direction == CountDirection.COUNTUP ||
+                (event.direction == CountDirection.AUTO && dayDelta < 0),
             isPinned = event.isPinned,
             isAllDay = event.isAllDay,
             isCompleted = event.isCompleted,
-            repeatsYearly = event.repeatsYearly,
+            repeatType = event.repeatType,
+            kind = event.kind,
+            primaryAction = event.primaryAction,
             progress = progress,
             remainingToday = remainingTodayOf(target, event.isAllDay, today, now),
-            meta = metaLine(event.category, target, event.repeatsYearly, event.isAllDay),
+            meta = metaLine(event.category, target, event.repeatType, event.isAllDay),
         )
+    }
+
+    /** 同一天内只复制进度或秒数确实改变的卡片，排序和其它实例保持不变。 */
+    fun refreshClock(cards: List<EventCardModel>, today: LocalDate, now: LocalDateTime): List<EventCardModel> {
+        var patched: MutableList<EventCardModel>? = null
+        for (index in cards.indices) {
+            val card = cards[index]
+            val progress = if (card.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE) 0f else progressOf(card.createdAt, card.target, now)
+            val remaining = remainingTodayOf(card.target, card.isAllDay, today, now)
+            if (progress == card.progress && remaining == card.remainingToday) continue
+            if (patched == null) patched = cards.toMutableList()
+            patched[index] = card.copy(progress = progress, remainingToday = remaining)
+        }
+        return patched ?: cards
     }
 
     fun comparator(mode: SortMode): Comparator<EventCardModel> {
@@ -170,14 +189,18 @@ object EventPresentation {
     private fun metaLine(
         category: String,
         target: LocalDateTime,
-        repeatsYearly: Boolean,
+        repeatType: com.morrowviento.morrow.domain.model.RepeatType,
         isAllDay: Boolean,
     ): String = buildString(24) {
         if (category.isNotBlank()) {
             append(category)
             append(" · ")
         }
-        if (repeatsYearly) append("每年 ")
+        when (repeatType) {
+            com.morrowviento.morrow.domain.model.RepeatType.YEARLY -> append("每年 ")
+            com.morrowviento.morrow.domain.model.RepeatType.MONTHLY -> append("每月 ")
+            else -> Unit
+        }
         appendPadded(target.monthValue, 1)
         append("月")
         appendPadded(target.dayOfMonth, 1)

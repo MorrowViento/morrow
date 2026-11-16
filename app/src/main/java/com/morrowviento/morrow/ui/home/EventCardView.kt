@@ -135,7 +135,7 @@ private fun CountdownBadge(card: EventCardModel, dim: Float) {
     val isToday = card.dayDelta == 0
 
     Box(modifier = Modifier.size(62.dp), contentAlignment = Alignment.Center) {
-        if (!card.repeatsYearly) {
+        if (card.repeatType == com.morrowviento.morrow.domain.model.RepeatType.NONE) {
             Canvas(Modifier.matchParentSize()) {
                 val stroke = 3.dp.toPx()
                 val inset = stroke / 2f

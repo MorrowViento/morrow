@@ -34,8 +34,8 @@ class ReminderReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 when (intent.action) {
-                    ACTION_COMPLETE -> complete(app, eventId)
-                    ACTION_SNOOZE -> snooze(app, eventId)
+                    ACTION_COMPLETE -> complete(app, eventId, intent)
+                    ACTION_SNOOZE -> snooze(app, eventId, intent)
                     else -> fire(app, eventId, intent, receivedAt)
                 }
             } catch (t: Throwable) {
@@ -61,13 +61,20 @@ class ReminderReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(EXTRA_TITLE)
         val isAllDay = intent.getBooleanExtra(EXTRA_IS_ALL_DAY, false)
 
-        if (target > 0L && !title.isNullOrBlank()) {
-            app.reminderNotifier.show(eventId, title, isAllDay, minutes, target, receivedAt)
+        val actionName = intent.getStringExtra(EXTRA_PRIMARY_ACTION)
+        val fastContent = target > 0L && !title.isNullOrBlank() && actionName != null
+        if (fastContent) {
+            val action = com.morrowviento.morrow.domain.model.EventPrimaryAction.entries.firstOrNull {
+                it.name == actionName
+            } ?: com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE
+            app.reminderNotifier.show(eventId, title, isAllDay, minutes, target, receivedAt, action)
         } else {
-            // 兼容升级前已排进系统、Intent 里还没有标题的旧闹钟
+            // 旧闹钟缺少标题或动作类型时，从当前记录补齐，不能把合法提醒误判为过期内容。
             val event = app.eventRepository.findById(eventId) ?: return
             if (event.isCompleted) return
-            val fallbackTarget = event.targetDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val fallbackTarget = com.morrowviento.morrow.domain.time.RepeatRule
+                .upcomingTarget(event, java.time.LocalDate.now()).toLocalDate()
+                .atTime(event.reminderAnchor.toLocalTime()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             app.reminderNotifier.show(event, minutes, target.takeIf { it > 0L } ?: fallbackTarget, receivedAt)
         }
 
@@ -76,12 +83,21 @@ class ReminderReceiver : BroadcastReceiver() {
 
         // 后置对账：已完成则撤销（并发场景下排期可能没来得及清），否则按「从现在起」重排，
         // 年度重复事件靠这一步自转，补上明年的落点
-        val event = app.eventRepository.findById(eventId) ?: return
-        if (event.isCompleted) {
-            app.reminderNotifier.cancel(eventId)
-            app.reminderScheduler.cancel(eventId)
-        } else {
-            app.reminderScheduler.sync(event)
+        app.eventRepository.withMutation {
+            val event = app.eventRepository.findById(eventId)
+            if (event == null || event.isCompleted) {
+                app.reminderNotifier.cancel(eventId)
+                app.reminderScheduler.cancel(eventId)
+            } else {
+                val staleContent = fastContent && (
+                    event.title != title || event.isAllDay != isAllDay ||
+                        event.primaryAction.name != intent.getStringExtra(EXTRA_PRIMARY_ACTION)
+                    )
+                if (staleContent || (target > 0L && !com.morrowviento.morrow.domain.time.ReminderPlan.isValidTarget(event, target))) {
+                    app.reminderNotifier.cancel(eventId)
+                }
+                app.reminderScheduler.sync(event)
+            }
         }
     }
 
@@ -117,20 +133,47 @@ class ReminderReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun complete(app: MorrowApp, eventId: String) {
-        val event = app.eventRepository.findById(eventId) ?: return
-        if (!event.isCompleted) {
-            app.eventRepository.save(event.copy(isCompleted = true))
+    private suspend fun complete(app: MorrowApp, eventId: String, intent: Intent) {
+        app.eventRepository.withMutation {
+            val event = app.eventRepository.findById(eventId) ?: return@withMutation
+            if (event.isCompleted || event.primaryAction.name != intent.getStringExtra(EXTRA_PRIMARY_ACTION)) return@withMutation
+            val target = intent.getLongExtra(EXTRA_TARGET, 0L)
+            if (!com.morrowviento.morrow.domain.time.ReminderPlan.isValidTarget(event, target)) return@withMutation
+            val date = java.time.Instant.ofEpochMilli(target).atZone(ZoneId.systemDefault()).toLocalDate()
+            val updated = com.morrowviento.morrow.domain.time.RepeatRule.applyPrimaryAction(event, java.time.LocalDate.now(), date)
+                ?: return@withMutation
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                app.undoRepository.clear()
+                app.eventRepository.save(updated)
+                app.undoRepository.push(
+                    com.morrowviento.morrow.domain.model.UndoOperation(
+                        id = java.util.UUID.randomUUID().toString(),
+                        kind = com.morrowviento.morrow.domain.model.UndoKind.TOGGLE_COMPLETED,
+                        message = "「${event.title}」${event.primaryAction.label}",
+                        snapshot = listOf(event),
+                        expiresAtMillis = System.currentTimeMillis() + com.morrowviento.morrow.domain.model.UndoOperation.WINDOW_MILLIS,
+                    ),
+                )
+                app.reminderScheduler.cancel(eventId)
+                app.reminderNotifier.cancel(eventId)
+                app.reminderScheduler.sync(updated)
+            }
         }
-        app.reminderScheduler.cancel(eventId)
-        app.reminderNotifier.cancel(eventId)
+        // 仅广播进程时没有首页订阅者，完成动作也必须主动更新桌面。
+        runCatching { app.widgetRefresher.refreshAll() }
+            .onFailure { Log.w(TAG, "完成事件后刷新小部件失败", it) }
     }
 
-    private suspend fun snooze(app: MorrowApp, eventId: String) {
-        val event = app.eventRepository.findById(eventId) ?: return
-        if (event.isCompleted) return
-        app.reminderNotifier.cancel(eventId)
-        app.reminderScheduler.snooze(eventId, SNOOZE_MINUTES)
+    private suspend fun snooze(app: MorrowApp, eventId: String, intent: Intent) {
+        app.eventRepository.withMutation {
+            val event = app.eventRepository.findById(eventId) ?: return@withMutation
+            val target = intent.getLongExtra(EXTRA_TARGET, 0L)
+            if (event.primaryAction.name != intent.getStringExtra(EXTRA_PRIMARY_ACTION) ||
+                !com.morrowviento.morrow.domain.time.ReminderPlan.isValidTarget(event, target)
+            ) return@withMutation
+            app.reminderNotifier.cancel(eventId)
+            app.reminderScheduler.snooze(event, target, SNOOZE_MINUTES)
+        }
     }
 
     companion object {
@@ -146,6 +189,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_TRIGGER_AT = "trigger_at"
         const val EXTRA_TITLE = "title"
         const val EXTRA_IS_ALL_DAY = "is_all_day"
+        const val EXTRA_PRIMARY_ACTION = "primary_action"
 
         const val SNOOZE_MINUTES = 10
     }

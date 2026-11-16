@@ -8,7 +8,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
                     app.undoRepository,
                     app.reminderScheduler,
                     app.widgetRefresher,
+                    app.reminderNotifier::cancel,
                 ),
             )
             val categoryViewModel: CategoryViewModel = viewModel(
@@ -108,7 +109,7 @@ class MainActivity : ComponentActivity() {
             // `enableEdgeToEdge()` 不带参数时按资源的 night 配置猜，用户在设置里强制
             // 深色而系统是浅色时，状态栏会留下深色图标——在深色背景上直接看不见。
             val darkTheme = settingsState.settings.isDark(isSystemInDarkTheme())
-            SideEffect {
+            LaunchedEffect(darkTheme) {
                 enableEdgeToEdge(
                     statusBarStyle = if (darkTheme) {
                         SystemBarStyle.dark(AndroidColor.TRANSPARENT)
@@ -170,7 +171,9 @@ class MainActivity : ComponentActivity() {
                     setAccent = settingsViewModel::setAccent,
                     setAutoAccent = settingsViewModel::setAutoAccent,
                     setBackdropMode = settingsViewModel::setBackdropMode,
-                    importBackdrop = settingsViewModel::importBackdrop,
+                    prepareBackdrop = settingsViewModel::prepareBackdrop,
+                    confirmBackdrop = settingsViewModel::confirmBackdrop,
+                    cancelBackdrop = settingsViewModel::cancelBackdrop,
                     clearBackdrop = settingsViewModel::clearBackdrop,
                     setGlassFrostLevel = settingsViewModel::setGlassFrostLevel,
                     setReduceMotion = settingsViewModel::setReduceMotion,

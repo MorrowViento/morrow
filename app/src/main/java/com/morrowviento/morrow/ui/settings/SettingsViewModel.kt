@@ -33,6 +33,8 @@ import com.morrowviento.morrow.ui.update.UpdateUiState
 import com.morrowviento.morrow.widget.WidgetConfigStore
 import com.morrowviento.morrow.widget.WidgetEntries
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -129,7 +131,7 @@ class SettingsViewModel(
      */
     fun setTheme(mode: ThemeMode) = persist {
         settings.setThemeMode(mode)
-        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        refreshSavedSettingsWidgets()
     }
 
     /** 切换玻璃厚度档位：直接写该档位的连续值（分段控件没有拖动预览这回事）。 */
@@ -153,7 +155,7 @@ class SettingsViewModel(
         val current = settings.appSettings.first().backdrop
         // 一次落盘：关取色与换强调色写在同一次 edit 里，主题子树只重建一次
         settings.setAccentColor(color, current.copy(autoTint = false))
-        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        refreshSavedSettingsWidgets()
     }
 
     /** 打开 / 关闭「从背景图取色」。种子上次选图时已经算好，这里不重新读图。 */
@@ -165,7 +167,7 @@ class SettingsViewModel(
             return@persist
         }
         settings.setBackdrop(current.copy(autoTint = enabled))
-        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        refreshSavedSettingsWidgets()
     }
 
     /** 切换底色：丝缎 / 图片。切到图片但没有图时不做任何事（由 UI 拉起相册）。 */
@@ -173,42 +175,78 @@ class SettingsViewModel(
         val current = settings.appSettings.first().backdrop
         if (mode == BackdropMode.IMAGE && !current.hasImage) return@persist
         settings.setBackdrop(current.copy(mode = mode))
-        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        refreshSavedSettingsWidgets()
     }
 
-    /**
-     * 选一张背景图。
-     *
-     * 三步都在 IO 线程：解码采样、重编码落盘、取主色（要知道主色得先解码）。
-     * 完成后一次写完四项设置，避免壁纸位图连着重绘四次。
-     *
-     * 首次选图默认打开「从背景图取色」：那正是用户说的「加了背景图，主题色跟着图走」。
-     * 之后用户手动选了预设色，开关会被 {@link setAccent} 关掉，这里不去抢回来。
-     */
-    fun importBackdrop(uri: Uri) = runTask(failure = "设置背景失败") {
-        val name = BackdropImage.import(appContext, uri)
-        val seed = BackdropImage.seedOf(appContext, name)
-        val current = settings.appSettings.first().backdrop
-        settings.setBackdrop(
-            current.copy(
+    fun prepareBackdrop(uri: Uri, aspectRatio: Float) = runTask(failure = "读取背景失败") {
+        require(aspectRatio.isFinite() && aspectRatio > 0f)
+        val bitmap = BackdropImage.prepare(appContext, uri)
+        try {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            local.update { it.copy(pendingBackdrop = PendingBackdrop(bitmap, aspectRatio), message = null) }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            bitmap.recycle()
+            throw cancelled
+        }
+    }
+
+    fun cancelBackdrop() {
+        if (!local.value.busy) local.update { it.copy(pendingBackdrop = null) }
+    }
+
+    fun confirmBackdrop(bitmap: android.graphics.Bitmap, crop: com.morrowviento.morrow.data.backdrop.BackdropCrop) =
+        runTask(failure = "设置背景失败") {
+        val pending = local.value.pendingBackdrop ?: return@runTask
+        if (pending.bitmap !== bitmap) return@runTask
+        require(kotlin.math.abs(crop.width / crop.height - pending.aspectRatio) < 0.001f)
+        val imported = BackdropImage.importCropped(appContext, bitmap, crop)
+        var committed = false
+        try {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val current = settings.snapshotSettings().backdrop
+            val next = current.copy(
                 mode = BackdropMode.IMAGE,
-                image = name,
-                autoTint = true,
-                tintSeed = if (seed != 0L) seed else current.tintSeed,
-            ),
-        )
-        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
-        local.update {
-            it.copy(message = if (seed == 0L) "背景已换；这张图取不出颜色，配色保持不变" else "背景已换，配色已按图片取色")
+                image = imported.name,
+                autoTint = if (current.hasImage) current.autoTint else true,
+                tintSeed = if (imported.seed != 0L) imported.seed else current.tintSeed,
+            )
+            withContext(kotlinx.coroutines.NonCancellable) {
+                settings.setBackdrop(next)
+                committed = true
+                BackdropImage.retain(appContext, imported.name)
+            }
+            refreshSavedSettingsWidgets()
+            local.update {
+                it.copy(pendingBackdrop = null, message = when {
+                    imported.seed == 0L -> "背景已换；这张图取不出颜色，配色保持不变"
+                    next.autoTint -> "背景已换，配色已按图片取色"
+                    else -> "背景已换，保留手选配色"
+                })
+            }
+        } finally {
+            if (!committed) BackdropImage.remove(appContext, imported.name)
         }
     }
 
     /** 移除自定义背景图：回到丝缎，取色种子一并清掉（留着会继续影响配色）。 */
     fun clearBackdrop() = runTask(failure = "移除背景失败") {
-        BackdropImage.clear(appContext)
-        settings.setBackdrop(BackdropSettings())
-        withContext(Dispatchers.IO) { widgetRefresh.refreshAll() }
+        local.update { it.copy(pendingBackdrop = null) }
+        withContext(kotlinx.coroutines.NonCancellable) {
+            settings.setBackdrop(BackdropSettings())
+            BackdropImage.clear(appContext)
+        }
+        refreshSavedSettingsWidgets()
         local.update { it.copy(message = "已回到丝缎背景") }
+    }
+
+    private suspend fun refreshSavedSettingsWidgets() {
+        try {
+            widgetRefresh.refreshAll()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("MorrowSettings", "设置已保存，小部件刷新失败", error)
+        }
     }
 
     // ---- 导出 / 导入 ----
@@ -238,9 +276,7 @@ class SettingsViewModel(
         val pending = local.value.pendingImport ?: return@runTask
         local.update { it.copy(pendingImport = null) }
 
-        val before = events.loadAll()
-        val report = backup.import(pending.document, mode, pending.skippedEvents)
-        reconcile(before)
+        val report = backup.import(pending.document, mode, pending.skippedEvents, reconcile = ::reconcile)
         local.update { it.copy(message = report.summaryText()) }
     }
 
@@ -253,12 +289,12 @@ class SettingsViewModel(
     fun cancelClearAll() = local.update { it.copy(confirmClearAll = false) }
 
     fun confirmClearAll() = runTask(failure = "清除失败") {
-        val before = events.loadAll()
-        backup.clearAllData()
-        // 背景图不在 DataStore 里，得单独删；否则「清除全部数据」之后桌面/设置页
-        // 还留着一张孤立的照片，用户以为没清干净
-        BackdropImage.clear(appContext)
-        reconcile(before)
+        backup.clearAllData { before ->
+            local.update { it.copy(pendingBackdrop = null) }
+            // 与导入/背景设置串行化，提交成功后才清理独立图片文件。
+            BackdropImage.clear(appContext)
+            reconcile(before)
+        }
         local.update { it.copy(confirmClearAll = false, message = "已清除全部数据") }
     }
 
@@ -293,7 +329,13 @@ class SettingsViewModel(
             it.copy(update = UpdateUiState(stage = UpdateStage.CHECKING), message = null)
         }
         viewModelScope.launch {
-            val result = runCatching { updateRepository.check() }.getOrNull()
+            val result = try {
+                updateRepository.check()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             val release = result?.release
             val abis = Build.SUPPORTED_ABIS.toList()
             val localCode = localVersionCode()
@@ -341,8 +383,10 @@ class SettingsViewModel(
                 }
                 downloadedApk = file
                 local.update { it.copy(update = it.update.copy(stage = UpdateStage.READY)) }
-            } catch (t: Throwable) {
-                failUpdate("下载失败：${t.message ?: "未知错误"}")
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failUpdate("下载失败：${error.message ?: "未知错误"}")
             }
         }
     }
@@ -353,18 +397,29 @@ class SettingsViewModel(
             failUpdate("安装包已失效，请重新下载")
             return
         }
+        if (local.value.update.busy) return
         local.update { it.copy(update = it.update.copy(stage = UpdateStage.INSTALLING)) }
         viewModelScope.launch {
-            // 会话安装要把整个 APK 写进 PackageInstaller 的 session，绝不能在主线程做
-            val ok = withContext(Dispatchers.IO) { ApkInstaller.install(appContext, apk) }
-            if (!ok) {
-                failUpdate("没能启动安装，请稍后重试或用系统安装器打开 ${apk.name}")
+            try {
+                val ok = withContext(Dispatchers.IO) { ApkInstaller.install(appContext, apk) }
+                if (ok) {
+                    local.update {
+                        it.copy(update = it.update.copy(stage = UpdateStage.READY, message = "安装请求已提交，请在系统界面确认；可关闭此面板"))
+                    }
+                } else {
+                    failUpdate("没能启动安装，请稍后重试或用系统安装器打开 ${apk.name}")
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failUpdate("启动安装失败：${error.message ?: "未知错误"}")
             }
-            // 成功提交后系统还会弹一次确认；面板保留，用户可自行关掉
         }
     }
 
-    fun dismissUpdate() = local.update { it.copy(update = UpdateUiState()) }
+    fun dismissUpdate() {
+        if (!local.value.update.busy) local.update { it.copy(update = UpdateUiState()) }
+    }
 
     private fun failUpdate(reason: String) {
         local.update {
@@ -379,8 +434,18 @@ class SettingsViewModel(
 
     // ---- 内部 ----
 
+    private val settingsMutation = kotlinx.coroutines.sync.Mutex()
+
     private fun persist(block: suspend () -> Unit) {
-        viewModelScope.launch { runCatching { block() } }
+        viewModelScope.launch {
+            try {
+                settingsMutation.withLock { withContext(Dispatchers.IO) { block() } }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                local.update { it.copy(message = "保存设置失败：${error.message ?: "未知错误"}") }
+            }
+        }
     }
 
     /**
@@ -394,9 +459,11 @@ class SettingsViewModel(
         local.update { it.copy(busy = true) }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { block() }
-            } catch (t: Throwable) {
-                local.update { it.copy(message = "$failure：${t.message ?: "未知错误"}") }
+                settingsMutation.withLock { withContext(Dispatchers.IO) { block() } }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                local.update { it.copy(message = "$failure：${error.message ?: "未知错误"}") }
             } finally {
                 local.update { it.copy(busy = false) }
             }
@@ -413,9 +480,15 @@ class SettingsViewModel(
         val after = events.loadAll()
         val alive = after.mapTo(HashSet()) { it.id }
         withContext(Dispatchers.IO) {
-            before.forEach { event -> if (event.id !in alive) reminders.cancel(event.id) }
-            reminders.syncAll(after)
-            widgetRefresh.refreshAll()
+            try {
+                before.forEach { event -> if (event.id !in alive) reminders.cancel(event.id) }
+                reminders.syncAll(after)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("MorrowSettings", "数据已保存，提醒对账失败", error)
+            }
+            refreshSavedSettingsWidgets()
         }
     }
 

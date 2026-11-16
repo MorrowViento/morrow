@@ -140,6 +140,18 @@ class WidgetSnapshotTest {
         assertEquals("已过", row.badgeUnit)
     }
 
+    @Test
+    fun explicitDirectionsMatchHomeIncludingPassedCountdown() {
+        val past = event("a", "2026-03-10T09:00")
+        for (direction in com.morrowviento.morrow.domain.model.CountDirection.entries) {
+            val value = past.copy(direction = direction)
+            val row = WidgetSnapshotBuilder.toRow(value, today, now)
+            val card = com.morrowviento.morrow.ui.event.EventPresentation.toCard(value, today, now)
+            assertEquals(card.isCountingUp, row.isCountingUp)
+            assertEquals(direction.name, direction != com.morrowviento.morrow.domain.model.CountDirection.COUNTDOWN, row.isCountingUp)
+        }
+    }
+
     // ---- 元信息 ----
 
     @Test

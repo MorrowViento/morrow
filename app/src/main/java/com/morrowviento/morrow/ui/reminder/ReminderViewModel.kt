@@ -101,8 +101,16 @@ class ReminderViewModel(
     /** 手动重新排期：用户怀疑闹钟丢了（换机、清缓存、系统清理）时的兜底按钮。 */
     fun resync() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { scheduler.syncAll(events.loadAll()) }
-            refresh()
+            try {
+                events.withMutation {
+                    withContext(Dispatchers.IO) { scheduler.syncAll(events.loadAll()) }
+                }
+                refresh()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("MorrowReminderVM", "重新排期失败", error)
+            }
         }
     }
 

@@ -28,7 +28,7 @@ data class WidgetRow(
     val isCountingUp: Boolean,
     val isAllDay: Boolean,
     val isPinned: Boolean,
-    val repeatsYearly: Boolean,
+    val repeatType: com.morrowviento.morrow.domain.model.RepeatType,
     /** 0..100；-1 表示不该画进度（重复事件或创建时间晚于目标）。 */
     val progressPercent: Int,
 ) {
@@ -56,7 +56,11 @@ data class WidgetRow(
         if (showCategory && category.isNotBlank()) parts += category
         if (showDate) {
             val date = "%d月%d日".format(target.monthValue, target.dayOfMonth)
-            parts += if (repeatsYearly) "每年 $date" else date
+            parts += when (repeatType) {
+                com.morrowviento.morrow.domain.model.RepeatType.YEARLY -> "每年 $date"
+                com.morrowviento.morrow.domain.model.RepeatType.MONTHLY -> "每月 $date"
+                else -> date
+            }
             parts += if (isAllDay) "全天" else "%02d:%02d".format(target.hour, target.minute)
         }
         return parts.joinToString(" · ")
@@ -128,10 +132,11 @@ object WidgetSnapshotBuilder {
             target = target,
             dayDelta = dayDelta,
             // 与首页 EventPresentation 同一条规则：显式正数 or AUTO 且已过期
-            isCountingUp = event.direction == com.morrowviento.morrow.domain.model.CountDirection.COUNTUP || dayDelta < 0,
+            isCountingUp = event.direction == com.morrowviento.morrow.domain.model.CountDirection.COUNTUP ||
+                (event.direction == com.morrowviento.morrow.domain.model.CountDirection.AUTO && dayDelta < 0),
             isAllDay = event.isAllDay,
             isPinned = event.isPinned,
-            repeatsYearly = event.repeatsYearly,
+            repeatType = event.repeatType,
             progressPercent = progressPercent(event, target, now),
         )
     }
@@ -140,7 +145,7 @@ object WidgetSnapshotBuilder {
      * 创建 → 目标的百分比。重复事件恒为 -1（"上一周年到现在"没有展示意义）。
      */
     private fun progressPercent(event: CountdownEvent, target: LocalDateTime, now: LocalDateTime): Int {
-        if (event.repeatsYearly) return -1
+        if (event.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE) return -1
         val total = Duration.between(event.createdAt, target).toMillis()
         if (total <= 0L) return if (now.isAfter(target)) 100 else -1
         val elapsed = Duration.between(event.createdAt, now).toMillis()

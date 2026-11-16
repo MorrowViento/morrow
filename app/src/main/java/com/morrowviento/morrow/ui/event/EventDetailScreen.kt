@@ -13,6 +13,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -77,7 +84,8 @@ fun EventDetailScreen(
                     Spacer(Modifier.height(18.dp))
                     InfoRow("目标", formatTarget(card))
                     InfoRow("分类", card.category)
-                    InfoRow("重复", if (card.repeatsYearly) "每年" else "不重复")
+                    InfoRow("类型", card.kind.label)
+                    InfoRow("重复", card.repeatType.label)
                     InfoRow("创建", card.createdAt.format(CREATED_AT_FORMAT))
                     if (card.isCompleted) InfoRow("状态", "已完成")
 
@@ -95,23 +103,24 @@ fun EventDetailScreen(
                     }
 
                     Spacer(Modifier.height(26.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ActionChip(
-                            label = if (card.isCompleted) "恢复为进行中" else "标记完成",
-                            emphasized = !card.isCompleted,
-                            onClick = onToggleCompleted,
-                        )
-                        ActionChip(
-                            label = if (card.isPinned) "取消置顶" else "置顶",
-                            emphasized = false,
-                            onClick = onTogglePinned,
-                        )
-                        ActionChip(
-                            label = "删除",
-                            emphasized = false,
-                            danger = true,
-                            onClick = onDelete,
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        DetailActionIcon(pin = true, pinned = card.isPinned, onClick = onTogglePinned)
+                        if (card.primaryAction != com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE) {
+                            com.morrowviento.morrow.ui.glass.GlassTextButton(
+                                text = card.primaryAction.label,
+                                onClick = onToggleCompleted,
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                active = true,
+                                compact = false,
+                            )
+                        } else {
+                            Spacer(Modifier.weight(1f))
+                        }
+                        DetailActionIcon(pin = false, onClick = onDelete)
                     }
                 }
         }
@@ -175,34 +184,44 @@ private fun InfoRow(label: String, value: String) {
 }
 
 @Composable
-private fun ActionChip(
-    label: String,
-    emphasized: Boolean,
-    danger: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val primary = glassTextPrimary()
-    val secondary = glassTextSecondary()
-    val contentColor = when {
-        danger -> Color(0xFFFF7A7A)
-        emphasized -> primary
-        else -> secondary
-    }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(primary.copy(alpha = if (emphasized) 0.16f else 0.06f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+private fun DetailActionIcon(pin: Boolean, pinned: Boolean = false, onClick: () -> Unit) {
+    val color = if (pin) glassTextPrimary() else Color(0xFFE65B64)
+    val description = if (pin) { if (pinned) "取消置顶" else "置顶" } else "删除"
+    com.morrowviento.morrow.ui.glass.GlassCirclePanel(
+        modifier = Modifier.size(52.dp).semantics {
+            contentDescription = description
+            if (pin) selected = pinned
+        },
+        prominent = pin && pinned,
+        onClick = onClick,
     ) {
-        Text(
-            text = label,
-            style = TextStyle(
-                fontSize = 13.sp,
-                fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
-                color = contentColor,
-            ),
-        )
+        Canvas(Modifier.size(24.dp)) {
+            val w = size.width
+            val h = size.height
+            val stroke = 1.8.dp.toPx()
+            fun line(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(
+                color, Offset(w * x1, h * y1), Offset(w * x2, h * y2), stroke,
+            )
+            if (pin) {
+                line(.3f, .18f, .7f, .18f)
+                line(.36f, .18f, .36f, .48f)
+                line(.64f, .18f, .64f, .48f)
+                line(.36f, .48f, .23f, .62f)
+                line(.64f, .48f, .77f, .62f)
+                line(.23f, .62f, .77f, .62f)
+                line(.5f, .62f, .5f, .9f)
+            } else {
+                line(.2f, .28f, .8f, .28f)
+                line(.38f, .16f, .62f, .16f)
+                line(.38f, .16f, .38f, .28f)
+                line(.62f, .16f, .62f, .28f)
+                line(.28f, .28f, .32f, .84f)
+                line(.72f, .28f, .68f, .84f)
+                line(.32f, .84f, .68f, .84f)
+                line(.43f, .4f, .43f, .72f)
+                line(.57f, .4f, .57f, .72f)
+            }
+        }
     }
 }
 

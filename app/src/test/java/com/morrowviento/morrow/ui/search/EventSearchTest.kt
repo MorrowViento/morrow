@@ -27,7 +27,7 @@ class EventSearchTest {
         isPinned = false,
         isAllDay = false,
         isCompleted = completed,
-        repeatsYearly = false,
+        repeatType = com.morrowviento.morrow.domain.model.RepeatType.NONE,
         progress = 0.5f,
         remainingToday = null,
         meta = "",

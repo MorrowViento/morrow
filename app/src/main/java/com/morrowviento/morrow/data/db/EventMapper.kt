@@ -5,6 +5,8 @@ import com.google.gson.reflect.TypeToken
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
+import com.morrowviento.morrow.domain.model.EventKind
+import java.time.LocalDate
 import com.morrowviento.morrow.domain.model.RepeatType
 import java.time.Instant
 import java.time.LocalDateTime
@@ -47,6 +49,8 @@ object EventMapper {
         repeatMonth = event.repeatMonth,
         repeatDay = event.repeatDay,
         createdAt = event.createdAt.atZone(zone).toInstant().toEpochMilli(),
+        kind = event.kind.name,
+        lastHandledOccurrence = event.lastHandledOccurrence?.toEpochDay(),
     )
 
     fun toDomain(
@@ -68,6 +72,8 @@ object EventMapper {
         repeatMonth = entity.repeatMonth,
         repeatDay = entity.repeatDay,
         createdAt = toLocalDateTime(entity.createdAt, zone),
+        kind = enumOrDefault(entity.kind, EventKind.TODO),
+        lastHandledOccurrence = entity.lastHandledOccurrence?.let { runCatching { LocalDate.ofEpochDay(it) }.getOrNull() },
     )
 
     fun toLocalDateTime(millis: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDateTime =

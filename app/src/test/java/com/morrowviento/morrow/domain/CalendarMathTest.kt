@@ -143,6 +143,59 @@ class CalendarMathTest {
         assertEquals("提前 90 分钟", EventReminder.labelForMinutes(90))
     }
 
+    @Test
+    fun monthlyMonthEnd_keepsOriginalDayAcrossShortMonths() {
+        val target = LocalDateTime.of(2026, 1, 31, 8, 30)
+        val event = CountdownEvent("monthly", "月末", target, repeatType = RepeatType.MONTHLY, createdAt = target)
+        assertEquals(listOf(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 2, 28), LocalDate.of(2026, 3, 31)),
+            RepeatRule.futureOccurrences(event, target.toLocalDate()).take(3).toList())
+        val advanced = requireNotNull(RepeatRule.applyPrimaryAction(event, target.toLocalDate(), target.toLocalDate()))
+        assertEquals(target, advanced.targetDate)
+        assertFalse(advanced.isCompleted)
+        assertEquals(LocalDateTime.of(2026, 2, 28, 8, 30), RepeatRule.upcomingTarget(advanced, target.toLocalDate()))
+        assertEquals(null, RepeatRule.applyPrimaryAction(advanced, target.toLocalDate(), target.toLocalDate()))
+    }
+
+    @Test
+    fun yearlyLeapAnchor_recoversLeapDayAndKeepsHistoryAfterAdvance() {
+        val target = LocalDateTime.of(2024, 2, 29, 12, 0)
+        val event = CountdownEvent("leap", "闰日", target, repeatType = RepeatType.YEARLY, createdAt = target,
+            lastHandledOccurrence = LocalDate.of(2027, 2, 28))
+        assertEquals(LocalDateTime.of(2028, 2, 29, 12, 0), RepeatRule.upcomingTarget(event, LocalDate.of(2026, 1, 1)))
+        assertEquals(listOf(LocalDate.of(2024, 2, 29), LocalDate.of(2025, 2, 28), LocalDate.of(2026, 2, 28)),
+            RepeatRule.occurrencesBetween(event, LocalDate.of(2023, 1, 1), LocalDate.of(2026, 12, 31)))
+    }
+
+    @Test
+    fun futureFirstOccurrence_doesNotRepeatBeforeOriginalDate() {
+        val target = LocalDateTime.of(2030, 12, 31, 8, 0)
+        RepeatType.entries.filter { it != RepeatType.NONE }.forEach { repeat ->
+            val event = CountdownEvent("future", "未来", target, repeatType = repeat, createdAt = target)
+            assertEquals(target, RepeatRule.upcomingTarget(event, LocalDate.of(2026, 1, 1)))
+            assertTrue(RepeatRule.occurrencesBetween(event, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31)).isEmpty())
+        }
+    }
+
+    @Test
+    fun primaryActions_distinguishKindsRepeatsAndLegacyCompletion() {
+        val target = LocalDateTime.of(2026, 5, 1, 9, 0)
+        val base = CountdownEvent("action", "类型", target, createdAt = target)
+        val today = target.toLocalDate()
+        val anniversary = base.copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY)
+        assertEquals(null, RepeatRule.applyPrimaryAction(anniversary, today, today))
+        assertTrue(requireNotNull(RepeatRule.applyPrimaryAction(base, today, today)).isCompleted)
+        RepeatType.entries.filter { it != RepeatType.NONE }.forEach { repeat ->
+            listOf(base, anniversary).forEach { typed ->
+                val advanced = requireNotNull(RepeatRule.applyPrimaryAction(typed.copy(repeatType = repeat), today, today))
+                assertEquals(today, advanced.lastHandledOccurrence)
+                assertFalse(advanced.isCompleted)
+            }
+            val restored = requireNotNull(RepeatRule.applyPrimaryAction(base.copy(repeatType = repeat, isCompleted = true), today, today))
+            assertFalse(restored.isCompleted)
+            assertEquals(null, restored.lastHandledOccurrence)
+        }
+    }
+
     // ------------------------------------------------ 日期滚轮年份范围（真机反馈）
 
     @Test

@@ -184,6 +184,36 @@ class EventPresentationTest {
         assertEquals(SortMode.DISTANCE, SortMode.fromPref("unknown"))
     }
 
+    @Test
+    fun explicitCountdownStaysCountdownAfterTarget() {
+        val past = event("past", "过去", now.minusDays(2))
+        for (direction in com.morrowviento.morrow.domain.model.CountDirection.entries) {
+            val card = EventPresentation.toCard(past.copy(direction = direction), today, now)
+            assertEquals(direction.name, direction != com.morrowviento.morrow.domain.model.CountDirection.COUNTDOWN, card.isCountingUp)
+        }
+    }
+
+    @Test
+    fun clockRefreshAdvancesQuantizedProgressAndReusesUnchangedCards() {
+        val changing = EventPresentation.toCard(event("a", "进度", now.plusDays(1), createdAt = now.minusDays(1), isAllDay = true), today, now)
+        val stable = EventPresentation.toCard(event("b", "重复", now.plusDays(1), repeatType = RepeatType.YEARLY), today, now)
+        val cards = listOf(changing, stable)
+        org.junit.Assert.assertSame(cards, EventPresentation.refreshClock(cards, today, now.plusSeconds(1)))
+        val next = EventPresentation.refreshClock(cards, today, now.plusHours(1))
+        assertTrue(next[0].progress > changing.progress)
+        org.junit.Assert.assertSame(stable, next[1])
+        assertEquals(cards.map { it.id }, next.map { it.id })
+    }
+
+    @Test
+    fun clockRefreshRemovesTodaySecondsAtTarget() {
+        val card = EventPresentation.toCard(event("t", "今天", now.plusSeconds(2)), today, now)
+        assertEquals("00:00:02", card.remainingToday)
+        val next = EventPresentation.refreshClock(listOf(card), today, now.plusSeconds(2)).single()
+        assertNull(next.remainingToday)
+        assertEquals(1f, next.progress, 0f)
+    }
+
     // ---- 每秒刷新相关的纯函数（2026-11-13 性能梳理时新增）----
 
     @Test

@@ -1,5 +1,6 @@
 package com.morrowviento.morrow.data.settings
 
+import android.app.Application
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
@@ -11,9 +12,10 @@ import com.morrowviento.morrow.widget.WidgetConfigStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,6 +24,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 
 /**
@@ -34,12 +39,15 @@ import java.io.File
  * 那一次发生在 `viewModelScope` 里没人接住，直接杀进程——用户看到的是
  * 「点保存后退回桌面，重开记录还在」。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], application = Application::class)
 class SettingsTypeSafetyTest {
 
     @get:Rule
     val temp = TemporaryFolder()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(job + Dispatchers.IO)
 
     private fun openStore(): DataStore<Preferences> =
         PreferenceDataStoreFactory.create(scope = scope) {
@@ -48,8 +56,8 @@ class SettingsTypeSafetyTest {
         }
 
     @After
-    fun tearDown() {
-        scope.cancel()
+    fun tearDown(): Unit = runBlocking {
+        job.cancelAndJoin()
     }
 
     /** 旧键存成 Boolean 时，按字符串读不能抛异常，而要拿到可用的文本。 */
@@ -94,6 +102,39 @@ class SettingsTypeSafetyTest {
         val defaults = settings.appSettings.first()
         assertEquals("system", defaults.themeMode.prefValue)
         assertFalse(defaults.reduceTransparency)
+    }
+
+    @Test
+    fun completeSettingsFlowNeverEmitsMixedSnapshots() = runBlocking {
+        val settings = SettingsRepository(openStore())
+        val a = AppSettings()
+        val b = a.copy(
+            themeMode = ThemeMode.DARK,
+            accent = AccentColor.entries.last(),
+            glassFrost = 0.95f,
+            reduceTransparency = true,
+            reduceMotion = true,
+            backdrop = BackdropSettings(mode = BackdropMode.IMAGE, image = "test.jpg", autoTint = true, tintSeed = 0xff336699L),
+        )
+        val seen = java.util.Collections.synchronizedList(mutableListOf<AppSettings>())
+        val collector = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            settings.appSettings.collect { seen.add(it) }
+        }
+        try {
+            settings.applySettings(a)
+            settings.appSettings.first { it == a }
+            repeat(10) {
+                settings.applySettings(b)
+                settings.appSettings.first { it == b }
+                settings.applySettings(a)
+                settings.appSettings.first { it == a }
+            }
+            assertTrue(seen.isNotEmpty())
+            assertTrue("混合快照：$seen", seen.all { it == a || it == b })
+            assertEquals(a, settings.snapshotSettings())
+        } finally {
+            collector.cancelAndJoin()
+        }
     }
 
     /** 崩溃点的完整复现路径：旧版布尔键存在时读默认小部件样式。 */

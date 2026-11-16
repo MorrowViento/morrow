@@ -27,6 +27,8 @@ data class PendingImport(
         }
 }
 
+data class PendingBackdrop(val bitmap: android.graphics.Bitmap, val aspectRatio: Float)
+
 data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
     val notificationAllowed: Boolean = true,
@@ -42,6 +44,7 @@ data class SettingsUiState(
     /** 导出/导入进行中：按钮置灰，避免重复触发两次写同一个文件。 */
     val busy: Boolean = false,
     val pendingImport: PendingImport? = null,
+    val pendingBackdrop: PendingBackdrop? = null,
     val confirmClearAll: Boolean = false,
     val showLicenses: Boolean = false,
     /** 一次性提示，展示后由 [SettingsActions.consumeMessage] 清掉。 */
@@ -63,8 +66,10 @@ data class SettingsActions(
     val setAutoAccent: (Boolean) -> Unit,
     /** 切换底色：丝缎 / 自定义图片（选图片档但还没有图时，UI 会顺手拉起相册）。 */
     val setBackdropMode: (com.morrowviento.morrow.data.settings.BackdropMode) -> Unit,
-    /** 选图：复制进私有目录 → 取主色 → 落盘 → 刷新小部件。 */
-    val importBackdrop: (android.net.Uri) -> Unit,
+    /** 选图只解码预览；确认裁剪后才提交背景和取色。 */
+    val prepareBackdrop: (android.net.Uri, Float) -> Unit,
+    val confirmBackdrop: (android.graphics.Bitmap, com.morrowviento.morrow.data.backdrop.BackdropCrop) -> Unit,
+    val cancelBackdrop: () -> Unit,
     /** 移除自定义图，回到丝缎（取色种子一并清掉）。 */
     val clearBackdrop: () -> Unit,
     /** 切换玻璃厚度档位（写该档位的连续值）。 */

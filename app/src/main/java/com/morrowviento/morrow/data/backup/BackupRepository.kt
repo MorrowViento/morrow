@@ -43,6 +43,7 @@ data class ImportReport(
 class BackupRepository(
     private val settings: SettingsRepository,
     private val events: EventRepository,
+    private val undo: com.morrowviento.morrow.data.undo.UndoRepository,
 ) {
 
     // ---------------------------------------------------------------- 导出
@@ -61,48 +62,49 @@ class BackupRepository(
 
     // ---------------------------------------------------------------- 导入
 
-    suspend fun import(document: BackupDocument, mode: ImportMode, skipped: Int): ImportReport {
-        val incoming = document.events.mapNotNull(BackupMapper::toDomain)
+    suspend fun import(
+        document: BackupDocument,
+        mode: ImportMode,
+        skipped: Int,
+        reconcile: suspend (List<com.morrowviento.morrow.domain.model.CountdownEvent>) -> Unit = {},
+    ): ImportReport = events.withMutation {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val before = events.loadAll()
+            val incoming = document.events.mapNotNull(BackupMapper::toDomain)
+            undo.clear()
+            when (mode) {
+                ImportMode.REPLACE -> events.replaceAll(incoming)
+                // 只写导入的行，不重写本机其它事件。
+                ImportMode.MERGE -> events.restore(incoming)
+            }
 
-        val merged = when (mode) {
-            ImportMode.REPLACE -> incoming
-            ImportMode.MERGE -> BackupMerge.events(events.loadAll(), incoming)
+            val categories = when (mode) {
+                ImportMode.REPLACE -> document.categories
+                ImportMode.MERGE -> BackupMerge.categories(readCategories(), document.categories)
+            }
+            if (categories.isNotEmpty()) {
+                settings.putString(CategoryRepository.KEY_CATEGORIES, CategoryCodec.encode(categories))
+            } else if (mode == ImportMode.REPLACE) {
+                settings.remove(CategoryRepository.KEY_CATEGORIES)
+            }
+
+            // 合并模式保持本机设置与样式；覆盖模式整体替换。
+            val settingsApplied = mode == ImportMode.REPLACE
+            if (settingsApplied) settings.applySettings(BackupMapper.toSettings(document.settings))
+            val widgetStyles = if (settingsApplied) applyWidgetStyles(document.widgets) else 0
+
+            // 回调仍在事件操作锁内，旧快照不能在并发删除后重新排入提醒。
+            reconcile(before)
+            ImportReport(
+                mode = mode,
+                importedEvents = incoming.size,
+                totalEvents = events.count(),
+                skippedEvents = skipped,
+                categories = categories.size,
+                widgetStyles = widgetStyles,
+                settingsApplied = settingsApplied,
+            )
         }
-
-        if (mode == ImportMode.REPLACE) {
-            // clear + 整批 upsert，避免「删除的事件在导入后仍然存在」
-            events.clearAll()
-        }
-        events.restore(merged)
-
-        val categories = when (mode) {
-            ImportMode.REPLACE -> document.categories
-            ImportMode.MERGE -> BackupMerge.categories(readCategories(), document.categories)
-        }
-        if (categories.isNotEmpty()) {
-            settings.putString(CategoryRepository.KEY_CATEGORIES, CategoryCodec.encode(categories))
-        }
-
-        // 设置与样式在合并模式下保持本机：用户通常只是想补另一台设备的事件，
-        // 顺手把外观也改掉属于意外行为。
-        val settingsApplied = mode == ImportMode.REPLACE
-        if (settingsApplied) settings.applySettings(BackupMapper.toSettings(document.settings))
-
-        val widgetStyles = if (mode == ImportMode.REPLACE) {
-            applyWidgetStyles(document.widgets)
-        } else {
-            0
-        }
-
-        return ImportReport(
-            mode = mode,
-            importedEvents = incoming.size,
-            totalEvents = events.count(),
-            skippedEvents = skipped,
-            categories = categories.size,
-            widgetStyles = widgetStyles,
-            settingsApplied = settingsApplied,
-        )
     }
 
     // ---------------------------------------------------------------- 清空
@@ -113,13 +115,17 @@ class BackupRepository(
      * 不做撤销：这是「换人用这台机器 / 彻底重来」的动作，留一个 6 秒窗口反而危险。
      * 界面上必须先让用户确认，并提示先导出备份。
      */
-    suspend fun clearAllData() {
-        events.clearAll()
-        settings.remove(CategoryRepository.KEY_CATEGORIES)
-        // 小部件样式是逐 id 存的，只能按键前缀清；数量级是「桌面放了几个」，
-        // 循环删除不会成为瓶颈
-        settings.stringsOnce(WidgetConfigStore.PREFIX).keys.forEach { settings.remove(it) }
-        settings.applySettings(com.morrowviento.morrow.data.settings.AppSettings())
+    suspend fun clearAllData(
+        reconcile: suspend (List<com.morrowviento.morrow.domain.model.CountdownEvent>) -> Unit = {},
+    ) = events.withMutation {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val before = events.loadAll()
+            undo.clear()
+            events.clearAll()
+            settings.removeKeys(settings.stringsOnce(WidgetConfigStore.PREFIX).keys + CategoryRepository.KEY_CATEGORIES)
+            settings.applySettings(com.morrowviento.morrow.data.settings.AppSettings())
+            reconcile(before)
+        }
     }
 
     // ---------------------------------------------------------------- 内部
@@ -137,7 +143,7 @@ class BackupRepository(
         // 备份里没有小部件样式（旧版本导出的）就别动本机配置——清空反而破坏用户桌面
         if (widgets.isEmpty()) return 0
         // 先清旧键：否则备份里没有的小部件会保留上一台设备的样式
-        settings.stringsOnce(WidgetConfigStore.PREFIX).keys.forEach { settings.remove(it) }
+        settings.removeKeys(settings.stringsOnce(WidgetConfigStore.PREFIX).keys)
 
         val values = widgets.associate { WidgetConfigStore.key(it.widgetId) to it.style }.toMutableMap()
         // 备份不含默认样式键（那是按 widgetId 存的，导出的 id 里解析不出来），

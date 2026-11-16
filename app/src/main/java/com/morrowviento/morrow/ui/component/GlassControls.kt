@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -155,7 +157,7 @@ fun ChoiceChip(
             .clip(RoundedCornerShape(50))
             .background(
                 if (selected) {
-                    accent.copy(alpha = 0.20f + 0.08f * press)
+                    accent.copy(alpha = 0.36f + 0.08f * press)
                 } else {
                     primary.copy(alpha = 0.06f + 0.05f * press)
                 },
@@ -166,7 +168,7 @@ fun ChoiceChip(
                 if (selected || press > 0.01f) {
                     drawRoundRect(
                         color = if (selected) {
-                            accent.copy(alpha = 0.55f)
+                            accent.copy(alpha = 0.90f)
                         } else {
                             primary.copy(alpha = 0.18f * press)
                         },
@@ -175,17 +177,30 @@ fun ChoiceChip(
                     )
                 }
             }
+            .semantics { this.selected = selected }
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 8.dp),
+            .heightIn(min = 44.dp)
+            .padding(horizontal = 13.dp, vertical = 10.dp),
     ) {
-        Text(
-            text = label,
-            style = TextStyle(
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) primary else secondary,
-            ),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (selected) {
+                androidx.compose.foundation.Canvas(Modifier.size(12.dp)) {
+                    val stroke = 2.dp.toPx()
+                    drawLine(primary, androidx.compose.ui.geometry.Offset(0f, size.height * .5f),
+                        androidx.compose.ui.geometry.Offset(size.width * .35f, size.height * .85f), stroke)
+                    drawLine(primary, androidx.compose.ui.geometry.Offset(size.width * .35f, size.height * .85f),
+                        androidx.compose.ui.geometry.Offset(size.width, size.height * .15f), stroke)
+                }
+            }
+            Text(
+                text = label,
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (selected) primary else secondary,
+                ),
+            )
+        }
     }
 }
 

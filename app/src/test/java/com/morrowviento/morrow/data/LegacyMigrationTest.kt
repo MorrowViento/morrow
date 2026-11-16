@@ -63,6 +63,20 @@ class LegacyMigrationTest {
     }
 
     @Test
+    fun legacyKindsDefaultToTodoAndMonthlyExtensionRetainsCursor() {
+        val old = LegacyEventParser.parse(sample).events.first()
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.TODO, old.kind)
+        assertNull(old.lastHandledOccurrence)
+        val monthly = LegacyEventParser.parse("""[{"id":"m","title":"monthly",
+            "targetDate":"2026-01-31T09:00","kind":"anniversary","repeatType":"monthly",
+            "repeatDay":31,"lastHandledOccurrence":"2026-02-28"}]""").events.single()
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY, monthly.kind)
+        assertEquals(RepeatType.MONTHLY, monthly.repeatType)
+        assertEquals(31, monthly.repeatDay)
+        assertEquals(java.time.LocalDate.of(2026, 2, 28), monthly.lastHandledOccurrence)
+    }
+
+    @Test
     fun `旧版单提醒字段转为提醒列表`() {
         val result = LegacyEventParser.parse(sample)
         val e2 = result.events.first { it.id == "e2" }

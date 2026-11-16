@@ -46,11 +46,16 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
         cancelSnooze(eventId)
     }
 
-    override fun snooze(eventId: String, minutes: Int) {
+    override fun snooze(event: CountdownEvent, targetAtMillis: Long, minutes: Int) {
+        val eventId = event.id
         val pi = PendingIntent.getBroadcast(
             appContext,
             SNOOZE_REQUEST,
-            snoozeIntent(eventId),
+            snoozeIntent(eventId)
+                .putExtra(ReminderReceiver.EXTRA_TARGET, targetAtMillis)
+                .putExtra(ReminderReceiver.EXTRA_TITLE, event.title)
+                .putExtra(ReminderReceiver.EXTRA_IS_ALL_DAY, event.isAllDay)
+                .putExtra(ReminderReceiver.EXTRA_PRIMARY_ACTION, event.primaryAction.name),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         setAt(System.currentTimeMillis() + minutes * MINUTE_MILLIS, pi, "snooze:$eventId")
@@ -166,6 +171,7 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             // 标题与全天标记也带上：接收器冷启动时不必先开数据库就能发出通知
             .putExtra(ReminderReceiver.EXTRA_TITLE, item.title)
             .putExtra(ReminderReceiver.EXTRA_IS_ALL_DAY, item.isAllDay)
+            .putExtra(ReminderReceiver.EXTRA_PRIMARY_ACTION, item.primaryAction.name)
 
     private fun snoozeIntent(eventId: String): Intent =
         Intent(appContext, ReminderReceiver::class.java)

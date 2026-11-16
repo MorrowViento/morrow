@@ -187,7 +187,7 @@ class CalendarPresentationTest {
         assertEquals(12, state.monthSummaries.size)
         assertEquals(3, state.yearEventCount)
         assertEquals(2, state.monthSummaries[2].eventCount)
-        assertEquals(listOf("体检", "年会"), state.monthSummaries[2].sampleTitles)
+        assertEquals(listOf("体检", "年会"), state.monthSummaries[2].sampleEntries.map { it.title })
         assertEquals(1, state.monthSummaries[0].eventCount)
     }
 
@@ -200,6 +200,29 @@ class CalendarPresentationTest {
         )
         assertEquals(1, state.yearEventCount)
         assertEquals(1, state.monthSummaries[11].eventCount)
+    }
+
+    @Test
+    fun miniCalendarsAndAllViewsCountMonthlyOccurrencesWithoutHidingHistory() {
+        val monthly = event(id = "monthly", target = "2025-01-31T09:00", repeat = RepeatType.MONTHLY,
+            repeatDay = 31).copy(lastHandledOccurrence = LocalDate.of(2026, 6, 30))
+        val year = CalendarPresentation.build(listOf(monthly), CalendarNav(CalendarView.YEAR, YearMonth.of(2026, 1)), today)
+        val list = CalendarPresentation.build(listOf(monthly), CalendarNav(CalendarView.LIST, YearMonth.of(2026, 1)), today)
+        assertEquals(12, year.yearEventCount)
+        assertEquals(year.yearEventCount, list.yearEventCount)
+        year.monthSummaries.forEach { summary ->
+            assertEquals(42, summary.cells.size)
+            assertEquals(DayOfWeek.MONDAY, summary.cells.first().date.dayOfWeek)
+            assertEquals(1, summary.cells.sumOf { it.eventCount })
+            val entry = summary.sampleEntries.single()
+            assertEquals(summary.month.atEndOfMonth(), entry.date)
+            assertEquals(RepeatType.MONTHLY, entry.repeatType)
+        }
+        val marks = CalendarPresentation.marksOf(listOf(monthly), YearMonth.of(2026, 2))
+        assertEquals(listOf(LocalDate.of(2026, 2, 28)), marks.keys.toList())
+        val empty = CalendarPresentation.build(emptyList(), CalendarNav(CalendarView.YEAR, YearMonth.of(2026, 3)), today)
+        assertEquals(1, empty.monthSummaries.flatMap { it.cells }.count { it.isToday })
+        assertTrue(empty.monthSummaries.all { it.sampleEntries.isEmpty() })
     }
 
     // ---- 列表视图 ----

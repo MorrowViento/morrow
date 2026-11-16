@@ -15,7 +15,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.morrowviento.morrow.domain.model.SortMode
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -33,11 +33,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     // ---- 核心设置（M2 首页与 M6 设置中心使用）----
 
-    val themeMode: Flow<String> = store.data.map { it.stringOrNull(LegacySettingsKeys.THEME_MODE) ?: ThemeModePref.system.name }
+    val themeMode: Flow<String> = store.data.map { it.stringOrNull(LegacySettingsKeys.THEME_MODE) ?: ThemeModePref.system.name }.distinctUntilChanged()
 
-    val sortMode: Flow<String> = store.data.map { it.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE) ?: SortModePref.distance.name }
+    val sortMode: Flow<String> = store.data.map { it.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE) ?: SortModePref.distance.name }.distinctUntilChanged()
 
-    val reduceTransparency: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) ?: false }
+    val reduceTransparency: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_TRANSPARENCY) ?: false }.distinctUntilChanged()
 
     /**
      * 玻璃厚度（0~1 连续值）。
@@ -45,53 +45,26 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
      * 键缺失时依次回落：旧版四档字符串 → 更旧的无障碍布尔 → 默认值。
      * 所以从 alpha6（四档）、alpha7 之前（布尔）升上来的用户，看到的仍是自己原来的观感。
      */
-    val glassFrost: Flow<Float> = store.data.map { it.glassFrostOrDefault() }
+    val glassFrost: Flow<Float> = store.data.map { it.glassFrostOrDefault() }.distinctUntilChanged()
 
-    val reduceMotion: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false }
+    val reduceMotion: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false }.distinctUntilChanged()
 
     /** 主题色。旧版没有这一项，缺失时回落默认蓝，升级后观感不变。 */
     val accentColor: Flow<AccentColor> =
-        store.data.map { AccentColor.fromPref(it.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)) }
+        store.data.map { AccentColor.fromPref(it.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)) }.distinctUntilChanged()
 
     /** 页面底色：模式 / 图片文件名 / 自动取色开关与种子色。 */
-    val backdrop: Flow<BackdropSettings> = store.data.map { it.backdropOrDefault() }
+    val backdrop: Flow<BackdropSettings> = store.data.map { it.backdropOrDefault() }.distinctUntilChanged()
 
-    val onboardingCompleted: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.ONBOARDING_COMPLETED) ?: false }
+    val onboardingCompleted: Flow<Boolean> = store.data.map { it.booleanOrNull(LegacySettingsKeys.ONBOARDING_COMPLETED) ?: false }.distinctUntilChanged()
 
     suspend fun setOnboardingCompleted() {
         store.edit { it[booleanPreferencesKey(LegacySettingsKeys.ONBOARDING_COMPLETED)] = true }
     }
 
-    // ---- M6：设置中心（四项合成一个快照，见 AppSettings 的注释）----
-
-    /**
-     * 核心设置的快照（不含背景）。
-     *
-     * 分两步合成是因为 `combine` 的重载最多到 5 个 Flow，而这里已经有 6 项；
-     * 先把这 5 项合成一份，再和 [backdrop] 合并一次，读起来也比塞进 vararg 清楚。
-     */
-    private val coreSettings: Flow<AppSettings> = combine(
-        themeMode,
-        sortMode,
-        glassFrost,
-        reduceMotion,
-        accentColor,
-    ) { theme, sort, frost, motion, accent ->
-        AppSettings(
-            themeMode = ThemeMode.fromPref(theme),
-            sortMode = SortMode.fromPref(sort),
-            accent = accent,
-            glassFrost = frost,
-            // 与厚度保持同步：达到最厚档时同时带上无障碍「降低透明度」语义
-            reduceTransparency = frost >= 0.85f,
-            reduceMotion = motion,
-        )
-    }
-
+    // 同一份 Preferences 直接映射：一次 edit 不会出现新背景 + 旧强调色的混合快照。
     val appSettings: Flow<AppSettings> =
-        combine(coreSettings, backdrop) { core, backdropSettings ->
-            core.copy(backdrop = backdropSettings)
-        }
+        store.data.map { it.toAppSettings() }.distinctUntilChanged()
 
     suspend fun setThemeMode(mode: ThemeMode) =
         putString(LegacySettingsKeys.THEME_MODE, mode.prefValue)
@@ -154,19 +127,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
      * 供备份导出与设置中心首帧使用：这两处只要「现在的值」，
      * 订阅四条 Flow 反而要等四次 DataStore 读盘各自发射。
      */
-    suspend fun snapshotSettings(): AppSettings {
-        val prefs = store.data.first()
-        val frost = prefs.glassFrostOrDefault()
-        return AppSettings(
-            themeMode = ThemeMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.THEME_MODE)),
-            sortMode = SortMode.fromPref(prefs.stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE)),
-            accent = AccentColor.fromPref(prefs.stringOrNull(LegacySettingsKeys.ACCENT_COLOR)),
-            backdrop = prefs.backdropOrDefault(),
-            glassFrost = frost,
-            reduceTransparency = frost >= 0.85f,
-            reduceMotion = prefs.booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
-        )
-    }
+    suspend fun snapshotSettings(): AppSettings = store.data.first().toAppSettings()
 
     /** 备份导入用：一次 edit 写完这几个键，避免几条 Flow 各触发一次重组。 */
     suspend fun applySettings(value: AppSettings) {
@@ -230,15 +191,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[booleanPreferencesKey(key)] = value }
     }
 
-    suspend fun remove(key: String) {
-        store.edit { prefs ->
-            prefs.remove(stringPreferencesKey(key))
-            prefs.remove(booleanPreferencesKey(key))
-            prefs.remove(intPreferencesKey(key))
-            prefs.remove(longPreferencesKey(key))
-            prefs.remove(doublePreferencesKey(key))
-            prefs.remove(stringSetPreferencesKey(key))
-        }
+    suspend fun remove(key: String) = removeKeys(listOf(key))
+
+    suspend fun removeKeys(keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        store.edit { prefs -> keys.forEach { prefs.remove(stringPreferencesKey(it)) } }
     }
 
     /**
@@ -301,7 +258,7 @@ private fun MutablePreferences.writeBackdrop(value: BackdropSettings) {
  * 小部件都会抛异常——在 viewModelScope 里无人接住，直接杀进程（表现就是「保存后退回桌面」）。
  */
 private fun Preferences.valueByName(name: String): Any? =
-    asMap().entries.firstOrNull { it.key.name == name }?.value
+    asMap()[stringPreferencesKey(name)]
 
 /**
  * 类型宽容的字符串读取：值是 Boolean / 数字时转成文本，其它类型或缺失返回 null。
@@ -353,6 +310,19 @@ private fun Preferences.longOrNull(name: String): Long? = when (val value = valu
  * 缺任意一项都用默认值补齐而不是整组作废：这四项在语义上是独立的，
  * 用户从旧版本升上来时四项都缺失 → 丝缎壁纸；只丢了图片名 → 回落到丝缎但保留取色种子。
  */
+private fun Preferences.toAppSettings(): AppSettings {
+    val frost = glassFrostOrDefault()
+    return AppSettings(
+        themeMode = ThemeMode.fromPref(stringOrNull(LegacySettingsKeys.THEME_MODE)),
+        sortMode = SortMode.fromPref(stringOrNull(LegacySettingsKeys.EVENT_SORT_MODE)),
+        accent = AccentColor.fromPref(stringOrNull(LegacySettingsKeys.ACCENT_COLOR)),
+        backdrop = backdropOrDefault(),
+        glassFrost = frost,
+        reduceTransparency = frost >= 0.85f,
+        reduceMotion = booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
+    )
+}
+
 private fun Preferences.backdropOrDefault(): BackdropSettings = BackdropSettings(
     mode = BackdropMode.fromPref(stringOrNull(LegacySettingsKeys.BACKDROP_MODE)),
     image = stringOrNull(LegacySettingsKeys.BACKDROP_IMAGE)?.takeIf { it.isNotBlank() },

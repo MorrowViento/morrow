@@ -50,6 +50,21 @@ class UndoCodecTest {
     }
 
     @Test
+    fun monthlySnapshotPreservesKindAndCursorAndMissingFieldsDefaultToTodo() {
+        val event = sampleEvent().copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+            repeatType = RepeatType.MONTHLY, repeatMonth = null,
+            lastHandledOccurrence = java.time.LocalDate.of(2027, 2, 6))
+        val operation = UndoOperation("monthly", UndoKind.TOGGLE_COMPLETED, "advanced", listOf(event), 42L)
+        assertEquals(operation, UndoCodec.decode(UndoCodec.encode(operation)))
+        val raw = """{"id":"u","kind":"DELETE","message":"m","expiresAt":1,
+            "events":[{"id":"e","targetDate":"2027-02-06T09:30","repeatType":"yearly","isCompleted":true}]}"""
+        val restored = UndoCodec.decode(raw)!!.snapshot.single()
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.TODO, restored.kind)
+        assertNull(restored.lastHandledOccurrence)
+        assertEquals(true, restored.isCompleted)
+    }
+
+    @Test
     fun `无提醒且不重复的事件也能往返`() {
         val event = sampleEvent().copy(reminders = emptyList(), repeatType = RepeatType.NONE, repeatMonth = null, repeatDay = null)
         val operation = UndoOperation(

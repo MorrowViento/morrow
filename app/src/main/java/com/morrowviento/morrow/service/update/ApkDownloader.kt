@@ -1,114 +1,168 @@
 package com.morrowviento.morrow.service.update
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import kotlin.coroutines.coroutineContext
 
-/**
- * APK 下载：断点续传 + 线路回退 + 完整性校验。
- *
- * 不引 WorkManager：更新下载由用户在设置页**主动发起且全程看着进度**，进程被杀后
- * 没必要后台续跑；协程取消即停，下次进来靠 `.part` 文件续传即可。
- * （TODO 里 WorkManager 的「不需要」结论证的是精确闹钟，这里同样不引入。）
- */
-class ApkDownloader(private val context: Context) {
+/** 用户主动下载：资产隔离、可信断点续传、线路回退与完整性校验。 */
+class ApkDownloader(
+    private val context: Context,
+    private val downloadUrls: (String) -> List<String> = UpdateEndpoints::downloadUrls,
+) {
+    private val downloadMutex = Mutex()
 
-    suspend fun download(
-        asset: UpdateAsset,
-        onProgress: (done: Long, total: Long) -> Unit,
-    ): File = withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-        val finalFile = File(dir, APK_NAME)
-        val partFile = File(dir, PART_NAME)
-        var lastError: Throwable? = null
-
-        for (url in UpdateEndpoints.downloadUrls(asset.url)) {
-            try {
-                return@withContext downloadFrom(url, asset, partFile, finalFile, onProgress)
-            } catch (error: Exception) {
-                lastError = error
-                // 换线路后不能接着上一家的分片续传：不同代理返回的分片未必一致，拼起来会坏包
-                partFile.delete()
+    suspend fun download(asset: UpdateAsset, onProgress: (done: Long, total: Long) -> Unit): File =
+        withContext(Dispatchers.IO) {
+            downloadMutex.withLock {
+                val dir = File(context.cacheDir, "updates")
+                if (!dir.isDirectory && !dir.mkdirs()) throw DiskFailure(IOException("无法创建下载目录"))
+                val expected = UpdatePolicy.normalizeSha256(asset.digest)
+                val key = hash("${asset.url}\n${asset.name}\n${asset.size}\n$expected".toByteArray())
+                val finalFile = File(dir, "morrow-update-$key.apk")
+                var lastError: IOException? = null
+                for (url in downloadUrls(asset.url)) {
+                    coroutineContext.ensureActive()
+                    // 无摘要时，每条线路有独立分片；不能把不同镜像的内容拼起来。
+                    val sourceKey = if (expected == null) "-${hash(url.toByteArray())}" else ""
+                    val partFile = File(dir, "morrow-update-$key$sourceKey.apk.part")
+                    try {
+                        if (expected != null && partFile.isFile &&
+                            (asset.size <= 0 || partFile.length() == asset.size) && sha256(partFile) == expected.lowercase()) {
+                            onProgress(partFile.length(), partFile.length())
+                            return@withLock publish(partFile, finalFile)
+                        }
+                        downloadFrom(url, asset, expected, partFile, onProgress)
+                        return@withLock publish(partFile, finalFile)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (disk: DiskFailure) {
+                        throw disk
+                    } catch (protocol: ProtocolFailure) {
+                        discard(partFile)
+                        lastError = protocol
+                    } catch (network: IOException) {
+                        coroutineContext.ensureActive()
+                        // 网络断开/短读保留已验证起点的分片，下次从同一资产接着下。
+                        lastError = network
+                    }
+                }
+                throw lastError ?: IOException("没有可用的下载地址")
             }
         }
-        throw lastError ?: IOException("没有可用的下载地址")
-    }
 
     private suspend fun downloadFrom(
         url: String,
         asset: UpdateAsset,
+        expected: String?,
         partFile: File,
-        finalFile: File,
-        onProgress: (done: Long, total: Long) -> Unit,
-    ): File {
-        val existing = if (partFile.exists()) partFile.length() else 0L
-        var offset = UpdatePolicy.resumeOffset(existing, asset.size)
-        val conn = UpdateNetwork.open(
+        onProgress: (Long, Long) -> Unit,
+    ) {
+        var offset = UpdatePolicy.resumeOffset(partFile.length(), asset.size)
+        UpdateNetwork.withConnection(
             url,
-            headers = if (offset > 0) mapOf("Range" to "bytes=$offset-") else emptyMap(),
+            headers = buildMap {
+                put("Accept-Encoding", "identity")
+                if (offset > 0L) put("Range", "bytes=$offset-")
+            },
             timeoutMillis = 20_000,
-        )
-        // 服务端忽略 Range 会回 200 并把整个文件重发：此时必须从头写，不能 append
-        val rangeIgnored = offset > 0 && conn.responseCode == HttpURLConnection.HTTP_OK
-        if (rangeIgnored) offset = 0
-
-        val contentRange = conn.getHeaderField("Content-Range")
-        val total = asset.size.takeIf { it > 0 }
-            ?: contentRange?.substringAfterLast('/')?.toLongOrNull()?.takeIf { it > 0 }
-            ?: conn.contentLengthLong.takeIf { it > 0 }?.plus(offset)?.takeIf { it > 0 }
-            ?: -1L
-
-        conn.inputStream.use { input ->
-            FileOutputStream(partFile, !rangeIgnored && offset > 0).use { output ->
-                val buffer = ByteArray(64 * 1024)
-                var done = offset
-                var sinceNotify = 0L
-                while (true) {
-                    coroutineContext.ensureActive()
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    output.write(buffer, 0, read)
-                    done += read
-                    sinceNotify += read
-                    if (sinceNotify >= 256 * 1024 || total < 0) {
-                        onProgress(done, total)
-                        sinceNotify = 0
+        ) { conn ->
+            val total: Long
+            val responseLength: Long
+            when (conn.responseCode) {
+                HttpURLConnection.HTTP_OK -> {
+                    offset = 0L // 200 忽略 Range：必须从头覆盖，而非追加。
+                    responseLength = conn.contentLengthLong
+                    total = asset.size.takeIf { it > 0L } ?: responseLength
+                    if (asset.size > 0L && responseLength >= 0L && responseLength != asset.size) {
+                        throw ProtocolFailure("下载长度与资产不一致")
                     }
                 }
-                output.flush()
-                onProgress(done, total)
+                HttpURLConnection.HTTP_PARTIAL -> {
+                    val match = CONTENT_RANGE.matchEntire(conn.getHeaderField("Content-Range").orEmpty())
+                        ?: throw ProtocolFailure("无效的 Content-Range")
+                    val start = match.groupValues[1].toLongOrNull() ?: throw ProtocolFailure("无效的 Range 起点")
+                    val end = match.groupValues[2].toLongOrNull() ?: throw ProtocolFailure("无效的 Range 终点")
+                    total = match.groupValues[3].toLongOrNull() ?: throw ProtocolFailure("无效的 Range 总长")
+                    if (start != offset || end < start || end >= total ||
+                        (asset.size > 0L && total != asset.size)) throw ProtocolFailure("续传范围与资产不一致")
+                    responseLength = end - start + 1L
+                    if (conn.contentLengthLong >= 0L && conn.contentLengthLong != responseLength) {
+                        throw ProtocolFailure("续传响应长度不一致")
+                    }
+                }
+                else -> throw ProtocolFailure("无法下载：HTTP ${conn.responseCode}")
+            }
+            if (!conn.getHeaderField("Content-Encoding").isNullOrBlank() &&
+                !conn.getHeaderField("Content-Encoding").equals("identity", ignoreCase = true)) {
+                throw ProtocolFailure("下载响应使用了非预期压缩")
+            }
+            conn.inputStream.use { input ->
+                disk { FileOutputStream(partFile, offset > 0L) }.useDisk { output ->
+                    var done = offset
+                    var received = 0L
+                    var sinceNotify = 0L
+                    val buffer = ByteArray(64 * 1024)
+                    onProgress(done, total)
+                    while (true) {
+                        coroutineContext.ensureActive()
+                        val read = input.read(buffer)
+                        coroutineContext.ensureActive()
+                        if (read < 0) break
+                        if ((total > 0L && read > total - done) ||
+                            (responseLength >= 0L && read > responseLength - received)) {
+                            throw ProtocolFailure("下载内容超出声明长度")
+                        }
+                        disk { output.write(buffer, 0, read) }
+                        done += read
+                        received += read
+                        sinceNotify += read
+                        if (sinceNotify >= 256 * 1024 || total <= 0L) {
+                            onProgress(done, total)
+                            sinceNotify = 0L
+                        }
+                    }
+                    disk { output.flush() }
+                    onProgress(done, total)
+                    if ((total > 0L && done != total) || (responseLength >= 0L && received != responseLength)) {
+                        throw IOException("下载不完整：$done / $total 字节")
+                    }
+                }
             }
         }
-        conn.disconnect()
-
-        if (total > 0 && partFile.length() != total) {
-            throw IOException("下载不完整：${partFile.length()} / $total 字节")
+        if (partFile.length() == 0L) throw ProtocolFailure("下载内容为空")
+        if (expected != null && sha256(partFile) != expected.lowercase()) {
+            throw ProtocolFailure("APK 校验失败，已丢弃下载文件")
         }
-        val expected = UpdatePolicy.normalizeSha256(asset.digest)
-        if (expected != null && !sha256(partFile).equals(expected, ignoreCase = true)) {
-            partFile.delete()
-            throw IOException("APK 校验失败，已丢弃下载文件")
-        }
-        if (finalFile.exists()) finalFile.delete()
-        if (!partFile.renameTo(finalFile)) {
-            throw IOException("无法保存 APK")
-        }
-        return finalFile
     }
 
-    private fun sha256(file: File): String {
+    private fun publish(part: File, finalFile: File): File = disk {
+        Files.move(part.toPath(), finalFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        finalFile
+    }
+
+    private fun discard(file: File) {
+        if (file.exists() && !file.delete()) throw DiskFailure(IOException("无法清理损坏分片"))
+    }
+
+    private suspend fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
+        disk { file.inputStream() }.useDisk { input ->
             val buffer = ByteArray(64 * 1024)
             while (true) {
-                val read = input.read(buffer)
+                coroutineContext.ensureActive()
+                val read = disk { input.read(buffer) }
                 if (read < 0) break
                 digest.update(buffer, 0, read)
             }
@@ -116,8 +170,40 @@ class ApkDownloader(private val context: Context) {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    private fun hash(bytes: ByteArray) = MessageDigest.getInstance("SHA-256")
+        .digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private inline fun <T> disk(block: () -> T): T = try {
+        block()
+    } catch (error: IOException) {
+        throw DiskFailure(error)
+    }
+
+    /** 本地 close 失败同样阻止换镜像；原有取消始终优先传播。 */
+    private inline fun <T : java.io.Closeable, R> T.useDisk(block: (T) -> R): R {
+        var failure: Throwable? = null
+        try {
+            return block(this)
+        } catch (error: Throwable) {
+            failure = error
+            throw error
+        } finally {
+            try {
+                disk { close() }
+            } catch (closeError: DiskFailure) {
+                if (failure is CancellationException) {
+                    failure.addSuppressed(closeError)
+                } else {
+                    if (failure != null) closeError.addSuppressed(failure)
+                    throw closeError
+                }
+            }
+        }
+    }
+
+    private class DiskFailure(cause: IOException) : IOException("本地文件操作失败：${cause.message}", cause)
+    private class ProtocolFailure(message: String) : IOException(message)
     private companion object {
-        const val APK_NAME = "morrow-update.apk"
-        const val PART_NAME = "morrow-update.apk.part"
+        val CONTENT_RANGE = Regex("bytes (\\d+)-(\\d+)/(\\d+)")
     }
 }

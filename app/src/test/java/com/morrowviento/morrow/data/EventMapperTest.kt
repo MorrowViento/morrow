@@ -41,6 +41,21 @@ class EventMapperTest {
     }
 
     @Test
+    fun monthlyKindAndCursorRoundTripWithoutTimezoneDrift() {
+        val original = sample().copy(
+            kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+            repeatType = RepeatType.MONTHLY, repeatMonth = null,
+            lastHandledOccurrence = java.time.LocalDate.of(2026, 11, 1),
+        )
+        val entity = EventMapper.toEntity(original, zone)
+        assertEquals(original, EventMapper.toDomain(entity, zone))
+        assertEquals(original.lastHandledOccurrence, EventMapper.toDomain(entity, ZoneId.of("UTC")).lastHandledOccurrence)
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.TODO,
+            EventMapper.toDomain(entity.copy(kind = "unknown"), zone).kind)
+        assertEquals(null, EventMapper.toDomain(entity.copy(lastHandledOccurrence = Long.MAX_VALUE), zone).lastHandledOccurrence)
+    }
+
+    @Test
     fun `毫秒时间戳按指定时区还原`() {
         val event = sample()
         val entity = EventMapper.toEntity(event, zone)

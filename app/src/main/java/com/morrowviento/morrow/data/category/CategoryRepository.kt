@@ -46,6 +46,7 @@ sealed interface CategoryDelete {
 class CategoryRepository(
     private val settings: SettingsRepository,
     private val events: EventRepository,
+    private val undo: com.morrowviento.morrow.data.undo.UndoRepository,
 ) {
 
     /** 已保存的分类列表（忽略旧事件里的孤儿分类）。 */
@@ -62,23 +63,28 @@ class CategoryRepository(
             }
         }
 
-    suspend fun add(name: String): CategoryEdit {
+    suspend fun add(name: String): CategoryEdit = events.withMutation {
         val current = currentMerged()
         val result = CategoryRules.add(current, name)
         if (result is CategoryEdit.Ok) persist(result.list)
-        return result
+        result
     }
 
     /** 重命名；成功时级联把该分类下的事件一并改名（历史事件显示新名）。 */
-    suspend fun rename(from: String, to: String): CategoryEdit {
+    suspend fun rename(from: String, to: String): CategoryEdit = events.withMutation {
         val current = currentMerged()
         val result = CategoryRules.rename(current, from, to)
         if (result is CategoryEdit.Ok) {
-            val newName = to.trim()
-            if (newName != from) events.renameCategory(from, newName)
-            persist(result.list)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                val newName = to.trim()
+                if (newName != from) {
+                    undo.clear()
+                    events.renameCategory(from, newName)
+                }
+                persist(result.list)
+            }
         }
-        return result
+        result
     }
 
     /**
@@ -87,20 +93,21 @@ class CategoryRepository(
      * @param target 分类被事件占用时的迁移目标；为 null 且存在占用则返回 [CategoryDelete.NeedsTarget]，
      *   由 UI 提示用户选择，绝不静默删除事件或让事件挂到不存在的分类上。
      */
-    suspend fun delete(name: String, target: String?): CategoryDelete {
+    suspend fun delete(name: String, target: String?): CategoryDelete = events.withMutation {
         val current = currentMerged()
-        if (!current.contains(name)) return CategoryDelete.NotFound
+        if (!current.contains(name)) return@withMutation CategoryDelete.NotFound
 
         val used = events.countByCategory(name)
         if (used > 0) {
             val candidates = current.filterNot { it == name }
-            if (target == null) return CategoryDelete.NeedsTarget(used, candidates)
-            if (target == name || !current.contains(target)) return CategoryDelete.InvalidTarget
-            events.renameCategory(name, target)
+            if (target == null) return@withMutation CategoryDelete.NeedsTarget(used, candidates)
+            if (target == name || !current.contains(target)) return@withMutation CategoryDelete.InvalidTarget
         }
 
-        return when (val next = CategoryRules.remove(current, name)) {
-            is CategoryEdit.Ok -> {
+        when (val next = CategoryRules.remove(current, name)) {
+            is CategoryEdit.Ok -> kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                undo.clear()
+                if (used > 0) events.renameCategory(name, requireNotNull(target))
                 persist(next.list)
                 CategoryDelete.Ok(used)
             }

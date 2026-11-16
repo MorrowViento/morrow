@@ -278,12 +278,16 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     // 自定义图片：只在真的用图片档时才去读盘。解码与取色都在 IO 线程，
     // 完成后主线程只是换一个 ImageBitmap 引用。
     val context = LocalContext.current
+    var photoLoading by remember(backdrop.image, backdrop.effectiveMode) {
+        mutableStateOf(backdrop.effectiveMode == BackdropMode.IMAGE)
+    }
     val photo by produceState<ImageBitmap?>(initialValue = null, backdrop.image, backdrop.effectiveMode) {
         value = if (backdrop.effectiveMode == BackdropMode.IMAGE) {
             withContext(Dispatchers.IO) { BackdropImage.load(context, backdrop.image)?.asImageBitmap() }
         } else {
             null
         }
+        photoLoading = false
     }
 
     var sizePx by remember { mutableStateOf(IntSize.Zero) }
@@ -293,7 +297,7 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
 
     // 图片真的解码出来了才不需要丝缎壁纸。写成布尔量而不是直接读 photo：
     // 它要当 LaunchedEffect 的 key（图刚就绪时要把还没画的丝缎补上）。
-    val needSatin = !(backdrop.effectiveMode == BackdropMode.IMAGE && photo != null)
+    val needSatin = backdrop.effectiveMode != BackdropMode.IMAGE || (!photoLoading && photo == null)
 
     LaunchedEffect(sizePx, base, dark, blobs, needSatin) {
         if (sizePx.width <= 0 || sizePx.height <= 0) return@LaunchedEffect
@@ -335,7 +339,7 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                     val satin = wallpaper
                     when {
                         // 图片模式：cover 裁切（短边铺满，长边居中裁掉），不做拉伸
-                        photoBitmap != null -> {
+                        backdrop.effectiveMode == BackdropMode.IMAGE && photoBitmap != null -> {
                             val iw = photoBitmap.width.toFloat()
                             val ih = photoBitmap.height.toFloat()
                             if (iw > 0f && ih > 0f && dstSize.width > 0 && dstSize.height > 0) {

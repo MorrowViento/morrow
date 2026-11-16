@@ -23,5 +23,5 @@ interface ReminderScheduler {
     fun cancel(eventId: String)
 
     /** 稍后提醒：在 [minutes] 分钟后补一次通知，不影响原有排期。 */
-    fun snooze(eventId: String, minutes: Int)
+    fun snooze(event: CountdownEvent, targetAtMillis: Long, minutes: Int)
 }

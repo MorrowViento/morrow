@@ -6,6 +6,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.withTransform
+import com.morrowviento.morrow.data.backdrop.BackdropCrop
+import com.morrowviento.morrow.ui.glass.GlassTextButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -108,9 +119,10 @@ fun SettingsScreen(
     state: SettingsUiState,
     actions: SettingsActions,
     onDismiss: () -> Unit,
+    backgroundAspectRatio: Float,
 ) {
     val context = LocalContext.current
-    BackHandler { onDismiss() }
+    BackHandler { if (!state.busy) { actions.cancelBackdrop(); onDismiss() } }
 
     // 通知 / 精确闹钟是在系统设置页改的，本进程收不到回调；回到前台时重读一次
     LifecycleResumeEffect(Unit) {
@@ -128,10 +140,10 @@ fun SettingsScreen(
 
     // 系统相册选择器（Android 13+ 是 Photo Picker）：**不需要任何存储权限**，
     // 也不要求用户理解「读取相册」这种吓人的授权文案。返回的 uri 是临时授权，
-    // 所以下面 importBackdrop 第一件事就是把它复制进私有目录。
+    // 返回后立即有界解码供裁剪，确认时才把最终画面保存到私有目录。
     val backdropLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
-    ) { uri -> uri?.let(actions.importBackdrop) }
+    ) { uri -> uri?.let { actions.prepareBackdrop(it, backgroundAspectRatio) } }
     val pickBackdrop: () -> Unit = {
         runCatching {
             backdropLauncher.launch(
@@ -281,7 +293,8 @@ fun SettingsScreen(
                             Divider()
                             ActionRow(
                                 title = if (backdrop.hasImage) "更换背景图片" else "选择背景图片",
-                                summary = "从相册选一张，会复制进应用私有目录；不需要相册权限",
+                                summary = "从相册选择并裁剪，确认后保存；不需要相册权限",
+                                enabled = !state.busy,
                                 value = if (backdrop.hasImage) "更换" else "选择",
                                 onClick = pickBackdrop,
                             )
@@ -456,6 +469,10 @@ fun SettingsScreen(
             }
         }
 
+        state.pendingBackdrop?.let { pending ->
+            BackdropCropScreen(pending, state.busy, actions.confirmBackdrop, actions.cancelBackdrop)
+        }
+
         state.pendingImport?.let { pending ->
             ImportConfirmSheet(
                 pending = pending,
@@ -494,6 +511,86 @@ fun SettingsScreen(
                 state = state.update,
                 actions = updateActions,
             )
+        }
+    }
+}
+
+@Composable
+private fun BackdropCropScreen(
+    pending: PendingBackdrop,
+    busy: Boolean,
+    onConfirm: (Bitmap, BackdropCrop) -> Unit,
+    onCancel: () -> Unit,
+) {
+    BackHandler { if (!busy) onCancel() }
+    val bitmap = pending.bitmap
+    val image = remember(bitmap) { bitmap.asImageBitmap() }
+    val initial = remember(pending) { BackdropCrop.centered(bitmap.width, bitmap.height, pending.aspectRatio) }
+    var crop by remember(pending) { mutableStateOf(initial) }
+    val interaction = remember { MutableInteractionSource() }
+    Column(
+        Modifier.fillMaxSize().background(glassColors().groupedBackground)
+            .clickable(interactionSource = interaction, indication = null) { }
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("裁剪背景", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()))
+        Spacer(Modifier.height(8.dp))
+        Text("比例固定为背景窗口；移动图片或双指缩放", style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()))
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+            val previewWidth = minOf(maxWidth, maxHeight * pending.aspectRatio)
+            val previewHeight = previewWidth / pending.aspectRatio
+            Canvas(
+                Modifier.width(previewWidth).height(previewHeight)
+                    .semantics {
+                        contentDescription = "背景裁剪预览"
+                        if (!busy) customActions = listOf(
+                            "向左移动" to Offset(-0.1f, 0f), "向右移动" to Offset(0.1f, 0f),
+                            "向上移动" to Offset(0f, -0.1f), "向下移动" to Offset(0f, 0.1f),
+                        ).map { (label, pan) ->
+                            CustomAccessibilityAction(label) {
+                                crop = crop.transform(bitmap.width, bitmap.height, pending.aspectRatio,
+                                    0.5f, 0.5f, pan.x, pan.y, 1f)
+                                true
+                            }
+                        }
+                    }
+                    .pointerInput(pending, busy) {
+                        if (!busy) detectTransformGestures { centroid, pan, zoom, _ ->
+                            crop = crop.transform(bitmap.width, bitmap.height, pending.aspectRatio,
+                                centroid.x / size.width, centroid.y / size.height,
+                                pan.x / size.width, pan.y / size.height, zoom)
+                        }
+                    },
+            ) {
+                clipRect {
+                    withTransform({
+                        scale(size.width / crop.width, size.height / crop.height, Offset.Zero)
+                        translate(-crop.left, -crop.top)
+                    }) { drawImage(image) }
+                    repeat(2) { index ->
+                        val fraction = (index + 1) / 3f
+                        drawLine(Color.White.copy(alpha = 0.45f), Offset(size.width * fraction, 0f),
+                            Offset(size.width * fraction, size.height), strokeWidth = 1.dp.toPx())
+                        drawLine(Color.White.copy(alpha = 0.45f), Offset(0f, size.height * fraction),
+                            Offset(size.width, size.height * fraction), strokeWidth = 1.dp.toPx())
+                    }
+                    drawRect(Color.White.copy(alpha = 0.8f), style = Stroke(2.dp.toPx()))
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GlassTextButton("缩小", { crop = crop.transform(bitmap.width, bitmap.height, pending.aspectRatio,
+                0.5f, 0.5f, 0f, 0f, 1f / 1.25f) }, enabled = !busy, modifier = Modifier.height(44.dp))
+            GlassTextButton("重置", { crop = initial }, enabled = !busy, modifier = Modifier.height(44.dp))
+            GlassTextButton("放大", { crop = crop.transform(bitmap.width, bitmap.height, pending.aspectRatio,
+                0.5f, 0.5f, 0f, 0f, 1.25f) }, enabled = !busy, modifier = Modifier.height(44.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassTextButton("取消", onCancel, modifier = Modifier.weight(1f).height(48.dp), enabled = !busy, compact = false)
+            GlassTextButton(if (busy) "保存中…" else "使用此背景", { onConfirm(bitmap, crop) },
+                modifier = Modifier.weight(1f).height(48.dp), active = true, enabled = !busy, compact = false)
         }
     }
 }

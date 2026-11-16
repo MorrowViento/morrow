@@ -1,8 +1,7 @@
 package com.morrowviento.morrow.domain.model
 
 /**
- * 倒数日事件。字段与 Flutter 版 `lib/models/countdown_event.dart` 一一对应，
- * 保证旧数据迁移零丢失。
+ * 倒数日事件。保留 ying 原事件字段，新增业务类型与已处理周期，旧事件默认按待办兼容。
  */
 data class CountdownEvent(
     val id: String,
@@ -21,7 +20,17 @@ data class CountdownEvent(
     val repeatMonth: Int? = null,
     val repeatDay: Int? = null,
     val createdAt: java.time.LocalDateTime,
+    val kind: EventKind = EventKind.TODO,
+    val lastHandledOccurrence: java.time.LocalDate? = null,
 ) {
+    val primaryAction: EventPrimaryAction
+        get() = when {
+            kind == EventKind.TODO && isCompleted -> EventPrimaryAction.RESTORE
+            repeatType == RepeatType.YEARLY -> EventPrimaryAction.NEXT_YEAR
+            repeatType == RepeatType.MONTHLY -> EventPrimaryAction.NEXT_MONTH
+            kind == EventKind.TODO -> EventPrimaryAction.COMPLETE
+            else -> EventPrimaryAction.NONE
+        }
     /** 仅日期部分（等价 Dart 侧 `dateOnly`）。 */
     val dateOnly: java.time.LocalDate get() = targetDate.toLocalDate()
 
@@ -52,4 +61,10 @@ data class CountdownEvent(
 
 enum class CountDirection { AUTO, COUNTDOWN, COUNTUP }
 
-enum class RepeatType { NONE, YEARLY }
+enum class EventKind(val label: String) { TODO("待办"), ANNIVERSARY("纪念日") }
+
+enum class RepeatType(val label: String) { NONE("不重复"), MONTHLY("每月重复"), YEARLY("每年重复") }
+
+enum class EventPrimaryAction(val label: String) {
+    NONE(""), COMPLETE("标记完成"), RESTORE("恢复为进行中"), NEXT_MONTH("进入下一月"), NEXT_YEAR("进入下一年"),
+}

@@ -30,4 +30,6 @@ data class EventEntity(
     @ColumnInfo(name = "repeat_day") val repeatDay: Int?,
     /** 创建时刻（本地时区毫秒） */
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(defaultValue = "'TODO'") val kind: String = "TODO",
+    @ColumnInfo(name = "last_handled_occurrence") val lastHandledOccurrence: Long? = null,
 )

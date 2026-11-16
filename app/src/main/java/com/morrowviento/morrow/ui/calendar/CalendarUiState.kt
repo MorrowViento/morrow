@@ -74,7 +74,7 @@ data class CalendarEntry(
     val dayDelta: Int,
     val isCompleted: Boolean,
     val isAllDay: Boolean,
-    val repeatsYearly: Boolean,
+    val repeatType: RepeatType,
 )
 
 /** 年视图的一个月。 */
@@ -82,8 +82,10 @@ data class CalendarEntry(
 data class MonthSummary(
     val month: YearMonth,
     val eventCount: Int,
-    /** 最多 3 个事件标题，用于卡片上给一点信息量。 */
-    val sampleTitles: List<String>,
+    /** 小日历只含公历与标记，不为十二个月预计算农历。 */
+    val cells: List<CalendarCell>,
+    /** 最多三条日期/标题摘要，同一天多事件各自计数。 */
+    val sampleEntries: List<CalendarEntry>,
 )
 
 /** 列表视图的一个月分组。 */
@@ -216,29 +218,18 @@ object CalendarPresentation {
     const val CELL_COUNT = 42
     val WEEKDAY_LABELS: List<String> = listOf("一", "二", "三", "四", "五", "六", "日")
 
-    /**
-     * 事件在 [year] 年的落点日期。
-     *
-     * 非重复事件只在目标年份匹配时出现；每年重复事件落在当年同月同日，
-     * 早于首次目标日期的不算（否则会把事件「倒推」到创建之前的年份）。
-     */
-    fun occurrenceIn(event: CountdownEvent, year: Int): LocalDate? {
-        if (event.repeatType != RepeatType.YEARLY) {
-            return event.targetDate.toLocalDate().takeIf { it.year == year }
-        }
-        val month = event.repeatMonth ?: event.targetDate.monthValue
-        val day = event.repeatDay ?: event.targetDate.dayOfMonth
-        val date = CalendarMath.anniversaryOn(year, month, day)
-        val first = event.targetDate.toLocalDate()
-        return date.takeIf { !it.isBefore(first) }
-    }
+    /** 该年首个落点；月/年/列表的完整落点统一由 RepeatRule 生成。 */
+    fun occurrenceIn(event: CountdownEvent, year: Int): LocalDate? =
+        com.morrowviento.morrow.domain.time.RepeatRule.occurrencesBetween(
+            event, LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31),
+        ).firstOrNull()
 
     /** 某月的日期 → 事件列表（同一天多个事件按未完成优先、标题排序）。 */
     fun marksOf(events: List<CountdownEvent>, month: YearMonth): Map<LocalDate, List<CountdownEvent>> {
         val out = LinkedHashMap<LocalDate, MutableList<CountdownEvent>>()
         events.forEach { event ->
-            occurrenceIn(event, month.year)?.let { date ->
-                if (YearMonth.from(date) == month) out.getOrPut(date) { mutableListOf() }.add(event)
+            com.morrowviento.morrow.domain.time.RepeatRule.occurrencesBetween(event, month.atDay(1), month.atEndOfMonth()).forEach { date ->
+                out.getOrPut(date) { mutableListOf() }.add(event)
             }
         }
         return out.mapValues { (_, list) -> list.sortedWith(ENTRY_ORDER) }
@@ -313,11 +304,16 @@ object CalendarPresentation {
         val summaries = (1..12).map { month ->
             val ym = YearMonth.of(nav.year, month)
             val marks = marksOf(events, ym)
-            val entries = marks.toSortedMap().values.flatten()
+            val entries = marks.toSortedMap().flatMap { (date, list) -> list.map { entryOf(it, date, today) } }
             MonthSummary(
                 month = ym,
                 eventCount = entries.size,
-                sampleTitles = entries.map { it.title }.distinct().take(3),
+                cells = monthCells(ym).map { date ->
+                    val inMonth = YearMonth.from(date) == ym
+                    CalendarCell(date, inMonth, inMonth && date == today, false, "", false,
+                        if (inMonth) marks[date].orEmpty().size else 0)
+                },
+                sampleEntries = entries.take(3),
             )
         }
         return CalendarUiState(
@@ -375,7 +371,7 @@ object CalendarPresentation {
         dayDelta = CalendarMath.daysUntil(date, today),
         isCompleted = event.isCompleted,
         isAllDay = event.isAllDay,
-        repeatsYearly = event.repeatsYearly,
+        repeatType = event.repeatType,
     )
 
     /** 同一天内：未完成在前，其次按标题，保证每秒刷新也不会跳序。 */

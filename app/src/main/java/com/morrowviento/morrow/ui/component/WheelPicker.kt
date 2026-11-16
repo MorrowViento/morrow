@@ -132,7 +132,9 @@ fun WheelColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         itemsIndexed(values) { index, value ->
-            val selected = index == state.firstVisibleItemIndex
+            val selected by remember(state, index) {
+                androidx.compose.runtime.derivedStateOf { index == state.firstVisibleItemIndex }
+            }
             // 选中与否不再切换字号（字号一变就要重新排版，滚动时会跳），
             // 改成只改缩放与浓淡，走一条临界阻尼弹簧——滚动过程中数字是「浮」过去的。
             val emphasis by animateFloatAsState(

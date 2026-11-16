@@ -6,6 +6,8 @@ import com.google.gson.JsonParser
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
+import com.morrowviento.morrow.domain.model.EventKind
+import java.time.LocalDate
 import com.morrowviento.morrow.domain.model.RepeatType
 import com.morrowviento.morrow.domain.model.UndoKind
 import com.morrowviento.morrow.domain.model.UndoOperation
@@ -75,6 +77,8 @@ object UndoCodec {
         addProperty("isAllDay", event.isAllDay)
         addProperty("isCompleted", event.isCompleted)
         addProperty("isPinned", event.isPinned)
+        addProperty("kind", event.kind.name.lowercase())
+        event.lastHandledOccurrence?.let { addProperty("lastHandledOccurrence", it.toString()) }
         addProperty("repeatType", event.repeatType.name.lowercase())
         event.repeatMonth?.let { addProperty("repeatMonth", it) }
         event.repeatDay?.let { addProperty("repeatDay", it) }
@@ -100,6 +104,7 @@ object UndoCodec {
             ?: throw IllegalArgumentException("targetDate 缺失或格式错误")
         val createdAt = parseDateTime(obj.string("createdAt")) ?: target
         val repeatType = when (obj.string("repeatType")) {
+            "monthly" -> RepeatType.MONTHLY
             "yearly" -> RepeatType.YEARLY
             else -> RepeatType.NONE
         }
@@ -141,12 +146,14 @@ object UndoCodec {
             } else {
                 null
             },
-            repeatDay = if (repeatType == RepeatType.YEARLY) {
+            repeatDay = if (repeatType != RepeatType.NONE) {
                 obj.int("repeatDay") ?: target.dayOfMonth
             } else {
                 null
             },
             createdAt = createdAt,
+            kind = if (obj.string("kind") == "anniversary") EventKind.ANNIVERSARY else EventKind.TODO,
+            lastHandledOccurrence = obj.string("lastHandledOccurrence")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         )
     }
 

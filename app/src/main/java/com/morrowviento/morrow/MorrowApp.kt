@@ -71,8 +71,8 @@ class MorrowApp : Application() {
 
         eventRepository = EventRepository(database.eventDao())
         settingsRepository = SettingsRepository(this)
-        categoryRepository = CategoryRepository(settingsRepository, eventRepository)
         undoRepository = UndoRepository(settingsRepository, eventRepository, appScope)
+        categoryRepository = CategoryRepository(settingsRepository, eventRepository, undoRepository)
         StartupTrace.mark("app", "repositories wired")
 
         // M4：提醒链路。渠道必须在任何通知投递前建好，否则通知会被系统静默丢弃
@@ -85,7 +85,7 @@ class MorrowApp : Application() {
         widgetRefresher = WidgetRefresher(this, settingsRepository, eventRepository)
 
         // M6：备份（只做数据进出，导入后的提醒对账与小部件刷新由调用方负责）
-        backupRepository = BackupRepository(settingsRepository, eventRepository)
+        backupRepository = BackupRepository(settingsRepository, eventRepository, undoRepository)
         StartupTrace.mark("app", "widget + backup wired")
 
         // 撤销窗口只有 6 秒，不能跟着自愈链一起让路 1.5 秒——那等于开局就先吃掉四分之一。
@@ -118,17 +118,20 @@ class MorrowApp : Application() {
 
         step("migrate") {
             // M1：旧版数据迁移（幂等，失败不阻断启动）
-            val report = LegacyDataMigrator(this@MorrowApp, database.eventDao(), settingsRepository)
-                .migrateIfNeeded()
+            val report = eventRepository.withMutation {
+                LegacyDataMigrator(this@MorrowApp, database.eventDao(), settingsRepository).migrateIfNeeded()
+            }
             Log.i(TAG, "迁移结果: $report")
         }
 
         step("reminders") {
             // M4：启动对账——被强制停止、清理加速或卸载重装后闹钟都可能丢失，
             // 每次冷启动重排一遍是最省事的自愈手段（sync 幂等）
-            val events = eventRepository.loadAll()
-            reminderScheduler.syncAll(events)
-            Log.i(TAG, "已对账 ${events.size} 个事件的提醒排期")
+            eventRepository.withMutation {
+                val events = eventRepository.loadAll()
+                reminderScheduler.syncAll(events)
+                Log.i(TAG, "已对账 ${events.size} 个事件的提醒排期")
+            }
         }
 
         step("widget") {

@@ -50,7 +50,7 @@ class EventFormStateTest {
 
     @Test
     fun yearlyRepeat_recordsMonthAndDay() {
-        val event = requireNotNull(form().copy(repeatYearly = true).toEvent())
+        val event = requireNotNull(form().copy(repeatType = RepeatType.YEARLY).toEvent())
         assertEquals(RepeatType.YEARLY, event.repeatType)
         assertEquals(12, event.repeatMonth)
         assertEquals(25, event.repeatDay)
@@ -101,14 +101,14 @@ class EventFormStateTest {
     @Test
     fun fromEvent_roundTripsEditableFields() {
         val event = requireNotNull(
-            form("旅行").copy(category = "旅行", icon = "plane", repeatYearly = true).addReminder(1440).toEvent(),
+            form("旅行").copy(category = "旅行", icon = "plane", repeatType = RepeatType.YEARLY).addReminder(1440).toEvent(),
         )
         val state = EventFormState.fromEvent(event)
         assertEquals(event.id, state.id)
         assertEquals("旅行", state.title)
         assertEquals("旅行", state.category)
         assertEquals("plane", state.icon)
-        assertTrue(state.repeatYearly)
+        assertEquals(RepeatType.YEARLY, state.repeatType)
         assertEquals(listOf(1440), state.reminders.map { it.minutesBefore })
         assertEquals(event.targetDate.toLocalDate(), state.date)
     }
@@ -132,6 +132,34 @@ class EventFormStateTest {
         )
         assertEquals(LocalDate.of(2026, 12, 25), state.date)
         assertEquals(LocalTime.of(23, 59), state.time)
+    }
+
+    @Test
+    fun edit_mergesLatestCompletionPinAndCycleCursor() {
+        val original = requireNotNull(form().copy(repeatType = RepeatType.MONTHLY).toEvent()).copy(
+            isCompleted = true, isPinned = true, lastHandledOccurrence = LocalDate.of(2027, 1, 25),
+        )
+        val edited = requireNotNull(EventFormState.fromEvent(original).copy(title = "改名").toEvent(original))
+        assertTrue(edited.isCompleted)
+        assertTrue(edited.isPinned)
+        assertEquals(original.lastHandledOccurrence, edited.lastHandledOccurrence)
+        assertEquals(original.createdAt, edited.createdAt)
+        val changedDate = requireNotNull(EventFormState.fromEvent(original).copy(date = original.dateOnly.plusDays(1)).toEvent(original))
+        assertNull(changedDate.lastHandledOccurrence)
+        val anniversary = requireNotNull(EventFormState.fromEvent(original).copy(
+            kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+        ).toEvent(original))
+        assertEquals(false, anniversary.isCompleted)
+    }
+
+    @Test
+    fun monthlyAndNewDefault_mapExplicitly() {
+        val event = requireNotNull(form().copy(repeatType = RepeatType.MONTHLY).toEvent())
+        assertNull(event.repeatMonth)
+        assertEquals(25, event.repeatDay)
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.TODO, event.kind)
+        assertEquals(RepeatType.MONTHLY, EventFormState.fromEvent(event).repeatType)
+        assertEquals(RepeatType.NONE, EventFormState.newEvent().repeatType)
     }
 
     @Test

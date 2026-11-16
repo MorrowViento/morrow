@@ -35,7 +35,8 @@ data class EventFormState(
     val icon: String = "",
     val direction: CountDirection = CountDirection.AUTO,
     val reminders: List<EventReminder> = emptyList(),
-    val repeatYearly: Boolean = false,
+    val repeatType: RepeatType = RepeatType.NONE,
+    val kind: com.morrowviento.morrow.domain.model.EventKind = com.morrowviento.morrow.domain.model.EventKind.TODO,
     val createdAt: LocalDateTime = LocalDateTime.now(),
 ) {
     /** 落库用的目标时刻。 */
@@ -46,8 +47,9 @@ data class EventFormState(
         EventFormErrors(title = if (title.isBlank()) "请输入标题" else null)
 
     /** 校验通过才返回事件，否则 null（调用方负责提示错误）。 */
-    fun toEvent(): CountdownEvent? {
+    fun toEvent(existing: CountdownEvent? = null): CountdownEvent? {
         if (!validate().isValid) return null
+        val sameAnchor = existing != null && existing.targetDate == target && existing.repeatType == repeatType
         return CountdownEvent(
             id = id ?: UUID.randomUUID().toString(),
             title = title.trim(),
@@ -58,10 +60,14 @@ data class EventFormState(
             direction = direction,
             reminders = EventReminder.normalize(reminders),
             isAllDay = isAllDay,
-            repeatType = if (repeatYearly) RepeatType.YEARLY else RepeatType.NONE,
-            repeatMonth = if (repeatYearly) date.monthValue else null,
-            repeatDay = if (repeatYearly) date.dayOfMonth else null,
-            createdAt = createdAt,
+            repeatType = repeatType,
+            repeatMonth = if (sameAnchor) existing.repeatMonth else if (repeatType == RepeatType.YEARLY) date.monthValue else null,
+            repeatDay = if (sameAnchor) existing.repeatDay else if (repeatType != RepeatType.NONE) date.dayOfMonth else null,
+            createdAt = existing?.createdAt ?: createdAt,
+            kind = kind,
+            isCompleted = kind == com.morrowviento.morrow.domain.model.EventKind.TODO && existing?.isCompleted == true,
+            isPinned = existing?.isPinned ?: false,
+            lastHandledOccurrence = if (sameAnchor) existing.lastHandledOccurrence else null,
         )
     }
 
@@ -127,7 +133,8 @@ data class EventFormState(
             icon = event.icon,
             direction = event.direction,
             reminders = event.reminders,
-            repeatYearly = event.repeatsYearly,
+            repeatType = event.repeatType,
+            kind = event.kind,
             createdAt = event.createdAt,
         )
 

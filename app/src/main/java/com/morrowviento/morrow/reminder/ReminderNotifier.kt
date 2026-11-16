@@ -45,7 +45,7 @@ class ReminderNotifier(context: Context) {
     }
 
     fun show(event: CountdownEvent, minutesBefore: Int, targetAtMillis: Long, nowMillis: Long) {
-        show(event.id, event.title, event.isAllDay, minutesBefore, targetAtMillis, nowMillis)
+        show(event.id, event.title, event.isAllDay, minutesBefore, targetAtMillis, nowMillis, event.primaryAction)
     }
 
     /**
@@ -63,6 +63,7 @@ class ReminderNotifier(context: Context) {
         minutesBefore: Int,
         targetAtMillis: Long,
         nowMillis: Long,
+        primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE,
     ) {
         val target = LocalDateTime.ofInstant(Instant.ofEpochMilli(targetAtMillis), ZoneId.systemDefault())
         val body = buildString {
@@ -81,18 +82,23 @@ class ReminderNotifier(context: Context) {
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openIntent(eventId))
-            .addAction(
-                Notification.Action.Builder(
-                    noIcon,
-                    appContext.getString(R.string.reminder_action_complete),
-                    actionIntent(eventId, ReminderReceiver.ACTION_COMPLETE),
-                ).build(),
-            )
+            .apply {
+                if (primaryAction != com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE &&
+                    primaryAction != com.morrowviento.morrow.domain.model.EventPrimaryAction.RESTORE
+                ) {
+                    addAction(
+                        Notification.Action.Builder(
+                            noIcon, primaryAction.label,
+                            actionIntent(eventId, ReminderReceiver.ACTION_COMPLETE, targetAtMillis, primaryAction),
+                        ).build(),
+                    )
+                }
+            }
             .addAction(
                 Notification.Action.Builder(
                     noIcon,
                     appContext.getString(R.string.reminder_action_snooze),
-                    actionIntent(eventId, ReminderReceiver.ACTION_SNOOZE),
+                    actionIntent(eventId, ReminderReceiver.ACTION_SNOOZE, targetAtMillis, primaryAction),
                 ).build(),
             )
             .build()
@@ -156,14 +162,19 @@ class ReminderNotifier(context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    private fun actionIntent(eventId: String, action: String): PendingIntent =
+    private fun actionIntent(
+        eventId: String, action: String, target: Long,
+        primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction,
+    ): PendingIntent =
         PendingIntent.getBroadcast(
             appContext,
             notificationId(eventId),
             Intent(appContext, ReminderReceiver::class.java)
                 .setAction(action)
-                .setData("morrow://$action/${eventId.lowercase()}".toUri())
-                .putExtra(ReminderReceiver.EXTRA_EVENT_ID, eventId),
+                .setData("morrow://$action/$eventId/$target/${primaryAction.name}".toUri())
+                .putExtra(ReminderReceiver.EXTRA_EVENT_ID, eventId)
+                .putExtra(ReminderReceiver.EXTRA_TARGET, target)
+                .putExtra(ReminderReceiver.EXTRA_PRIMARY_ACTION, primaryAction.name),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 

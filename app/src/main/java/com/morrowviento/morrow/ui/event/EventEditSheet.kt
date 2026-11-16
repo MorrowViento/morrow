@@ -129,8 +129,17 @@ fun EventEditSheet(
                         ChoiceChip(form.direction.label(), false) {
                             form = form.copy(direction = form.direction.next())
                         }
-                        ChoiceChip("每年重复", form.repeatYearly) {
-                            form = form.copy(repeatYearly = !form.repeatYearly)
+                    }
+                    SectionTitle("事件类型")
+                    ChipRow {
+                        com.morrowviento.morrow.domain.model.EventKind.entries.forEach { kind ->
+                            ChoiceChip(kind.label, form.kind == kind) { form = form.copy(kind = kind) }
+                        }
+                    }
+                    SectionTitle("重复")
+                    ChipRow {
+                        com.morrowviento.morrow.domain.model.RepeatType.entries.forEach { repeat ->
+                            ChoiceChip(repeat.label, form.repeatType == repeat) { form = form.copy(repeatType = repeat) }
                         }
                     }
 

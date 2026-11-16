@@ -7,6 +7,8 @@ import com.google.gson.JsonParser
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
+import com.morrowviento.morrow.domain.model.EventKind
+import java.time.LocalDate
 import com.morrowviento.morrow.domain.model.RepeatType
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -55,6 +57,7 @@ object LegacyEventParser {
         val createdAt = parseLocalDateTime(obj.str("createdAt")) ?: target
 
         val repeatType = when (obj.str("repeatType")) {
+            "monthly" -> RepeatType.MONTHLY
             "yearly" -> RepeatType.YEARLY
             else -> RepeatType.NONE
         }
@@ -90,12 +93,14 @@ object LegacyEventParser {
             } else {
                 null
             },
-            repeatDay = if (repeatType == RepeatType.YEARLY) {
+            repeatDay = if (repeatType != RepeatType.NONE) {
                 obj.int("repeatDay") ?: target.dayOfMonth
             } else {
                 null
             },
             createdAt = createdAt,
+            kind = if (obj.str("kind") == "anniversary") EventKind.ANNIVERSARY else EventKind.TODO,
+            lastHandledOccurrence = obj.str("lastHandledOccurrence")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         )
     }
 

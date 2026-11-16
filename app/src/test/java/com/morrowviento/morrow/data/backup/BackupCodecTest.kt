@@ -93,6 +93,23 @@ class BackupCodecTest {
     }
 
     @Test
+    fun versionTwoPreservesMonthlyKindAndCursorAndVersionOneDefaultsToTodo() {
+        val original = event().copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+            repeatType = RepeatType.MONTHLY, repeatMonth = null,
+            lastHandledOccurrence = java.time.LocalDate.of(2027, 3, 8))
+        val raw = BackupCodec.encode(document(listOf(original)))
+        val parsed = BackupCodec.decode(raw) as BackupParse.Ok
+        assertEquals(2, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
+        assertEquals(original, BackupMapper.toDomain(parsed.document.events.single()))
+        val legacy = BackupCodec.decode("""{"format":"morrow-backup","version":1,
+            "events":[{"id":"old","targetDate":"2027-05-01T08:00","isCompleted":true,"isPinned":true,"repeatType":"YEARLY"}]}""") as BackupParse.Ok
+        val restored = BackupMapper.toDomain(legacy.document.events.single())!!
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.TODO, restored.kind)
+        assertNull(restored.lastHandledOccurrence)
+        assertTrue(restored.isCompleted && restored.isPinned)
+    }
+
+    @Test
     fun `分类与小部件样式原样往返`() {
         val ok = BackupCodec.decode(BackupCodec.encode(document())) as BackupParse.Ok
         assertEquals(listOf("生活", "工作"), ok.document.categories)

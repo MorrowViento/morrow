@@ -11,6 +11,21 @@ import kotlinx.coroutines.flow.map
  */
 class EventRepository(private val dao: EventDao) {
 
+    private val mutationMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** 序列化完整的读快照/写库/撤销操作。内部 DAO 方法不重复加锁。 */
+    suspend fun <T> withMutation(block: suspend () -> T): T {
+        mutationMutex.lock()
+        try {
+            return block()
+        } finally {
+            mutationMutex.unlock()
+        }
+    }
+
+    suspend fun replaceAll(events: List<CountdownEvent>) =
+        dao.replaceAll(events.map(EventMapper::toEntity))
+
     fun observeAll(): Flow<List<CountdownEvent>> =
         dao.observeAll().map { rows -> rows.map { EventMapper.toDomain(it) } }
 

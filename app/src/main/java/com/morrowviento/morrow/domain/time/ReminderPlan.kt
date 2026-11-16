@@ -20,6 +20,7 @@ data class ScheduledReminder(
     val triggerAtMillis: Long,
     val targetAtMillis: Long,
     val isAllDay: Boolean,
+    val primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.COMPLETE,
 )
 
 /**
@@ -55,7 +56,8 @@ object ReminderPlan {
 
         val result = ArrayList<ScheduledReminder>(reminders.size * MAX_OCCURRENCES)
         var occurrences = 0
-        for (target in targetInstants(event, fromMillis, zone)) {
+        val earliestTarget = fromMillis + reminders.minOf { it.minutesBefore } * MINUTE_MILLIS
+        for (target in targetInstants(event, earliestTarget, zone)) {
             if (occurrences >= MAX_OCCURRENCES) break
             var added = false
             for (reminder in reminders) {
@@ -70,6 +72,7 @@ object ReminderPlan {
                     triggerAtMillis = triggerAt,
                     targetAtMillis = target,
                     isAllDay = event.isAllDay,
+                    primaryAction = event.primaryAction,
                 )
             }
             // 该落点的所有提醒都已过期时不计入次数，否则会把名额浪费在过去
@@ -85,17 +88,20 @@ object ReminderPlan {
      * 多取一年是为了让 12 月 31 日这类跨年边界也有足够的未来落点。
      */
     private fun targetInstants(event: CountdownEvent, fromMillis: Long, zone: ZoneId): List<Long> {
-        if (event.repeatType != RepeatType.YEARLY) {
-            return listOf(event.reminderAnchor.toMillis(zone))
-        }
-        val month = event.repeatMonth ?: event.targetDate.monthValue
-        val day = event.repeatDay ?: event.targetDate.dayOfMonth
-        val time = event.targetDate.toLocalTime()
-        // 用 Instant.atZone 而不是 LocalDate.ofInstant：后者在 Android 上要 API 34，minSdk 只有 33
-        val anchorYear = Instant.ofEpochMilli(fromMillis).atZone(zone).year
-        return (anchorYear - 1..anchorYear + 2)
-            .map { CalendarMath.anniversaryOn(it, month, day).atTime(time).toMillis(zone) }
-            .sorted()
+        if (event.repeatType == RepeatType.NONE) return listOf(event.reminderAnchor.toMillis(zone))
+        val today = Instant.ofEpochMilli(fromMillis).atZone(zone).toLocalDate()
+        val time = event.reminderAnchor.toLocalTime()
+        // 多一个候选：当天全部提醒已经过去时仍能排足两次未来落点。
+        return RepeatRule.futureOccurrences(event, today).take(MAX_OCCURRENCES + 1)
+            .map { it.atTime(time).toMillis(zone) }.toList()
+    }
+
+    fun isValidTarget(event: CountdownEvent, targetAtMillis: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean {
+        if (event.isCompleted || targetAtMillis <= 0L) return false
+        val date = Instant.ofEpochMilli(targetAtMillis).atZone(zone).toLocalDate()
+        if (event.lastHandledOccurrence?.let { date <= it } == true) return false
+        return RepeatRule.occurrencesBetween(event, date, date).isNotEmpty() &&
+            date.atTime(event.reminderAnchor.toLocalTime()).toMillis(zone) == targetAtMillis
     }
 
     private fun LocalDateTime.toMillis(zone: ZoneId): Long =

@@ -203,6 +203,44 @@ class ReminderPlanTest {
     }
 
     @Test
+    fun monthlyAnchorsCursorAndAllDayTimeAgree() {
+        val original = event(LocalDateTime.of(2026, 1, 31, 0, 0), minutes(0),
+            isAllDay = true, repeat = RepeatType.MONTHLY)
+        val handled = original.copy(lastHandledOccurrence = java.time.LocalDate.of(2026, 2, 28))
+        val plan = ReminderPlan.upcoming(handled, millis(LocalDateTime.of(2026, 2, 1, 0, 0)), zone)
+        assertEquals(listOf(LocalDateTime.of(2026, 3, 31, 9, 0), LocalDateTime.of(2026, 4, 30, 9, 0)),
+            plan.map { local(it.targetAtMillis) })
+        assertTrue(plan.all { it.primaryAction == com.morrowviento.morrow.domain.model.EventPrimaryAction.NEXT_MONTH })
+        assertTrue(ReminderPlan.isValidTarget(handled, plan.first().targetAtMillis, zone))
+        assertTrue(!ReminderPlan.isValidTarget(handled, millis(LocalDateTime.of(2026, 2, 28, 9, 0)), zone))
+        assertTrue(!ReminderPlan.isValidTarget(handled, millis(LocalDateTime.of(2026, 3, 31, 0, 0)), zone))
+        assertTrue(!ReminderPlan.isValidTarget(handled.copy(isCompleted = true), plan.first().targetAtMillis, zone))
+    }
+
+    @Test
+    fun longLeadMonthlyReminderStillFindsTwoFutureTriggers() {
+        val from = millis(LocalDateTime.of(2026, 1, 1, 12, 0))
+        val plan = ReminderPlan.upcoming(event(LocalDateTime.of(2025, 1, 31, 10, 0),
+            minutes(365 * 1440), repeat = RepeatType.MONTHLY), from, zone)
+        assertEquals(2, plan.size)
+        assertTrue(plan.all { it.triggerAtMillis > from })
+        assertEquals(LocalDateTime.of(2027, 1, 31, 10, 0), local(plan.first().targetAtMillis))
+    }
+
+    @Test
+    fun futureSeriesAndAnniversaryDoNotInventEarlierOrCompletionReminders() {
+        val original = event(LocalDateTime.of(2028, 2, 29, 0, 0), minutes(0),
+            isAllDay = true, repeat = RepeatType.YEARLY)
+            .copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY)
+        val plan = ReminderPlan.upcoming(original, millis(LocalDateTime.of(2026, 1, 1, 0, 0)), zone)
+        assertEquals(LocalDateTime.of(2028, 2, 29, 9, 0), local(plan.first().targetAtMillis))
+        assertTrue(!ReminderPlan.isValidTarget(original, millis(LocalDateTime.of(2026, 2, 28, 9, 0)), zone))
+        val single = ReminderPlan.upcoming(original.copy(repeatType = RepeatType.NONE),
+            millis(LocalDateTime.of(2026, 1, 1, 0, 0)), zone).single()
+        assertEquals(com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE, single.primaryAction)
+    }
+
+    @Test
     fun `同一落点的多条提醒按时间升序`() {
         val from = millis(LocalDateTime.of(2026, 11, 11, 12, 0))
         val plan = ReminderPlan.upcoming(

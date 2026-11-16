@@ -32,11 +32,13 @@ class UpdateRepository {
         UpdateCheckResult(UpdatePolicy.newest(probes), probes)
     }
 
-    private fun probe(url: String): ProbeResult {
+    private suspend fun probe(url: String): ProbeResult {
         val start = System.nanoTime()
         return try {
             val text = UpdateNetwork.fetch(url)
             ProbeResult(url, elapsed(start), ReleaseJson.parse(text))
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             ProbeResult(url, elapsed(start), null, error.message ?: error.javaClass.simpleName)
         }

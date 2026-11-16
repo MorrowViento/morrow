@@ -34,6 +34,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -58,9 +61,17 @@ class EventViewModel(
     private val undo: UndoRepository,
     private val reminders: ReminderScheduler,
     private val widgetRefresh: WidgetRefreshTrigger = WidgetRefreshTrigger.NONE,
+    private val cancelNotification: (String) -> Unit = {},
 ) : ViewModel() {
 
     private val completedExpanded = MutableStateFlow(false)
+    private val operationError = MutableStateFlow<String?>(null)
+
+    private val sharedEvents = events.observeAll()
+        .map { Result.success(it) }
+        .catch { emit(Result.failure(it)) }
+        .flowOn(Dispatchers.Default)
+        .shareIn(viewModelScope, SharingStarted.Lazily, replay = 1)
 
     /**
      * 数据一变就刷小部件。
@@ -71,7 +82,9 @@ class EventViewModel(
      */
     init {
         viewModelScope.launch {
-            events.observeAll()
+            sharedEvents
+                .filter { it.isSuccess }
+                .map { it.getOrThrow() }
                 .drop(1)
                 .debounce(300)
                 .collect {
@@ -105,8 +118,7 @@ class EventViewModel(
      * 上一次算出的卡片列表。`events` 用**引用**比较：Room 每次查询都会给出新 List，
      * 只要还是同一个实例，内容就没变，可以整批复用。
      *
-     * 复用时只重算今天那几张卡片的 `remainingToday`——它是唯一真正需要秒级刷新的字段；
-     * 进度环也被量化过（见 [EventPresentation.progressOf]），不会每秒变一次。
+     * 复用时推进今日秒数与量化进度；只有字段真正变化的卡片才复制。
      */
     private class CardsSnapshot(
         val events: List<CountdownEvent>,
@@ -119,12 +131,13 @@ class EventViewModel(
     private var snapshot: CardsSnapshot? = null
 
     val state: StateFlow<HomeUiState> = combine(
-        events.observeAll(),
+        sharedEvents,
         settings.sortMode,
         completedExpanded,
         undo.pending,
         ticker,
-    ) { list, sortPref, expanded, pending, now ->
+    ) { result, sortPref, expanded, pending, now ->
+        val list = result.getOrThrow()
         val mode = SortMode.fromPref(sortPref)
         val today = now.toLocalDate()
         val nowMillis = System.currentTimeMillis()
@@ -133,8 +146,8 @@ class EventViewModel(
         val cards = if (cached != null && cached.events === list && cached.mode == mode && cached.today == today) {
             // 同一份数据、同一排序、同一天：只把「今日剩余」推进一秒。
             // 两份列表都没变时连快照对象也不新建（一秒一个对象的垃圾也省了）。
-            val active = cached.active.refreshClock(today, now)
-            val completed = cached.completed.refreshClock(today, now)
+            val active = EventPresentation.refreshClock(cached.active, today, now)
+            val completed = EventPresentation.refreshClock(cached.completed, today, now)
             if (active === cached.active && completed === cached.completed) {
                 cached
             } else {
@@ -160,6 +173,7 @@ class EventViewModel(
         )
     }
         .catch { emit(HomeUiState(isLoading = false, error = it.message ?: "读取事件失败")) }
+        .combine(operationError) { state, error -> if (error == null) state else state.copy(error = error) }
         // 映射 + 排序一律离开主线程：每秒一次的重算即使只有几十微秒，
         // 也不该和绘制挤在同一帧里（stateIn 默认在主线程上游收集）
         .flowOn(Dispatchers.Default)
@@ -191,11 +205,11 @@ class EventViewModel(
      * 42 格的农历换算与事件落点放到后台线程算，翻月时不会卡住手势。
      */
     val calendarStrip: StateFlow<CalendarStrip> = combine(
-        events.observeAll(),
+        sharedEvents,
         calendarNav,
         dayTick,
-    ) { list, nav, today ->
-        CalendarPresentation.strip(list, nav, today)
+    ) { result, nav, today ->
+        CalendarPresentation.strip(result.getOrThrow(), nav, today)
     }
         .catch { emit(CalendarStrip.shell(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败"))) }
         .flowOn(Dispatchers.Default)
@@ -252,47 +266,69 @@ class EventViewModel(
      * 撤销只服务于删除与批量清理这类难以手动复原的操作。
      */
     fun save(form: EventFormState) {
-        val event = form.toEvent() ?: return
-        viewModelScope.launch {
+        if (!form.validate().isValid) return
+        mutate {
+            val existing = form.id?.let { events.findById(it) }
+            if (form.id != null && existing == null) return@mutate
+            val event = form.toEvent(existing) ?: return@mutate
+            undo.clear()
             events.save(event)
             // sync 是幂等的「先清后设」：改提醒、改日期、取消提醒都由它一次收敛
-            withContext(Dispatchers.IO) { reminders.sync(event) }
+            withContext(Dispatchers.IO) {
+                cancelNotification(event.id)
+                reminders.cancel(event.id)
+                reminders.sync(event)
+            }
         }
     }
 
     // ---- M2c：详情页操作（全部进入 6 秒撤销队列）----
 
     fun deleteEvent(id: String) {
-        viewModelScope.launch {
-            val event = events.findById(id) ?: return@launch
+        mutate {
+            val event = events.findById(id) ?: return@mutate
+            undo.clear()
             events.delete(id)
-            withContext(Dispatchers.IO) { reminders.cancel(id) }
             pushUndo(UndoKind.DELETE, "已删除「${event.title}」", listOf(event))
+            withContext(Dispatchers.IO) {
+                cancelNotification(id)
+                reminders.cancel(id)
+            }
         }
     }
 
     fun toggleEventCompleted(id: String) {
-        viewModelScope.launch {
-            val event = events.findById(id) ?: return@launch
-            val updated = event.copy(isCompleted = !event.isCompleted)
+        val expected = (state.value.active + state.value.completed).firstOrNull { it.id == id } ?: return
+        mutate {
+            val event = events.findById(id) ?: return@mutate
+            if (event.isCompleted != expected.isCompleted || event.primaryAction != expected.primaryAction) return@mutate
+            val updated = com.morrowviento.morrow.domain.time.RepeatRule.applyPrimaryAction(
+                event, LocalDate.now(), expected.target.toLocalDate(),
+            ) ?: return@mutate
+            undo.clear()
             events.save(updated)
-            // 完成即静音：sync 对已完成事件返回空排期，会把手上的闹钟清掉
-            withContext(Dispatchers.IO) { reminders.sync(updated) }
             pushUndo(
                 kind = UndoKind.TOGGLE_COMPLETED,
-                message = if (event.isCompleted) {
-                    "「${event.title}」已恢复为进行中"
-                } else {
-                    "「${event.title}」已完成"
+                message = when (event.primaryAction) {
+                    com.morrowviento.morrow.domain.model.EventPrimaryAction.NEXT_MONTH -> "「${event.title}」已进入下一月"
+                    com.morrowviento.morrow.domain.model.EventPrimaryAction.NEXT_YEAR -> "「${event.title}」已进入下一年"
+                    com.morrowviento.morrow.domain.model.EventPrimaryAction.RESTORE -> "「${event.title}」已恢复为进行中"
+                    else -> "「${event.title}」已完成"
                 },
                 snapshot = listOf(event),
             )
+            withContext(Dispatchers.IO) {
+                cancelNotification(id)
+                reminders.cancel(id)
+                reminders.sync(updated)
+            }
         }
     }
 
     fun togglePinned(id: String) {
-        viewModelScope.launch {
-            val event = events.findById(id) ?: return@launch
+        mutate {
+            val event = events.findById(id) ?: return@mutate
+            undo.clear()
             events.save(event.copy(isPinned = !event.isPinned))
             pushUndo(
                 kind = UndoKind.TOGGLE_PINNED,
@@ -303,31 +339,36 @@ class EventViewModel(
     }
 
     fun clearCompleted() {
-        viewModelScope.launch {
+        mutate {
             val done = events.loadAll().filter { it.isCompleted }
-            if (done.isEmpty()) return@launch
+            if (done.isEmpty()) return@mutate
+            undo.clear()
             events.deleteMany(done.map { it.id })
-            withContext(Dispatchers.IO) { done.forEach { reminders.cancel(it.id) } }
             pushUndo(UndoKind.CLEAR_COMPLETED, "已清理 ${done.size} 个已完成事件", done)
+            withContext(Dispatchers.IO) { done.forEach { cancelNotification(it.id); reminders.cancel(it.id) } }
         }
     }
 
     fun clearAll() {
-        viewModelScope.launch {
+        mutate {
             val all = events.loadAll()
-            if (all.isEmpty()) return@launch
+            if (all.isEmpty()) return@mutate
+            undo.clear()
             events.clearAll()
-            withContext(Dispatchers.IO) { all.forEach { reminders.cancel(it.id) } }
             pushUndo(UndoKind.CLEAR_ALL, "已清空 ${all.size} 个事件", all)
+            withContext(Dispatchers.IO) { all.forEach { cancelNotification(it.id); reminders.cancel(it.id) } }
         }
     }
 
     /** 撤销最近一次操作；窗口过期或无事可撤时静默忽略（撤销条本身已消失）。 */
     fun undoLast() {
-        viewModelScope.launch {
-            undo.undo()
-            // 回填的事件可能带提醒，整体对账一次比逐条猜测更稳（撤销是低频动作）
-            withContext(Dispatchers.IO) { reminders.syncAll(events.loadAll()) }
+        launchOperation {
+            if (undo.undo()) {
+                // 与其它写入串行化，避免旧对账在删除后重新排入提醒。
+                events.withMutation {
+                    withContext(Dispatchers.IO) { reminders.syncAll(events.loadAll()) }
+                }
+            }
         }
     }
 
@@ -347,23 +388,25 @@ class EventViewModel(
         )
     }
 
-    /**
-     * 只推进「今日剩余」这一列，其余卡片原样返回。
-     *
-     * 没有卡片需要变时返回**同一个实例**：这样 `HomeUiState` 与上一帧相等，
-     * `StateFlow` 不会向下游发值，Compose 也就整页跳过重组。
-     */
-    private fun List<EventCardModel>.refreshClock(today: LocalDate, now: LocalDateTime): List<EventCardModel> {
-        var patched: MutableList<EventCardModel>? = null
-        for (index in indices) {
-            val card = this[index]
-            if (card.isAllDay || card.target.toLocalDate() != today) continue
-            val next = EventPresentation.remainingTodayOf(card.target, false, today, now)
-            if (next == card.remainingToday) continue
-            if (patched == null) patched = toMutableList()
-            patched[index] = card.copy(remainingToday = next)
+    private fun mutate(block: suspend () -> Unit) = launchOperation {
+        events.withMutation {
+            // 一旦开始写库，快照记录必须完成，不能因页面退出只留下半个操作。
+            withContext(kotlinx.coroutines.NonCancellable) { block() }
         }
-        return patched ?: this
+    }
+
+    private fun launchOperation(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            operationError.value = null
+            try {
+                block()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "事件操作失败", error)
+                operationError.value = error.message ?: "事件操作失败"
+            }
+        }
     }
 
     companion object {
@@ -376,10 +419,11 @@ class EventViewModel(
             undo: UndoRepository,
             reminders: ReminderScheduler,
             widgetRefresh: WidgetRefreshTrigger,
+            cancelNotification: (String) -> Unit,
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                EventViewModel(events, settings, undo, reminders, widgetRefresh) as T
+                EventViewModel(events, settings, undo, reminders, widgetRefresh, cancelNotification) as T
         }
     }
 }
