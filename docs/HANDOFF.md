@@ -1,18 +1,18 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前状态：**4.1.2 / 71 已构建、核验并发布**（tag `v4.1.2`、Release「朝夕 4.1.2」、资产 `morrow-71-4.1.2-release.apk` **5,199,013 B / SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`**）。本版两件事：① **五个超大 UI 文件按职责拆分**（SettingsScreen 1,345→461 行等，无行为变更）；② **补上 protobuf 的 BSD-3 版权归属**（新增静态 `protobuf-bsd-3.txt`，生成器 `attributionFiles()` 无条件追加，`runtime.txt` 116,447 B）。回归 **380 项单测 / 47 XML / 0 失败错误跳过**、lint 0 errors / 15 warnings、8 份许可资产与源一致、Apple 素材 0 匹配、证书同 68。上一版 4.1.1 / 70（`7F92400A…D963`）已发布，详见下方 #20/#21 实录。**当前只剩人工逐组件源码层版权审阅与真机验收（含 68→71 保数据升级）。** 下方 338/366/379 项、69 包与 feature-update 包均为历史证据。**续接先读「4.1.2 / 71：结构重构与 protobuf 归属」章节。**
+> 当前状态：**4.1.2 / 71 已构建、核验并发布**（tag `v4.1.2` 指向 `f9da8d8`、Release「朝夕 4.1.2」id `449651404`、2026-11-18T07:32:07Z 正式、资产 `morrow-71-4.1.2-release.apk` **5,199,013 B / SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`**，`/releases/latest` 与 manifest 均已回读一致）。本版两件事：① **五个超大 UI 文件按职责拆分**（SettingsScreen 1,345→461 行等，无行为变更）；② **补上 protobuf 的 BSD-3 版权归属**（新增静态 `protobuf-bsd-3.txt`，生成器 `attributionFiles()` 无条件追加，`runtime.txt` 116,447 B）。回归 **380 项单测 / 47 XML / 0 失败错误跳过**、lint 0 errors / 15 warnings、8 份许可资产与源一致、Apple 素材 0 匹配、证书同 68。上一版 4.1.1 / 70（`7F92400A…D963`）保留未动，详见下方 #20/#21 实录与本批 #22。**当前只剩人工逐组件源码层版权审阅与真机验收（含 68→71 保数据升级）。** 下方 338/366/379 项、69 包与 feature-update 包均为历史证据。**续接先读「4.1.2 / 71：结构重构与 protobuf 归属」与「#22」两节。**
 
 ## 当前批次与授权
 
-- 新版已发布：**tag `v4.1.1`**（指向 `fbc1a89`）、Release「朝夕 4.1.1」（id `449587411`，2026-11-18T06:05:24Z 正式，非 draft/prerelease）、资产 `morrow-70-4.1.1-release.apk`（5,196,689 B / `7F92400A…D963`）；**tag 与标题按用户指定不带 code**（资产名仍必须带 code）。`update/manifest.json` 已回填、独立提交（`4a31259`）并推送成功、回读一致（见 #21 节）。上一版 `v4.0.0-68` 未改动。
+- 新版已发布：**tag `v4.1.2`**（指向 `f9da8d8`）、Release「朝夕 4.1.2」（id `449651404`，2026-11-18T07:32:07Z 正式，非 draft/prerelease）、资产 `morrow-71-4.1.2-release.apk`（5,199,013 B / `601b3beb…73a6`）；**tag 与标题按用户指定不带 code**（资产名仍必须带 code）。`update/manifest.json` 已按 `/releases/latest` 真实字段回填并推送（见 #22 节）。上一版 `v4.1.1`（`449587411` / 70 包 5,196,689 B）与 `v4.0.0-68` 均未改动。
 - 用户已授权本批提交推送、原签名 release APK 上传、正式 Release，以及发布核验成功后回填真实 manifest。自身代码 MIT 已选定；ying 的 MIT 与 Glasmio 0.1.3 的 Apache-2.0 分别保留。许可资源已实施（根 LICENSE、ying.txt、Glasmio NOTICES、generateRuntimeNotices、三份静态协议/版权正文）；十项 Apple 素材已证明本次 69 release 审计包不分发，正文缺口为 0 且完整性门槛通过；README 与设置页可读许可本轮已完成。逐组件源码层版权审阅与全量回归未完成，正式 70 包仍须重验，见 #19 章节。不要重复询问同一授权。
 - #16：ChoiceChip 外层 CenterStart、16sp 居中行盒/无字体 padding；首页/日历使用持续存在的活动采样槽，只有当前内容绘制，底栏/浮层在槽外；日历不在安全区重绘背景。新增 Compose v2 + Robolectric Native 真实布局测试（4 项），既有手势测试（5 项）通过；未真机验视觉。
 - #17：完整 CalendarUiState 共享 Transition，模式/周期 contentKey 抑制同周期切页；退出页使用旧快照、交互仅当前周期；模式 crossfade/周期定向滑动，不插值高度、不读惰性邻页。明确数字行盒/固定字重及大字体格高。7 项动画与真实日历测试通过（含连续反向、2×字体、边界箭头/手势、reduceMotion），未真机测帧率。
 - #18：小部件复用应用丝缎/私有图片（cover 裁剪），后台预乘 alpha 三次可分离盒滤波；共享 frost/veil/强调色规格，外背景连续圆角 26dp。工作图长边 384、输出不超过 262,144 像素，最多 16 个宿主 SizeF 变体均分总预算，LRU 8 MiB；挂起渲染锁不阻塞主线程查缓存，不回收借出的源图/缓存图，不污染首页 placeholder。列表行用原生 26dp 圆角色纱/边缘（不是逐行实时采样或连续圆角 shader），不分配整幅行位图。
 - #18 验证：新增 15 项回归（9 像素/尺寸/缓存、2 原生列表快照、2 保存刷新、1 应用主题、1 Compose 实际预览/2×字体）；聚焦 45 项通过后补齐最后 2 项，最终全量 366 项实际通过。预览按测量尺寸后台生成，切主题不混旧位图，列表保留同次刷新外观快照；frost/减透明提交成功后真实刷新。未验启动器/设备帧率，不承诺模糊桌面壁纸。
 - 当前阶段：#19 代码与文档部分已交付，**全量回归已完成（379 项 / lint 0 errors·15 warnings / 原签名 release 成功）**，只剩人工版权归属审阅，详见下方专门章节；之后才 #20 全量验证与 4.1.1 / 70 原签名构建、#21 推送发布。保持 schema/包名/密钥/生产依赖/CI 不变。
-- HEAD 基线 `fbc1a89`（4.1.1 发布代码与文档），`v4.1.1` 已发布；远端 latest 已回读为 `v4.1.1`，`update/manifest.json` 与远端一致。MANUAL-TEST 原有本地修改不编辑、不代勾、不提交。
+- HEAD 基线 `f9da8d8`（4.1.2 发布代码与文档），`v4.1.2` 已发布；远端 latest 已回读为 `v4.1.2`，`update/manifest.json` 与其一致。MANUAL-TEST 原有本地修改不编辑、不代勾、不提交。
 - 暂停动画时钟的测试须显式 `Snapshot.sendApplyNotifications()`：否则 Robolectric 全局快照尚未通知重组、语义树仍为旧页；不能把这种测试调度失败当生产动画问题。当前未关闭 Native 或删断言。
 
 ## 任务目标与边界
@@ -176,10 +176,21 @@
 - **版本与验证**：`versionCode 71`、`versionName 4.1.2`（公开展示不附 code）。`:app:testDebugUnitTest --rerun :app:lintDebug :app:assembleDebug :app:assembleRelease :app:verifyRuntimeNoticeCompleteness` → `BUILD SUCCESSFUL in 6m15s`（114 任务，63 executed）；**380 项 / 47 XML / 0 failures·errors·skipped**（379 + 1 项新的 protobuf 归属测试）；lint **0 errors / 15 warnings**（同基线，无新增）。
 - **APK**：5,199,013 B / `601b3beb…73a6`，**146 条目**；`aapt2` **71 / 4.1.2** / minSdk 33 / targetSdk 37；`apksigner` 证书 `8894605E…8D02` 与正式 68 一致；**8 份** `assets/licenses/` 资产（6 份源文件 MATCH、`runtime.txt`/`morrow.txt` 为生成物）；图像条目 0、无嵌套归档、资源表 1,341 行检索 `tapback|listening|adaptive_audio` 0 匹配；`classes.dex` 含 `LicenseDocument` 与 `protobuf-bsd-3` 标记。debug 80,518,929 B / `4f51bf8c…b171`。本地副本 `../morrow-71-4.1.2-release.apk` 与源包逐字节一致。
 
+### #22 4.1.2 / 71 提交、推送与正式发布实录（2026-11-18）
+- 提交（显式路径暂存，`docs/MANUAL-TEST.md` 始终排除）：`5196f10` `refactor(ui): 按职责拆分五个超大 UI 文件`（13 文件，纯声明搬移）；`ba6d023` `chore(license): 补齐 protobuf 的 BSD-3 版权归属`（5 文件，含版本切 71 / 4.1.2）；`f9da8d8` `docs: 回填 4.1.2 / 71 的重构、许可与发布证据`（README + 4 份 docs）。
+- 推送：`git push origin main` → `cfd745a..f9da8d8`，`pre-push` 钩子报告「127.0.0.1:10809 已在监听，无需唤醒」；`git ls-remote` 回读 `refs/heads/main = f9da8d8`。
+- 发布前核验：`/releases/latest` = `v4.1.1`；`/releases/tags/v4.1.2` 与 `/git/refs/tags/v4.1.2` 均 **404**，标签未被占用。
+- 发布路径（沿用 #21 的 draft 优先）：建草稿（id `449651404`、`tag_name=v4.1.2`、`target_commitish=main`、标题「朝夕 4.1.2」）→ 上传 `morrow-71-4.1.2-release.apk`（HTTP 201，`size=5,199,013`，`digest=sha256:601b3beb…73a6`，asset id `762396303`）→ **把已上传资产重新下载**（5,199,013 B）本地算摘要与 `cmp` **逐字节一致** → `PATCH draft=false` 转正式（HTTP 200，`published_at` `2026-11-18T07:32:07Z`）。
+- 发布后回读：`/releases/latest` = `v4.1.2` /「朝夕 4.1.2」/ `prerelease=false` / 资产 5,199,013 B / `sha256:601b3beb…73a6` / `.../releases/download/v4.1.2/morrow-71-4.1.2-release.apk`；`git ls-remote --tags origin v4.1.2` = `f9da8d8`，与 `refs/heads/main` 同一提交。
+- `update/manifest.json` 用 `/releases/latest` 的真实字段整体重写（tag / name / body / published_at / prerelease / assets 的 name+url+size+digest），4,334 B，未手抄任何摘要。
+- 网络：`api.github.com` 与 `uploads.github.com` 经仓库级 `http.proxy=http://127.0.0.1:10809` 全程 200/201，**本批未再出现 59466 的 502**。
+- 命名决策沿用用户 4.1.1 时的指定：tag 与标题**不带 code**，资产名保留 code；仍走手工 API，未改 `scripts/release.sh`。
+- 未做：未改 CI/密钥/包名/schema/生产依赖，未覆盖旧 tag 或旧 Release，未纳入 MANUAL-TEST，未安装或卸载设备。
+
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。
 - `domain/time/LunarCalendar.kt`：自实现农历/压缩年表，未见明确外部版权；无证据表明复制了不许可来源，也未完成全部来源审核。
-- `docs/RELEASE.md` 仍是 4.1.0 旧基线 + 旧 `v<name>-<code>` 脚本规则，发布阶段统一。
+- `docs/RELEASE.md` 已随 4.1.2 发布同步到当前基线（`v4.1.2` / id `449651404` / 8 份许可资产 / 380 项）。脚本 `scripts/release.sh` 仍保留旧的 `v<name>-<code>` 命名，与手工发布流程不一致——下次若要脚本化发布需先改这一处。
 - 仍缺的是**人工版权/NOTICE 归属审阅结论**（`apache-2.0.txt` 只是协议副本，逐组件源码层归属未逐一审阅）。随包许可文本这一层已闭合：4.1.2 起 protobuf 也有版权行，8 份资产与源一致。设置页展示不改变各组件自身的版权归属。
 
 ### 续接顺序（#19 → #20 → #21）

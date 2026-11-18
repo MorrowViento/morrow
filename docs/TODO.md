@@ -1,6 +1,6 @@
 # TODO — 朝夕 · 当前待办
 
-> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「4.1.2 / 71：结构重构与 protobuf 归属」与「发布实录」），再读本文件；历史实现见 CHANGELOG。**4.1.2 / 71 已于 2026-11-18 发布**（结构重构 + protobuf 许可归属），工程动作结束，剩余人工版权审阅与真机验收。
+> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「4.1.2 / 71：结构重构与 protobuf 归属」与「#22」发布实录），再读本文件；历史实现见 CHANGELOG。**4.1.2 / 71 已于 2026-11-18 发布**（tag `v4.1.2` / Release `449651404` / `601b3beb…73a6`，结构重构 + protobuf 许可归属），工程动作结束，剩余人工版权审阅与真机验收。
 
 ## 4.1.2 / 71：结构重构 + protobuf 许可归属（2026-11-18 已发布）
 
@@ -11,6 +11,7 @@
   - 工具：仓库外 `../tools/kt_split.py`（按声明移动 + 自动裁剪 import；`by` 委托的 `getValue/setValue` 必须按写法保留）。
 - [x] **版本 4.1.2 / 71 与全量验证**：`testDebugUnitTest --rerun + lintDebug + assembleDebug + assembleRelease + verifyRuntimeNoticeCompleteness` → `BUILD SUCCESSFUL in 6m15s`（114 任务，63 executed）；**380 项 / 47 XML / 0 failures·errors·skipped**；lint **0 errors / 15 warnings**（无新增）。
 - [x] **APK 核验**：**5,199,013 B / `601b3beb…73a6`**，146 条目；`aapt2` **71 / 4.1.2** / minSdk 33 / targetSdk 37；证书 `8894605E…8D02` 同正式 68；**8 份**许可资产（6 源文件 MATCH）；图像条目 0、无嵌套归档、资源表 Apple 关键词 0 匹配；本地副本 `../morrow-71-4.1.2-release.apk` 逐字节一致。
+- [x] **发布（2026-11-18，#22）**：三个提交 `5196f10` / `ba6d023` / `f9da8d8` 推送 main；draft → 上传 → 回下载 `cmp` 逐字节一致 → 转正式；tag `v4.1.2` = `f9da8d8`、Release `449651404`（`07:32:07Z`）、`/releases/latest` 与 `update/manifest.json` 均已回读一致；`api.github.com`/`uploads.github.com` 全程走 `127.0.0.1:10809`，未再出现 59466 的 502。
 - [ ] **真机验收（沿用下方清单）**：视觉/帧率/小部件/许可长文滚动，以及 **68→71 原位升级保数据**。
 
 ## 当前：4.1.1 视觉与开源发布（已批准）

@@ -3,7 +3,7 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
-## [2026-11-18] 4.1.2 (71)：超大 UI 文件拆分 + protobuf 许可归属补齐（已发布，见下）
+## [2026-11-18] 4.1.2 (71)：超大 UI 文件拆分 + protobuf 许可归属补齐（已发布）
 
 - **结构重构（无行为变更）**：五个单文件巨物按职责拆分，靠「行多重集比对 + 全量单测」证明没有内容增删，只做可见性调整与文件级注释。
   - `ui/settings/SettingsScreen.kt` 1,345 行 → `SettingsScreen`(461) + `SettingsRows`(363) + `SettingsGlyphs`(306) + `BackdropCropScreen`(128) + `LicensesSheet`(205)；
@@ -15,6 +15,8 @@
 - **版本**：`versionCode 70→71`、`versionName 4.1.1→4.1.2`（公开展示不附 code），依赖/AGP/Kotlin/schema/包名/CI/签名/proguard 均未动。
 - **回归**：380 项单测 / 47 份 XML / 0 failures·errors·skipped（379 + 1 项 protobuf 归属测试）；lint **0 errors / 15 warnings**（与基线同一组，无新增）；debug + 原签名 release（含 lintVital/R8/资源裁剪）成功；`verifyRuntimeNoticeCompleteness` 退出 0。
 - **最终 APK** `morrow-71-4.1.2-release.apk`：**5,199,013 B**，SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`，146 条目；`aapt2` **71 / 4.1.2** / minSdk 33 / targetSdk 37；`apksigner` 证书 SHA-256 `8894605E…8D02` 与正式 68 一致（可原位升级）；**8 份**许可资产与源一致（6 份源文件 MATCH，`runtime.txt`/`morrow.txt` 为生成物），图像条目 0、资源表 `tapback|listening|adaptive_audio` 0 匹配、无嵌套归档，dex 含 `LicenseDocument`。
+
+- **发布**：tag `v4.1.2`（指向 `f9da8d8`）、Release「朝夕 4.1.2」id `449651404`、`published_at` 2026-11-18T07:32:07Z；资产回下载后与本地包逐字节一致；`update/manifest.json` 按 `/releases/latest` 回填。
 
 ## [2026-11-18] 未发布：设置页状态栏割裂修复（提交 `956461d`）
 

@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.1.1",
-  "name": "朝夕 4.1.1",
-  "body": "## 朝夕 4.1.1\n\n这一版把「手感」和「桌面」都磨了一遍，也是朝夕第一次完整开源。\n\n### 日历翻页不再跳一下\n\n切页过程中标题和日期是同一套动画：月/年模式之间淡入淡出，跨周期按方向横滑，退出的那一页保留自己的快照。数字行盒、字重和格高重新对齐，放大字号也不会把日期挤歪；边界月份的前后箭头与手势同样按周期身份判断，不会误判成同一个月。\n\n### 桌面小部件重做\n\n外背景改用连续圆角，列表行换成原生轻量的圆角行卡片，不再是一块白边的黑板。渲染和应用内的丝缎、自定义图片共用同一份采样来源，背景模糊在后台按预乘 alpha 做三次可分离滤波；实际桌面尺寸的每个变体平分像素预算，长边工作图 384，缓存上限 8 MiB。配置页按桌面实际测量尺寸出预览，保存成功后立即刷新。\n\n### 滚动的底色一次算完\n\n整页背景（色斑 + 斜向光带）按屏幕尺寸与配色渲染成位图，每帧只贴一次；换明暗、换配色时预渲染挪到后台线程，切换不再卡住那一帧。控件的选中态在容器里垂直居中，首页与日历各自持有互斥的活动采样槽，日历直接复用整窗背景。\n\n### 开源\n\n仓库改为 MIT：自有代码是 `LICENSE`，原项目 ying 的 MIT 与 Glasmio 0.1.3 的 Apache-2.0 分别保留。设置页新增「开源许可」，可以离线逐份读完七份文档——包括按坐标整理的逐组件清单 `runtime.txt`。Glasmio 的许可此前标错，这一版已更正为 Apache-2.0。\n\n### 升级说明\n\n沿用同一把发布签名（RSA 4096），4.0.0 (68) 可以直接覆盖升级，事件、设置、提醒与桌面小部件都会保留。仍然建议先在「设置 → 数据」导出备份。\n\n- 包名：`com.morrowviento.morrow`\n- 版本：4.1.1（versionCode 70）\n- 支持：Android 13 及以上\n",
-  "published_at": "2026-11-18T06:05:24Z",
+  "tag_name": "v4.1.2",
+  "name": "朝夕 4.1.2",
+  "body": "这一版没有新功能，做的是两件「欠账」：把五个上千行的界面文件按职责拆开，以及补上 protobuf 缺失的 BSD-3 版权归属。\n\n## 结构重构（行为与视觉不变）\n\n设置、玻璃、首页、日历四个目录里，单文件普遍 700~1,300 行，读一处逻辑要在同文件的十几段声明之间来回跳。按「页面编排 / 视图部件 / 绘制 glyph」切开：\n\n| 文件 | 拆分前 | 拆分后 |\n|---|---|---|\n| `ui/settings/SettingsScreen.kt` | 1,345 | 461 + `SettingsRows` 363 + `SettingsGlyphs` 306 + `BackdropCropScreen` 128 + `LicensesSheet` 205 |\n| `ui/glass/GlassBottomBar.kt` | 989 | 674 + `GlassBottomBarParts` 366 |\n| `ui/home/HomeScreen.kt` | 841 | 549 + `HomeSections` 328 |\n| `ui/calendar/CalendarScreen.kt` | 806 | 357 + `CalendarViews` 477 |\n| `ui/glass/GlassTheme.kt` | 690 | 475 + `GlassBackdrop` 236 |\n\n只做声明搬移与可见性收敛（`BarFrostScale`、`CalendarFontMetrics`、`CalendarLineHeight` 等改为 `internal`，不扩大模块外可见性）。拆分后逐文件做**行多重集比对**，确认没有丢行、没有改行。\n\n## 许可：protobuf 的版权行补回来了\n\n`datastore-preferences-external-protobuf:1.3.0` 随包的 LICENSE 只有 1,434 B 的模板正文——它把上游的版权行整段删掉，还把「Google Inc.」替换成「the copyright holder」，代码生成条款也没了。BSD-3-Clause 第 1 条明确要求保留版权声明，原样转发这份模板等于没有归属。\n\n新增 `assets/licenses/protobuf-bsd-3.txt`（2,482 B）：归档原文按原字节保留不动，另附从上游 protobuf v3.25.5 LICENSE 取回的全文本，含 `Copyright 2008 Google Inc.  All rights reserved.` 与生成条款。两份并存、互不顶替。\n\n生成器因此区分两种补充义务：\n\n- `fallbackFiles()` —— 归档缺正文时补缺口（原有行为）；\n- `attributionFiles()` —— 坐标命中**就无条件追加**静态归属，文件缺失直接构建失败。\n\n清单 `assets/licenses/runtime.txt` 里，protobuf 这一条同时列出「归档原文 1 项、静态归属 1 项」、两份 SHA-256 与归属说明。设置页「开源许可」能离线读到带版权行的完整正文。\n\n## 验证\n\n- 单测 **380 项 / 47 份 XML / 0 failures·errors·skipped**（379 + 1 项新的 protobuf 归属回归）\n- `lintDebug` **0 errors / 15 warnings**，与上一版同一组，无新增（未 suppress、未借升级依赖消警告）\n- `verifyRuntimeNoticeCompleteness` 退出 0；debug 与原签名 release（含 R8 与资源裁剪）构建成功\n- 包体 **5,199,013 B**，146 条目；`versionCode 71` / `versionName 4.1.2`，minSdk 33 / targetSdk 37\n- 签名证书 SHA-256 `8894605E…8D02`，与 4.0.0(68)、4.1.1(70) **同一把密钥**，可原位覆盖升级（保数据升级仍待真机实测）\n- `assets/licenses/` **8 份**资产：6 份源文件与仓库逐字节 MATCH，`runtime.txt` 116,447 B / `morrow.txt` 为生成物\n- Apple 素材不存在性复核：包内图像条目 0、资源表 1,341 行检索 `tapback|listening|adaptive_audio` 0 命中、无嵌套归档\n\n## 升级提示\n\n`applicationId` 已从旧 Flutter 版的 `com.jiuxina.ying` 改为 `com.morrowviento.morrow`，与「萤」不是同一个应用，无法覆盖安装。从旧版迁移请先导出备份 → 卸载旧版 → 安装新版 → 导入备份。4.0.0 及之后的「朝夕」版本之间可直接覆盖升级。\n\n## 已知未完成\n\n人工逐组件源码级版权/NOTICE 终审、真机验收（浅色/深色观感、帧率、小部件、许可长文滚动、**68→71 原位保数据升级**）仍未做。本版验证停留在 Robolectric/Compose 测试与 release 构建层面，没有设备截图证据。\n\n完整变更与证据见 `docs/CHANGELOG.md`、`docs/HANDOFF.md`、`docs/LICENSE-AUDIT.md`。\n",
+  "published_at": "2026-11-18T07:32:07Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-70-4.1.1-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.1.1/morrow-70-4.1.1-release.apk",
-      "size": 5196689,
-      "digest": "sha256:7f92400a49f50c1bca041d2e1125e25ac3160c32c637da541aec8770aa20d963"
+      "name": "morrow-71-4.1.2-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.1.2/morrow-71-4.1.2-release.apk",
+      "size": 5199013,
+      "digest": "sha256:601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6"
     }
   ]
 }
