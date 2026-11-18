@@ -107,6 +107,25 @@ class RuntimeNoticesAssetTest {
     }
 
     @Test
+    fun protobufCarriesStaticAttributionWithCopyrightLine() {
+        val runtime = text(asset("runtime.txt"))
+        val attribution = text(asset("protobuf-bsd-3.txt"))
+        assertTrue(attribution.contains("Copyright 2008 Google Inc."))
+        assertTrue(attribution.contains("Neither the name of Google Inc."))
+        assertTrue(attribution.contains("License: BSD-3-Clause"))
+        assertTrue(runtime.contains(attribution))
+        assertTrue(runtime.contains("静态归属 assets/licenses/protobuf-bsd-3.txt（版权行与上游全文）"))
+        assertTrue(runtime.contains("静态归属 1 项"))
+        // 归档里的模板正文仍按原字节保留；归属补充是追加，不是替换。
+        assertTrue(runtime.contains("Neither the name of the copyright holder"))
+        assertTrue(runtime.contains("Neither the name of Google Inc."))
+        val protobufEntry = runtime.lineSequence().first {
+            it.startsWith("androidx.datastore:datastore-preferences-external-protobuf:1.3.0 — ")
+        }
+        assertTrue(protobufEntry.endsWith("BSD-3-Clause"))
+    }
+
+    @Test
     fun lockedGlasmioNoticeRetainsUpstreamTextAndAppleExclusions() {
         val bytes = asset("glasmio-third-party-notices.txt")
         assertEquals("e7327a8f2829e07f92e4c582d80a03c439ee2c55bea46a294490288b1ea820c1", sha256(bytes))

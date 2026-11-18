@@ -88,6 +88,12 @@ class LicenseCatalogTest {
         val apache = document("Apache License 2.0")
         assertEquals("Apache-2.0", apache.license)
         assertTrue(text(apache).contains("END OF TERMS AND CONDITIONS"))
+
+        // protobuf 的 BSD-3：归档正文没有版权行，随包的是带上游版权行的归属补充。
+        val protobuf = document("Protocol Buffers")
+        assertEquals("BSD-3-Clause", protobuf.license)
+        assertTrue(text(protobuf).contains("Copyright 2008 Google Inc."))
+        assertTrue(text(protobuf).contains("Neither the name of Google Inc."))
     }
 
     @Test
@@ -99,7 +105,8 @@ class LicenseCatalogTest {
         assertFalse(runtime.contains("!/lint.jar!/"))
         assertFalse(runtime.contains("CopyrightKt.class"))
         // 静态正文与锁定第三方声明都必须出现在 runtime 清单里（ying 是上游独立许可，不参与汇总）。
-        listOf("朝夕（本应用）", "Glasmio", "MaterialKolor", "Material Color Utilities", "Apache License 2.0")
+        listOf("朝夕（本应用）", "Glasmio", "MaterialKolor", "Material Color Utilities",
+            "Protocol Buffers", "Apache License 2.0")
             .forEach { title -> assertTrue("runtime.txt 缺少 $title 正文", runtime.contains(text(document(title)))) }
     }
 

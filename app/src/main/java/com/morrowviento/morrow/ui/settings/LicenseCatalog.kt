@@ -22,7 +22,7 @@ data class LicenseDocument(
  * 许可目录。
  *
  * 顺序即阅读顺序：先是本应用与上游项目，再是直接影响界面观感的 Glasmio / 主题色库，
- * 最后是通用协议副本与逐组件清单。
+ * 最后是带版权归属的协议副本与逐组件清单。
  */
 val LicenseCatalog: List<LicenseDocument> = listOf(
     LicenseDocument(
@@ -54,6 +54,12 @@ val LicenseCatalog: List<LicenseDocument> = listOf(
         license = "Apache-2.0",
         summary = "MaterialKolor 内嵌的上游代码，Copyright 2021 Google LLC",
         assetPath = "licenses/material-color-utilities.txt",
+    ),
+    LicenseDocument(
+        title = "Protocol Buffers",
+        license = "BSD-3-Clause",
+        summary = "datastore 外置 protobuf 的版权归属；归档正文缺版权行，此处补上游全文",
+        assetPath = "licenses/protobuf-bsd-3.txt",
     ),
     LicenseDocument(
         title = "Apache License 2.0",
