@@ -5,9 +5,8 @@
 
 ## 当前状态与不可混淆项
 
-- 2026-11-16 已沿用现有配置与原 RSA 4096 发布密钥构建 4.1.0 (69) release；没有读取/输出密钥或实际密码，没有生成新密钥。
-- 本批最终 debug / release 均经 output-metadata 与 aapt2 核实为 **4.1.0 (69)**；上级交付 `morrow-69-4.1.0-release-feature-update.apk` 和 debug-feature-update 包，大小/摘要见 HANDOFF。code-review 历史包未覆盖；release 是本地待验包，不是已发布证明。
-- 对正式 68、新 release 和新 debug 分别执行 apksigner verify：v2 校验通过；**新版 release 与正式 68 的证书 SHA-256 一致**，debug 不同。具备同签名原位升级条件，但实际安装与保数据仍待真机。证书 CN 仅元数据，不能替代摘要比较。
+- 2026-11-18 已沿用同一把原 RSA 4096 发布密钥构建并发布 **4.1.1 (70)** release；密钥与密码仍只在用户目录（`~/.gradle/gradle.properties` 外部注入），未读取/输出到仓库或日志，没有生成新密钥。
+- 该版 release / debug 经 `output-metadata.json` 与 `aapt2` 核实为 **4.1.1 (70)**；`apksigner verify --print-certs` V2 通过，证书 SHA-256 `8894605E2B84AEC593D95E9DFB8C315D18CD48D99FAC1E29F69CAA4B78B18D02` 与正式 68 **一致**，具备同签名原位升级条件（实际安装与保数据仍待真机）。已上传 `morrow-70-4.1.1-release.apk`（5,196,689 B / `7F92400A…D963`）到 Release `v4.1.1`。
 - Gradle 未提供 keystore 时 `assembleRelease` 保持未签名，debug 不受影响；发版脚本缺密钥则改选 debug。这两种行为不同，发布前必须人工确认。
 
 ## 安装/迁移路径

@@ -1,11 +1,13 @@
 # RELEASE — 正式发布流程
 
-> 更新：2026-11-16。只有涉及发布才读本文件；当前任务看 HANDOFF / TODO。脚本会写远端与推送，文档更新不等于发布授权。
+> 更新：2026-11-18。只有涉及发布才读本文件；当前任务看 HANDOFF / TODO。脚本会写远端与推送，文档更新不等于发布授权。
 
 ## 当前发布基线与前提
 
-- 文档和本地 `update/manifest.json` 记录正式签名 **`v4.0.0-68`**，资产 `morrow-68-4.0.0-release.apk`，5,028,400 B（约 4.8 MiB）；本轮未查询远端最新 Release（仅核对并同步 main）。
-- 本批已重建 debug / release，metadata 与 aapt2 均为 **4.1.0 (69)**；338 项全量单测通过，lint 0 errors / 13 warnings，release R8/资源裁剪成功并与 68 正式证书 SHA-256 一致。上级 feature-update APK 仅本地待验，详情/摘要见 HANDOFF；code-review 是上一批历史包。用户已授权代码/工程文档提交推送，功能提交 `4bfc12b` 已同步 GitHub main 并回读核验；文档收尾独立提交。**未上传 APK 或公开发布 Release**。真机验收后如代码变化，发布前重新构建并核验最终资产，不只看文件名/目录。
+- 最新正式版 **`v4.1.1`**（Release「朝夕 4.1.1」，id `449587411`，`published_at` 2026-11-18T06:05:24Z），资产 `morrow-70-4.1.1-release.apk`，**5,196,689 B**，SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`；本地 `update/manifest.json` 已按 `/releases/latest` 真实数据回填。
+  - 上一版 `v4.0.0-68` 保持不动（5,028,400 B / `2dcc4921…bb8f`），未被覆盖。
+  - 本版 tag 按用户指定为 `v4.1.1`（不带 code），与 `v4.0.0-68` 的旧命名不同；资产名仍必须是 `morrow-<code>-<name>-release.apk`，客户端从资产名取 code。走手工 API 发布（未改 `scripts/release.sh`，其默认仍生成 `v<name>-<code>`）。
+- 发布前已确认：379 项单测通过、lint 0 errors / 15 warnings、R8 + 资源裁剪实际执行、证书 SHA-256 与正式 68 一致（`8894605E…8D02`）、7 份许可资产与源一致、图像条目 0 且资源表无 Apple 素材。真机与 68→70 保数据升级仍待用户验收。
 - 沿用 4.0.0 的项目自有发布密钥，步骤见 [SIGNING](SIGNING.md)。**正式更新禁止退回 debug 签名**；脚本缺密钥会自动选 debug，必须在执行前人工确认 variant=release。
 - 4.1.0 的 AL 真机验收、核心回归与 N 更新链路尚待结果；按 TODO 确认未解决缺陷和发布结论。
 - 脚本固定 `target_commitish=main`，且最后推送 `origin main`：待发代码必须先进入并同步 main，不能在功能分支上直接发而让标签指向别的代码。

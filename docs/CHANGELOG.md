@@ -3,6 +3,14 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
+## [2026-11-18] 4.1.1 (70)：正式发布（日历动画、小部件重构、开源许可）
+
+- 代码提交 `505c822`（4.1.1 视觉/动画/小部件 + 开源许可页 + 版本 70），文档提交 `fbc1a89`；普通推送 main 成功，远端 `refs/heads/main` 回读 `fbc1a89`。
+- 全量回归：379 项单测（47 份 XML，0 failures/errors/skipped）、lint 0 errors / 15 warnings、debug 与原签名 release 成功，`verifyRuntimeNoticeCompleteness` 退出 0（缺口 0）。
+- 最终 APK `morrow-70-4.1.1-release.apk`：**5,196,689 B**，SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`，145 条目；`aapt2` 70 / 4.1.1 / minSdk 33 / targetSdk 37；`apksigner` 证书 SHA-256 `8894605E…8D02` 与正式 68 一致（可原位升级）。7 份许可资产与源一致，图像条目 0、资源表无 Apple 素材。
+- 发布：tag `v4.1.1`（指向 `fbc1a89`），Release「朝夕 4.1.1」id `449587411`，`published_at` `2026-11-18T06:05:24Z`；draft 阶段先上传资产、回下载比对摘要一致后转正式，`/releases/latest` 回读 tag / 资产名 / 大小 / digest 全部一致。
+- `update/manifest.json` 按真实 Release 回填并独立提交；**该提交推送时 `github.com` 经代理返回 502，尚未同步**（`api.github.com` 同时段正常），Release/tag/资产本身已生效并经 API 回读。未改 CI/密钥/包名/schema，未覆盖旧 tag 或旧 Release，未纳入 MANUAL-TEST。真机与 68→70 保数据升级仍未验收。
+
 ## [2026-11-16] 4.1.0 (69)：代码同步 GitHub（未发布）
 
 - 用户追加提交/推送授权；通过 WorkBuddy 自带 PortableGit 2.55.0.windows.3 查询工作区与真实远端，main 原有 3 个相关提交尚未推送，远端无新增提交（0 behind / 3 ahead）。

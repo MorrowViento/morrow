@@ -1,18 +1,18 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前执行已批准的 4.1.1 视觉/动画/小部件/开源发布方案：#16–#18 已完成。#19 工程项全部闭合：许可正文覆盖（缺口 0、`verifyRuntimeNoticeCompleteness` 退出 0）、README 重写、设置页可读许可（Glasmio 已改 Apache-2.0）、26 项内存回归、**许可改动后的全量回归**（379 项单测 / 47 份 XML / 0 failures·errors·skipped、lint 0 errors / 15 warnings、debug + 原签名 release 成功）。**#20 已构建并核验 4.1.1 / 70**：`aapt2` 70 / 4.1.1、证书与正式 68 一致、7 份许可资产与源一致、Apple 素材 0 匹配，最终包 **5,196,689 B / SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`**，本地副本 `../morrow-70-4.1.1-release.apk` 逐字节一致。**尚未提交、推送、上传或发行**；#19 只剩人工逐组件版权/NOTICE 审阅，**下一单步是 #21 推送与发行，须用户明确开工**。下方 338 项、366 项和 feature-update 包是历史证据。**续接请先读「#19 运行时许可与 README（进行中，含发布阻塞）」章节。**
+> 当前执行已批准的 4.1.1 视觉/动画/小部件/开源发布方案：#16–#18 已完成；#19 工程项全部闭合（许可正文/README/设置页可读许可/缺口 0）；#20 已构建并核验 **4.1.1 / 70**（379 项单测 / lint 0 errors·15 warnings / 证书同 68 / 145 条目 / 7 份资产一致 / Apple 素材 0 匹配，**5,196,689 B / SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`**）；**#21 已发布**：tag `v4.1.1`、Release「朝夕 4.1.1」id `449587411`、`published_at` 2026-11-18T06:05:24Z，`/releases/latest` 回读一致，`update/manifest.json` 已按真实数据回填并独立提交，但**该提交的 GitHub 推送当时被代理 502 阻塞、尚未回读**（详见下节）。**当前只剩人工逐组件版权/NOTICE 审阅与真机验收（含 68→70 保数据升级），工程上仅剩这一步清单推送待网络恢复。** 下方 338 项、366 项、69 包与 feature-update 包均为历史证据。**续接请先读「#19 运行时许可与 README」与「#20/#21 发布实录」章节。**
 
 ## 当前批次与授权
 
-- 新版计划：versionName 4.1.1 / code 70，tag `v4.1.1`、标题「朝夕 4.1.1」，公开版本展示不附构建号。**源码已改为 4.1.1 / 70 并完成构建与核验（本地副本 `../morrow-70-4.1.1-release.apk`），但未提交、未推送、未上传、未发布**；发布清单仍 `v4.0.0-68`。
+- 新版已发布：**tag `v4.1.1`**（指向 `fbc1a89`）、Release「朝夕 4.1.1」（id `449587411`，2026-11-18T06:05:24Z 正式，非 draft/prerelease）、资产 `morrow-70-4.1.1-release.apk`（5,196,689 B / `7F92400A…D963`）；**tag 与标题按用户指定不带 code**（资产名仍必须带 code）。`update/manifest.json` 已回填并独立提交（推送受阻，见 #21 节）。上一版 `v4.0.0-68` 未改动。
 - 用户已授权本批提交推送、原签名 release APK 上传、正式 Release，以及发布核验成功后回填真实 manifest。自身代码 MIT 已选定；ying 的 MIT 与 Glasmio 0.1.3 的 Apache-2.0 分别保留。许可资源已实施（根 LICENSE、ying.txt、Glasmio NOTICES、generateRuntimeNotices、三份静态协议/版权正文）；十项 Apple 素材已证明本次 69 release 审计包不分发，正文缺口为 0 且完整性门槛通过；README 与设置页可读许可本轮已完成。逐组件源码层版权审阅与全量回归未完成，正式 70 包仍须重验，见 #19 章节。不要重复询问同一授权。
 - #16：ChoiceChip 外层 CenterStart、16sp 居中行盒/无字体 padding；首页/日历使用持续存在的活动采样槽，只有当前内容绘制，底栏/浮层在槽外；日历不在安全区重绘背景。新增 Compose v2 + Robolectric Native 真实布局测试（4 项），既有手势测试（5 项）通过；未真机验视觉。
 - #17：完整 CalendarUiState 共享 Transition，模式/周期 contentKey 抑制同周期切页；退出页使用旧快照、交互仅当前周期；模式 crossfade/周期定向滑动，不插值高度、不读惰性邻页。明确数字行盒/固定字重及大字体格高。7 项动画与真实日历测试通过（含连续反向、2×字体、边界箭头/手势、reduceMotion），未真机测帧率。
 - #18：小部件复用应用丝缎/私有图片（cover 裁剪），后台预乘 alpha 三次可分离盒滤波；共享 frost/veil/强调色规格，外背景连续圆角 26dp。工作图长边 384、输出不超过 262,144 像素，最多 16 个宿主 SizeF 变体均分总预算，LRU 8 MiB；挂起渲染锁不阻塞主线程查缓存，不回收借出的源图/缓存图，不污染首页 placeholder。列表行用原生 26dp 圆角色纱/边缘（不是逐行实时采样或连续圆角 shader），不分配整幅行位图。
 - #18 验证：新增 15 项回归（9 像素/尺寸/缓存、2 原生列表快照、2 保存刷新、1 应用主题、1 Compose 实际预览/2×字体）；聚焦 45 项通过后补齐最后 2 项，最终全量 366 项实际通过。预览按测量尺寸后台生成，切主题不混旧位图，列表保留同次刷新外观快照；frost/减透明提交成功后真实刷新。未验启动器/设备帧率，不承诺模糊桌面壁纸。
 - 当前阶段：#19 代码与文档部分已交付，**全量回归已完成（379 项 / lint 0 errors·15 warnings / 原签名 release 成功）**，只剩人工版权归属审阅，详见下方专门章节；之后才 #20 全量验证与 4.1.1 / 70 原签名构建、#21 推送发布。保持 schema/包名/密钥/生产依赖/CI 不变。
-- HEAD 基线 `63ecd6b`；本批修改尚未提交。远端 latest 已在计划阶段只读核实为 v4.0.0-68，manifest 保持 68；发布前须再回读。MANUAL-TEST 原有本地修改不编辑、不代勾、不提交。
+- HEAD 基线 `fbc1a89`（4.1.1 发布代码与文档），`v4.1.1` 已发布；远端 latest 已回读为 `v4.1.1`，`update/manifest.json` 与远端一致。MANUAL-TEST 原有本地修改不编辑、不代勾、不提交。
 - 暂停动画时钟的测试须显式 `Snapshot.sendApplyNotifications()`：否则 Robolectric 全局快照尚未通知重组、语义树仍为旧页；不能把这种测试调度失败当生产动画问题。当前未关闭 Native 或删断言。
 
 ## 任务目标与边界
@@ -139,11 +139,22 @@
 - 本地交付副本：`../morrow-70-4.1.1-release.apk`，5,196,689 B，SHA-256 与源包**逐字节一致**。**仅为本地副本，未上传到任何 Release、未改 manifest、未打 tag。**
 - 与 69 审计包的关系：70 包不是 69 的字节复用（版本码/版本名变化，5,196,693→5,196,689 B），因此上述核验是在**最终待上传包**上重做的；69 的审计结论自此仅作历史记录。
 
+### #21 提交、推送与正式发布实录（2026-11-18）
+- 提交（显式路径暂存，未用 `git add -A`，`docs/MANUAL-TEST.md` 始终排除）：`505c822` `feat(ui): 完成 4.1.1 日历动画、小部件重构与开源许可页`（38 文件，+3,000/−474，含 LICENSE、5 份静态许可 assets、版本 70）；`fbc1a89` `chore(docs): 重写 README 并同步 4.1.1/70 发布前证据`。
+- 推送：`git push origin main` → `63ecd6b..fbc1a89`；`git ls-remote origin refs/heads/main` 回读 `fbc1a89`，工作区随后仅剩受保护的 MANUAL-TEST 本地修改。
+- 发布前核验（令牌取自本机 Git 凭据，未打印）：`/releases/latest` = `v4.0.0-68`；`/releases/tags/v4.1.1` 与 `/git/refs/tags/v4.1.1` 均 **404**，确认标签未被占用。
+- 发布路径：**draft 优先**——建草稿 Release（id `449587411`，`tag_name=v4.1.1`、`target_commitish=main`、标题「朝夕 4.1.1」、`draft=true`、`prerelease=false`）→ 上传 `morrow-70-4.1.1-release.apk`（HTTP 201，`size=5,196,689`，`digest=sha256:7f92400a…d963`）→ **把已上传资产重新下载**并本地算摘要（`7F92400A…D963`，与本地包逐字节一致）→ `PATCH draft=false` 转正式（HTTP 200，`published_at` `2026-11-18T06:05:24Z`）。
+- 发布后回读：`/releases/latest` = `v4.1.1` / 「朝夕 4.1.1」/ `prerelease=false` / 资产 `morrow-70-4.1.1-release.apk` 5,196,689 B / `sha256:7f92400a…d963` / 下载地址 `.../releases/download/v4.1.1/morrow-70-4.1.1-release.apk`；`git ls-remote --tags origin v4.1.1` = `fbc1a89`。
+- `update/manifest.json` 用 `/releases/latest` 的真实字段回填（tag / name / body / published_at / prerelease / assets 的 name+url+size+digest），独立提交；未手抄摘要。
+- **推送受阻（未完成）**：代码与文档前两个提交 `505c822`、`fbc1a89` 已成功推送并回读；但含 manifest 与发布文档的第三个提交在 `git push` 时连续失败——`github.com:443` 经代理返回 `CONNECT tunnel failed, response 502`（同时段 `api.github.com` 正常 200，直连超时），间隔重试 8 次仍 502。**因此：Release / tag / 资产已在远端生效并经 API 回读，`update/manifest.json` 与本次文档更新仍只在本地**，不得宣称清单已同步。恢复后执行 `git push origin main` 并回读 `refs/heads/main` 与 `raw.githubusercontent.com/.../update/manifest.json`。`/releases/latest` 是主更新路径，manifest 仅为回退，短暂滞后不影响客户端检测到 4.1.1。
+- 命名决策：用户明确选择 **tag `v4.1.1` + 标题「朝夕 4.1.1」（不带 code）**，因此走手工 API 发布，**未修改 `scripts/release.sh`**（其默认仍为 `v<name>-<code>`）。资产名保持 `morrow-70-4.1.1-release.apk`，客户端从资产名取 code，缺 code 会检测不到更新。
+- 未做：未改 CI/密钥/包名/schema，未覆盖旧 tag 或旧 Release，未纳入 MANUAL-TEST，未安装或卸载设备。
+
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。
 - `domain/time/LunarCalendar.kt`：自实现农历/压缩年表，未见明确外部版权；无证据表明复制了不许可来源，也未完成全部来源审核。
 - `docs/RELEASE.md` 仍是 4.1.0 旧基线 + 旧 `v<name>-<code>` 脚本规则，发布阶段统一。
-- 仍缺的是**人工版权/NOTICE 归属审阅结论**（`apache-2.0.txt` 只是协议副本，逐组件源码层归属未逐一审阅）；许可改动后的全量回归**已完成（379 项）**、4.1.1 / 70 正式候选包**已构建并核验**（`7F92400A…D963`），见上两节。设置页展示不改变各组件自身的版权归属。
+- 仍缺的是**人工版权/NOTICE 归属审阅结论**（`apache-2.0.txt` 只是协议副本，逐组件源码层归属未逐一审阅）；许可改动后的全量回归**已完成（379 项）**、4.1.1 / 70 **已构建、核验并正式发布**（`7F92400A…D963`），见上两节。设置页展示不改变各组件自身的版权归属。
 
 ### 续接顺序（#19 → #20 → #21）
 1. **已完成**当前69审计包的AAR/最终APK核验，十项Apple图像不分发；生成器修复与正文补齐后又对最新145文件的包重验，#20正式70包仍须重复核验。
@@ -153,12 +164,13 @@
 5. **已完成 README 重写**：清除 WorkManager / 22 测试 / 仅年重复 / 旧 GlassPress / 旧里程碑 / 仓库外计划，补齐当前功能、构建门槛、许可边界，保留包名区别。
 6. **已完成许可改动后的全量回归**：379 项单测（47 XML，0 失败/错误/跳过）、`lintDebug` 0 errors / 15 warnings（同基线）、debug 与原签名 release（含 `lintVitalRelease`）构建成功；release 5,196,693 B / `320E5E90…4D1DF9`，证书与 68 一致。**366+13=379 已对账，无因新代码回归**。
 7. **已完成 #20 的 4.1.1 / 70**：版本字段只改 `app/build.gradle.kts`；四任务 + 完整性门槛一次跑通，379 项单测 / lint 0 errors·15 warnings / debug 与原签名 release 成功，`aapt2` 70 / 4.1.1，证书同 68，145 条目、7 份资产一致、Apple 素材 0 匹配，最终 **5,196,689 B / `7F92400A…D963`** 并复制到 `../morrow-70-4.1.1-release.apk`。
-8. **下一单步：#21 推送与发行（须用户明确开工）**——普通提交（排除 MANUAL-TEST）、查远端 latest 与 `v4.1.1` 未占用、建 draft Release→上传 `morrow-70-4.1.1-release.apk`→核验资产摘要→正式发布→成功后回填真实 `update/manifest.json` 并推送，同步 CHANGELOG/RELEASE/SIGNING；不覆盖旧 tag/release、不改 CI/密钥。
+8. **已完成 #21 发布**：普通提交 `505c822` / `fbc1a89` 推送 main 并回读；确认 `v4.1.1` 未被占用；draft→上传→回下载比对摘要→转正式；`/releases/latest` 与 `git ls-remote --tags` 双向回读一致。**待办：含 `update/manifest.json` 与发布文档的第三个提交尚未推送成功（代理 502），恢复后推送并回读远端清单。** CHANGELOG / RELEASE / SIGNING 已同步（本地）。
+9. **剩余（无待发布动作）**：人工逐组件版权/NOTICE 审阅；真机验收（视觉/帧率/系统提醒/SAF/G/H/J/L/M）与 68→70 原位升级保数据，按 TODO「真机与发布待办」执行。
 
 ### 本阶段环境与受保护文件
 - `docs/MANUAL-TEST.md` 既有本地修改 SHA-256 回读 = `93FBCB61575E9B06AFED6BF0971BFC7818E6274FD5C2F41F712B29E3042C8A4A`（未变）。不编辑、不代勾、不提交；本批 diff 检查用 `git diff --check -- . ':!docs/MANUAL-TEST.md'`。
 - 本批已有大量修改/新增文件，不能再说 MANUAL-TEST 是唯一工作区改动（详见 git status）。
-- HEAD 基线 `63ecd6b`，本批未 stage/commit/打 tag；源码已是 **4.1.1 / 70**（仅版本字段改动），无新版 release / 新 Release / manifest 改动。
+- HEAD 基线 `fbc1a89` + 本次发布文档提交；源码 **4.1.1 / 70** 已发布，Release / tag / manifest 均已更新。
 - 本轮已运行全量 379 项单测、`lintDebug`、`assembleDebug`、原签名 `assembleRelease`（含 `lintVitalRelease`）与 `verifyRuntimeNoticeCompleteness`，并复核签名证书同 68、7 份许可资产与源一致、Apple 素材 0 匹配、最终 SHA-256 已绑定。366 基线此后**由 379 取代**，不再引用旧全量数字。#20 的构建与核验已完成；#21 提交/推送/发行未开始。
 - 未安装/卸载设备；未做真机视觉/FPS/启动器/升级保数据验收。
 
