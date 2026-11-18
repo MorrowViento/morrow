@@ -1,7 +1,45 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
-> 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前状态：**4.1.3 / 72 已发布**（tag `v4.1.3` 指向 `f5553f7`、Release「朝夕 4.1.3」id `449719768`、2026-11-18T08:48:37Z 正式、资产 `morrow-72-4.1.3-release.apk` **5,231,781 B / SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`**，`/releases/latest` 与 manifest 均已回读一致）。本版四件事：① **修设置页透出日历**（上一版把让位写成 `if/else`，设置页打开时掉进 else 把日历画在底下）；② **各页头部与按钮尺寸统一**（新增 `ui/component/PageChrome.kt`）；③ **字体设置**（M6 遗留项，本地导入 + 就地预览，`AppText` 包装层让 148 处样式零改动生效）；④ **节日皮肤**（八个农历节日柔光 + 首页祝语，设置页可关）。回归 **394 项单测 / 49 XML / 0 失败错误跳过**、lint release 0 errors / 15 warnings、8 份许可资产与源一致、`runtime.txt` 116,447 B 未变（字体不随包）、证书同 68。上一版 4.1.2 / 71（`601b3beb…73a6`、Release `449651404`）保留未动。**剩余：人工逐组件源码层版权审阅与真机验收（含 68→72 保数据升级）。** 下方 338/366/379/380 项、69 包与 feature-update 包均为历史证据。**续接先读「#24」（构建与发布实录）与「#23」（实现说明）两节。**
+> 更新：2026-11-19。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
+> 当前状态：**4.2.0 / 73 代码完成，构建核验已过，发布进行中**。两批一起发：上一批（完整重复规则 / 农历循环 / 多点提醒 / 持续事件 + 节日皮肤修复）+ 本批（**时间块视图 / 多维标记 / 日期计算器 / 归档**）。已升版 `versionCode 73` / `versionName 4.2.0`；release APK 已出（5,313,701 B / `d1c02522…097d`），aapt2 73/4.2.0、证书 `8894605E…8D02` 同 68、`runtime.txt` 116,447 B 未变、`verifyRuntimeNoticeCompleteness` 退出 0、全量 **436 项 / 53 XML / 0 失败**、lint 0 errors / 15 warnings。远端最新仍是 4.1.3 / 72（tag `v4.1.3` 指向 `f5553f7`、Release `449719768`、资产 `morrow-72-4.1.3-release.apk` 5,231,781 B / `10258ec2…f39c`）。4.1.3 四件事与上一版 4.1.2 / 71（`601b3beb…73a6`、Release `449651404`）均为历史证据。**续接先读「#25」（两批实现）与「#24」（发布实录）。** 剩余：人工逐组件源码层版权审阅与真机验收（含 72→新版保数据升级）。
+
+## #25 两批：重复规则 / 农历循环 / 多点提醒 / 持续事件 + 时间块 / 标记 / 计算器 / 归档（代码完成，发布中）
+
+**用户指令**：第一句「首先节假日皮肤没有效果，先做完整重复规则，农历生日农历循环，多点提醒，持续事件」；第二句「现在做时间轴时间块，多维标记，日期计算器。归档和现在的已完成有什么区别，有区别的话就做，做完后和上一版一起 release」。
+
+**归档与已完成的区别（本批的关键判断）**：已完成 = 事情办到了，留在列表里看成绩、日历仍标勾；归档 = 从日常视线收起来（不做了/过气了/暂时搁置），**不提醒、不上日历、不计入已完成、不进成绩区**，只能从归档箱找回。这是第三条状态线，不是「已完成」的别名——所以「有区别」成立，做了。
+
+**节日皮肤「没效果」的真因**：不是没接上。`LocalFestivalSkin` 由 `HomeScreen` 包在 `GlassBackdropHost` 外层，设置页打开时背景仍走同一个宿主，链路是通的。两个原因叠在一起——① **2026-11-18 是农历十月初十，不是那八个节日**；② 4.1.3 的柔光只有 0.22/0.16，叠在丝缎四团大色块上几乎看不出来。修法：浓度 0.34/0.26 + 底部第二团；设置页加**预览**（当场换背景，因为背景就在设置页底下），解决「一年只有八九天能验」的问题。
+
+**数据模型一次到位（schema 2 → 3）**：`CountdownEvent` 新增 `repeatInterval`（1..99）、`repeatWeekdays`（ISO 1..7 集合）、`repeatOnLunar`、`repeatUntil`、`endDate`；`RepeatType` 扩为 NONE/DAILY/WEEKLY/MONTHLY/YEARLY；`EventPrimaryAction` 新增 `NEXT_OCCURRENCE`。Room 五列全带默认值（`MIGRATION_2_3` 纯 ALTER），旧行升级后仍是「不重复、单日」。备份 format 2→3：新字段可选、旧备份可读、**新备份在旧 App 上被拒绝**（`version > CURRENT_VERSION`）而不是静默丢字段；`UndoCodec` 同步，保证撤销逐字段等价。
+
+**重复规则的两个坑**：
+1. **周档要按「周」对齐，不能按 7 天加**。锚点 11/18 周三、选「每 2 周的周一/周三」，正确的下一次是 11/30 与 12/2（两周后那一周），如果按 `锚点+7N` 算会得到 12/2 与 12/4。实现以锚点所在周的**周一**为格点，每 `interval` 周展开选中的星期，再用 `filter { it >= lower }` 掉掉锚点之前的日期。
+2. **农历月日不能靠 repeatMonth/repeatDay 判断**。这两列在公历模式存公历月日、农历模式存农历月日，单看数值分不出来；`RepeatRule.lunarYearly` 因此**以锚点日期的农历换算为准**，两列只作超出年表时的兜底。首版实现用了 `repeatMonth ?: anchorLunar.month`，被 `RepeatRuleTest` 抓出「2027-03-24 落在农历二月」——测试里 helper 把 `repeatMonth` 设成了公历 2 月。
+
+**农历换算**：新增 `LunarCalendar.toSolar(年, 月, 日)`，用同一份 `YEAR_STARTS` 累计表 + 月长；日超出该月取月末（三十遇小月取廿九），闰月不参与。`RepeatRuleTest` 用「扫 2026 全年做公历→农历→公历往返」把它钉死（闰月跳过，因为生日本来就不按闰月过）。
+
+**持续事件**：`endDate`（含当天）而不是时长——用户理解的是「9 月 1 日到 9 月 5 日」。重复时每次按同样跨度平移。三处落点要注意：
+- 日历月视图的 42 格与「选中某天」用 `coverageBetween`（中间日也亮、点进去也看得到），**年视图与列表仍按起点**，否则一个月的出差会在年摘要里刷 30 行；
+- 首页卡片进行中时，目标取 `coveringStart`（这一次的起点）而不是 `upcomingTarget`（下一次），否则 9/3 会显示「还有 362 天」；徽章改读「还剩 N 天 / 今天结束」；
+- 提醒仍按第一天（出发前提醒，不是结束前）。
+
+**多点提醒**：数据层早就是 list（上限 5），缺的是入口——4.1.3 只有 9 个预设 chip。本轮加自定义分钟输入 + 「已设」摘要。
+
+**文案集中**：新增 `domain/time/RepeatText`（`short/of/span`），首页卡片、日历行、详情页、小部件共用。4.1.x 是四处各写一份 `when (repeatType)`，加两档就要改四遍。
+
+**本批四功能（时间块 / 标记 / 计算器 / 归档）**：
+
+- **时间块视图**（日历第四视图）：月视图回答「哪一天有事」，时间块回答「这一天被什么占着」。`TimelineLayout.kt` 是纯函数布局——全天/跨天条画在轴上方、时段事件按分钟定位、重叠事件自动分列（`lane`/`laneCount`）；`TimelineView.kt` 渲染 + 每 30 秒推进的当前时刻线 + 滚到最早事件前半小时。分段控件「月/年/列表」扩四档；`CalendarActions.shiftDay`、`CalendarNav.clampDay` 配合翻日。重叠分列是最容易写错的逻辑，`TimelineLayoutTest` 专门钉死。
+- **多维标记**：`EventTags.kt`——一条事件可挂多个标签（与单值分类是两个维度：分类回答「属于生活哪一块」，标签回答「在哪些场景要出现」），上限 5 个、每个最长 8 字；归一化（去 `#` 前缀、逗号/全角逗号换空格、去重忽略大小写、保持输入顺序）在写库/备份/撤销三条路径复用。编辑面板加标签输入与已有标签点选，卡片/详情展示，搜索命中标签。
+- **日期计算器**：`DateMath.kt`（纯函数，无 Android 依赖）+ `DateCalculatorSheet.kt`，入口在首页菜单。有符号天数差、含首尾天数、几周零几天、几年几月几天、基准日加减、农历换算、周岁。**刻意不做**工作日/节假日计算（需要维护一份会过期的调休表，成本高于便利）。
+- **归档**：`CountdownEvent.archivedAt`（+ `isArchived` 派生）。首页/日历（`CalendarPresentation.strip` 过滤）/提醒排期（`ReminderPlan` 排除）/小部件（`WidgetSnapshot` 过滤）四处统一排除归档；首页菜单「归档箱」+ `ArchiveSheet`（恢复/删除/清空）；`UndoKind` 加 `TOGGLE_ARCHIVED` / `CLEAR_ARCHIVED`。
+
+**数据模型二次扩展（schema 3 → 4）**：`CountdownEvent` 新增 `tags` / `archivedAt` / `durationMinutes`；Room `MIGRATION_3_4` 三列全带默认值（`tags` / `archived_at` / `duration_minutes`）。备份 format 3→4（新字段可选、旧备份可读、旧 App 拒绝新备份）；`UndoCodec` 同步。
+
+**验证**：**436 项单测 / 53 份 XML / 0 failures·errors·skipped**（394 + 上一批 18 + 本批 `DateMathTest` / `TimelineLayoutTest` / `EventTagsTest`）；lint release **0 errors / 15 warnings**（同一组基线规则，本批 `TimelineView` 新增的一条 `UseOfNonLambdaOffsetOverload` 已改为 lambda 重载收掉）；`assembleDebug` / `assembleRelease` 成功。`BackupRepositoryTest` 的 1→3→4 迁移断言、`BackupCodecTest` 的版本号（2→3→4）与未知枚举用例（`WEEKLY` 已是合法值，改用 `FORTNIGHTLY`）已同步。
+
+**未做 / 未验**：上一批未验项（三处新滚轮在长表单里的滚动、进行中卡片观感、农历生日跨年、星期多选在窄屏的横向滚动、72→新版保数据升级）与本批未验项（时间块重叠分列观感、当前时刻线推进、归档箱交互、日期计算器面板）合并为一次真机验收清单，见 TODO。发布流程见下。
 
 ## 当前批次与授权
 

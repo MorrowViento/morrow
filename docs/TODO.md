@@ -1,6 +1,25 @@
 # TODO — 朝夕 · 当前待办
 
-> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「#24」4.1.3 构建发布实录与「#23」实现说明），再读本文件；历史实现见 CHANGELOG。**4.1.3 / 72 已构建、核验并发布**（资产 `morrow-72-4.1.3-release.apk` / `10258ec2…f39c`：字体设置 + 节日皮肤 + 设置页透底修复 + 按钮尺寸统一）。上一版 4.1.2 / 71（tag `v4.1.2` / Release `449651404` / `601b3beb…73a6`）保留未动。
+> 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)（「#25」本批实现说明与「#24」4.1.3 发布实录），再读本文件；历史实现见 CHANGELOG。
+> **当前状态：4.2.0 / 73 代码完成，构建核验与发布进行中**（两批一起发：上一批「完整重复规则 / 农历循环 / 多点提醒 / 持续事件 + 节日皮肤修复」+ 本批「时间块视图 / 多维标记 / 日期计算器 / 归档」）。已升版 `versionCode 73` / `versionName 4.2.0`。
+> 上一版 4.1.3 / 72（tag `v4.1.3` / Release `449719768` / `10258ec2…f39c`）保留未动。
+
+## 4.2.0 / 73：重复与时间跨度 + 时间块 / 标记 / 计算器 / 归档（代码完成，发布中）
+
+- [x] **修「节日皮肤没有效果」**：根因是当天不是农历节日、柔光又只有 0.22/0.16 且只有顶上一团。浓度提到 0.34/0.26 + 底部第二团；设置页新增「预览」当场换背景（`cycleFestivalPreview` / `clearFestivalPreview`，不落盘，离开设置页结束）；说明行按「预览中 / 已关闭 / 今天是节日 / 下一个节日+日期」四种状态。
+- [x] **完整重复规则**：NONE/DAILY/WEEKLY/MONTHLY/YEARLY + `repeatInterval`(1..99) + `repeatWeekdays`(ISO 1..7 多选) + `repeatUntil`（含当天，无次数上限）。`RepeatRule` 四档惰性序列重写，月档夹月末且不漂移；新增 `EventPrimaryAction.NEXT_OCCURRENCE`。
+- [x] **农历生日 / 农历年循环**：`LunarCalendar.toSolar()`；年循环「按农历」逐年回算公历，月日以锚点换算为准（`repeatMonth/Day` 仅兜底），闰月按平月过、三十遇小月取廿九。
+- [x] **多点提醒**：保留 5 条上限与预设，新增自定义分钟输入 + 「已设」摘要 + 重复/超限提示。
+- [x] **持续事件**：`endDate`；`spanDays/isMultiDay/covers()`；月视图格子与选中日走 `coverageBetween`（年/列表仍按起点）；首页徽章改「还剩 N 天」、目标取本次起点；详情页加「持续」行；提醒仍按第一天。
+- [x] **文案统一**：`RepeatText.short/of/span`，首页 / 日历 / 详情 / 小部件共用，删掉四处各自的 `when (repeatType)`。
+- [x] **数据兼容**：Room schema 2→3→4（3 加重复/星期/农历/结束日/持续区间 5 列，4 加 `tags` / `archived_at` / `duration_minutes` 3 列，全带默认值）；备份 format 2→3→4（新字段可选、旧备份可读、旧 App 拒绝新备份）；`UndoCodec` 同步新字段。
+- [x] **时间块视图（日历第四视图）**：`TimelineLayout.kt`（纯函数：全天条 + 分钟定位 + 重叠分列）+ `TimelineView.kt`（渲染 + 当前时刻线 + 滚到最早事件前半小时）；分段控件扩四档；`CalendarActions.shiftDay` 翻日。
+- [x] **多维标记**：`EventTags.kt` 归一化（去 #、逗号换空格、去重、上限 5/个最长 8）；编辑面板输入 + 已有标签点选；卡片/详情展示；搜索命中标签。
+- [x] **日期计算器**：`DateMath.kt`（纯函数）+ `DateCalculatorSheet.kt`，入口在首页菜单；有符号差 / 含首尾 / 周天 / 年月日 / 加减 / 农历 / 周岁；不做工作日（需维护调休表）。
+- [x] **归档（第三条状态线）**：`archivedAt`；与「已完成」分开；首页/日历/提醒/小部件排除归档；`ArchiveSheet`（恢复/删除/清空）；`UndoKind` 加 `TOGGLE_ARCHIVED` / `CLEAR_ARCHIVED`。
+- [x] **验证**：**436 项单测 / 53 份 XML / 0 failures·errors·skipped**（394 + 上一批 18 + 本批 `DateMathTest` / `TimelineLayoutTest` / `EventTagsTest` 24）；lint release **0 errors / 15 warnings**（本批 `TimelineView` 一条 offset 告警已改 lambda 收掉）；`assembleDebug` / `assembleRelease` 成功。`BackupRepositoryTest` 已覆盖 1→3→4 迁移。
+- [ ] **发布（进行中）**：`versionCode 72→73`、`versionName 4.1.3→4.2.0`，原签名 release + 全量回归 + APK 核验 + 上传，按 4.1.x 同一套流程。
+- [ ] **真机验收**：表单滚轮在长表单里的滚动与手感；时间块视图重叠分列观感与当前时刻线；进行中卡片「还剩 N 天」观感；农历生日跨年展示；多选星期在窄屏横向滚动；归档箱交互；以及 **72→新版原位升级保数据**。
 
 ## 4.1.3 / 72：M6 剩余项与界面修正（2026-11-18 已发布）
 
