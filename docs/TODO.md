@@ -23,6 +23,9 @@
 - [x] **#20 版本/验证（2026-11-18 完成）**：`:app:verifyRuntimeNoticeCompleteness` 在 4.1.1/70 构建中通过（退出 0、缺口 0）；版本改 4.1.1 / 70，公开版本展示不附 code；全量 379 项单测、lint 0 errors / 15 warnings、debug 与原签名 release（含 `lintVitalRelease`、R8、资源裁剪）成功；`aapt2` 元数据 70 / 4.1.1 / minSdk33 / targetSdk37，`apksigner` 证书与正式 68 一致；145 条目、7 份许可资产与源一致、Apple 素材 0 匹配、无嵌套归档，最终 SHA-256 `7F92400A…D963` 已绑定本地交付包 `morrow-70-4.1.1-release.apk`（5,196,689 B）。真机与升级保数据仍不在本项范围。
 - [x] **#21 推送/发行（2026-11-18 完成）**：提交 `505c822`（代码/资源/版本）与 `fbc1a89`（README/HANDOFF/TODO）普通推送 main，回读 `refs/heads/main=fbc1a89`；确认 `v4.1.1` 未被占用（release 与 git ref 均 404）后建草稿 Release id `449587411`，上传 `morrow-70-4.1.1-release.apk`（201，digest 一致）→ **回下载比对逐字节一致** → 转正式（`published_at` 2026-11-18T06:05:24Z，非 draft/prerelease）→ `/releases/latest` 回读 tag/标题/资产/大小/digest 全一致，`git ls-remote --tags v4.1.1=fbc1a89`。`update/manifest.json` 按真实数据回填并独立提交 `4a31259`；该提交推送时 WorkBuddy 自带代理对 `github.com` 返回 502，**改走本机 `127.0.0.1:10809` 代理后推送成功**，`git ls-remote` 回读 `main=4a31259`、远端清单 200 且与本地语义一致。CHANGELOG/RELEASE/SIGNING 已同步并推送。**tag 与标题按用户指定不带 code，资产名仍带 `70`；未改脚本、未覆盖旧 tag/Release、未纳入 MANUAL-TEST。**
 
+- [x] **发布后修复：设置页状态栏割裂（2026-11-18，`956461d`）**：设置页原先在安全区内自绘壁纸，与日历页 4.1.1 修过的同一处病根；改为由全窗口 `GlassBackdropHost` 提供背景，并在设置页打开期间让首页整块让位避免透底。379 项单测 / 47 XML 全通过、lint 0 errors / 15 warnings（无新增）、`assembleDebug` 成功；**真机观感未验**。已推送 `main=956461d`；**源码已领先已发布的 70 包，下次发行须 4.1.2 / 71**。
+- [ ] **下一单步：逐组件版权/NOTICE 归属审阅**（唯一未完成的工程性事项；真机验收需设备）：以 `app/build/generated/runtimeNotices/licenses/runtime.txt` 的 109 个坐标为清单，逐条确认协议标签与随包正文一致、Apache-2.0 组件的 §4(a) 副本与 §4(d) NOTICE 义务有落点、BSD/MIT 组件的版权行完整；结论写进文档，不以「门槛退出 0」代替人工判断。
+
 上一批结果与真机未验事项保留如下；**366 项旧基线已由 2026-11-18 的全量 379 项取代**（47 份 XML，0 failures/errors/skipped），lint 0 errors / 15 warnings。**4.1.1 / 70 已正式发布**：tag `v4.1.1`、Release「朝夕 4.1.1」（`449587411`）、资产 5,196,689 B / `7F92400A…D963`，`/releases/latest` 与 manifest 均已回读一致。工程动作已全部结束，剩余为**人工逐组件版权审阅**与**真机验收（含 68→70 保数据升级）**。下方“本批”均指历史 4.1.0 功能批次。
 
 ## 目标与当前完成度

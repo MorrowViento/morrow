@@ -1,7 +1,7 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前执行已批准的 4.1.1 视觉/动画/小部件/开源发布方案：#16–#18 已完成；#19 工程项全部闭合（许可正文/README/设置页可读许可/缺口 0）；#20 已构建并核验 **4.1.1 / 70**（379 项单测 / lint 0 errors·15 warnings / 证书同 68 / 145 条目 / 7 份资产一致 / Apple 素材 0 匹配，**5,196,689 B / SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`**）；**#21 已发布**：tag `v4.1.1`、Release「朝夕 4.1.1」id `449587411`、`published_at` 2026-11-18T06:05:24Z，`/releases/latest` 回读一致，`update/manifest.json` 已按真实数据回填并独立提交（`4a31259`），**推送时先用 WorkBuddy 自带代理 502，改走本机 `127.0.0.1:10809` 后推送成功并回读远端清单一致**。**当前只剩人工逐组件版权/NOTICE 审阅与真机验收（含 68→70 保数据升级），工程上已无待推送项。** 下方 338 项、366 项、69 包与 feature-update 包均为历史证据。**续接请先读「#19 运行时许可与 README」与「#20/#21 发布实录」章节。**
+> 当前执行已批准的 4.1.1 视觉/动画/小部件/开源发布方案：#16–#18 已完成；#19 工程项全部闭合（许可正文/README/设置页可读许可/缺口 0）；#20 已构建并核验 **4.1.1 / 70**（379 项单测 / lint 0 errors·15 warnings / 证书同 68 / 145 条目 / 7 份资产一致 / Apple 素材 0 匹配，**5,196,689 B / SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`**）；**#21 已发布**：tag `v4.1.1`、Release「朝夕 4.1.1」id `449587411`、`published_at` 2026-11-18T06:05:24Z，`/releases/latest` 回读一致，`update/manifest.json` 已按真实数据回填并独立提交（`4a31259`），**推送时先用 WorkBuddy 自带代理 502，改走本机 `127.0.0.1:10809` 后推送成功并回读远端清单一致**。**当前只剩人工逐组件版权/NOTICE 审阅与真机验收（含 68→70 保数据升级）。发布后另修了设置页状态栏割裂（`956461d`，源码已领先已发布的 70 包，下次发行须 4.1.2 / 71）。** 下方 338 项、366 项、69 包与 feature-update 包均为历史证据。**续接请先读「#19 运行时许可与 README」与「#20/#21 发布实录」章节。**
 
 ## 当前批次与授权
 
@@ -150,6 +150,12 @@
 - 命名决策：用户明确选择 **tag `v4.1.1` + 标题「朝夕 4.1.1」（不带 code）**，因此走手工 API 发布，**未修改 `scripts/release.sh`**（其默认仍为 `v<name>-<code>`）。资产名保持 `morrow-70-4.1.1-release.apk`，客户端从资产名取 code，缺 code 会检测不到更新。
 - 未做：未改 CI/密钥/包名/schema，未覆盖旧 tag 或旧 Release，未纳入 MANUAL-TEST，未安装或卸载设备。
 
+### 发布后修复：设置页状态栏割裂（2026-11-18，提交 `956461d`）
+- 现象：进设置页后状态栏那一截与页面之间有一道横线。根因与日历页同一处——**在 `safeDrawingPadding()` 约束的区域内自绘壁纸**，位图从状态栏下沿才开始，渐变原点与照片 cover 裁剪比例都和系统栏那一截对不上。日历页在 4.1.1 已改成「背景由全窗口宿主提供」，设置页漏了。
+- 修复：`SettingsScreen` 删掉 `GlassBackdrop()` 与 import，底色交回 `GlassBackdropHost`；由于设置页是**盖在仍在组合的首页之上**（日历是槽内互斥），额外让首页在设置页打开期间整块让位（`if (!calendarActive && !showSettings)`），否则标题与卡片会从壁纸上透出来变成两页重叠。裁剪页自身的不透明底、返回键处理、`safeDrawingPadding` 边界都没动。
+- 验证：`testDebugUnitTest --rerun + lintDebug + assembleDebug` → `BUILD SUCCESSFUL in 3m22s`，**379 项 / 47 XML / 0 failures·errors·skipped**，lint **0 errors / 15 warnings（无新增）**。**没有真机/截图证据**：浅色深色、图片背景档、大字体下的观感仍待设备确认。因为只改界面层、不涉及许可与打包，未重跑 `assembleRelease`——**已发布的 70 包早于本提交，不再与源码逐字节对应**。
+- 版本处置：源码仍是 4.1.1 / 70，但**不得用 70 号重发**（同 code 不同字节，已装用户收不到）。下次发行另起 **4.1.2 / 71**，按 #20/#21 的同一套核验走。
+
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。
 - `domain/time/LunarCalendar.kt`：自实现农历/压缩年表，未见明确外部版权；无证据表明复制了不许可来源，也未完成全部来源审核。
@@ -195,7 +201,12 @@
 - API33 日期 Instant→atZone→toLocalDate，不用 API34 LocalDate.ofInstant；SAF 覆盖写 wt；RemoteViews 分隔线 ImageView，LazyColumn 嵌套有界。测试 DataStore 独立文件/受控 scope，取消并等待写任务结束后清理。
 - MANUAL-TEST 编号/checkbox 由用户维护，提交逐次授权，禁 git add -A；已有本地修改不纳入本次提交。**用户已授权本批 commit/push、新版发行及成功后真实清单同步；未授权 CI/密钥/安装/卸载或 MANUAL-TEST 提交**；密码不进仓库/日志。
 - 代理 502 先核对网络/凭据/远端，获授权推送才重试，不绕过检查；整文件差异先查 LF/CRLF；提交格式 feat/fix/chore(scope): 中文描述。
-- **本机可用代理**：WorkBuddy 默认注入 `https_proxy=http://127.0.0.1:59466`，对 `github.com:443` 曾持续 `CONNECT 502`（`api.github.com` 正常）。备用为本机 AgentRouter 链路的 Xray 回环代理 `http://127.0.0.1:10809`（10808 为其 SOCKS），实测 `github.com` 200、TLS 约 0.8 s。用法：`git -c http.proxy=http://127.0.0.1:10809 push origin main`，临时生效、不写入仓库或全局配置；`curl` 需加 `-x http://127.0.0.1:10809 --noproxy ""` 覆盖环境变量。探测：`netstat -ano | grep 127.0.0.1:10809`。
+- **本机 GitHub 网络（2026-11-18 起自动化）**：WorkBuddy 默认注入 `https_proxy=http://127.0.0.1:59466`，对 `github.com:443` 曾持续 `CONNECT 502`（`api.github.com` 正常）。现固定走本机 AgentRouter 链路的 Xray 回环代理：
+  - `git config --local http.proxy http://127.0.0.1:10809`（仓库级，覆盖环境变量；`--unset` 可回退）。
+  - 计划任务 **`Morrow Xray Proxy`**：动作 `%USERPROFILE%\.workbuddy\tools\xray\xray.exe run -c ...\config.json`，登录自启 + 可 `/run` 唤醒，`ExecutionTimeLimit=PT0S`（常驻）、隐藏窗口、`IgnoreNew`。
+  - 唤醒脚本 `%USERPROFILE%\.workbuddy\tools\xray\ensure-xray.ps1`：探 127.0.0.1:10809 → 未监听则 `Start-ScheduledTask` 拉起 → 轮询至就绪（默认 15 s），日志写同目录 `ensure-xray.log`；已在监听直接退 0。
+  - `.git/hooks/pre-push` 调该脚本（钩子在 `.git` 内、不随仓库分发，重建克隆后需重放）；唤醒失败只告警不阻断推送。
+  - 手工排查：`curl -x http://127.0.0.1:10809 --noproxy "" -o /dev/null -w '%{http_code}' https://github.com`；`netstat -ano | grep 127.0.0.1:10809`。端口已被占用时再起实例会失败退出（任务结果 `0xFFFFFFFF`），属预期噪音，不影响已有实例。
 
 ## 构建与报告（Windows PowerShell，从仓库根）
 
