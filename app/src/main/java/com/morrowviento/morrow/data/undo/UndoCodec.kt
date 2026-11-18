@@ -92,6 +92,7 @@ object UndoCodec {
         if (event.repeatOnLunar) addProperty("repeatOnLunar", true)
         event.repeatUntil?.let { addProperty("repeatUntil", it.toString()) }
         event.endDate?.let { addProperty("endDate", it.toString()) }
+        event.endTime?.let { addProperty("endTime", it.toString()) }
         if (event.tags.isNotEmpty()) {
             add("tags", JsonArray().apply { event.tags.forEach { add(it) } })
         }
@@ -180,6 +181,7 @@ object UndoCodec {
             repeatOnLunar = obj.bool("repeatOnLunar") ?: false,
             repeatUntil = obj.string("repeatUntil")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
             endDate = obj.string("endDate")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            endTime = obj.string("endTime")?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() },
             createdAt = createdAt,
             kind = if (obj.string("kind") == "anniversary") EventKind.ANNIVERSARY else EventKind.TODO,
             lastHandledOccurrence = obj.string("lastHandledOccurrence")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },

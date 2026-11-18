@@ -268,33 +268,35 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
     val accent = glassAccent()
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     GlassPanel(modifier = modifier, onClick = onClick) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp)) {
+        // 年视图是「预览」不是「完整日历」：12 个月并排，板块要小、只给一瞥。
+        // 格子高度、内边距、字号都往下压一档，让一屏能多露几行摘要。
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${summary.month.monthValue}月", style = TextStyle(fontSize = 15.sp,
+                Text("${summary.month.monthValue}月", style = TextStyle(fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold, color = primary))
                 Spacer(Modifier.weight(1f))
-                Text("${summary.eventCount} 次", style = TextStyle(fontSize = 11.sp, color = secondary))
+                Text("${summary.eventCount} 次", style = TextStyle(fontSize = 10.sp, color = secondary))
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth()) {
                 CalendarPresentation.WEEKDAY_LABELS.forEach { label ->
                     Text(label, Modifier.weight(1f), textAlign = TextAlign.Center,
-                        style = TextStyle(fontSize = 9.sp, color = secondary))
+                        style = TextStyle(fontSize = 8.sp, color = secondary))
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             for (row in 0 until 6) {
                 Row(Modifier.fillMaxWidth()) {
                     for (col in 0 until 7) {
                         val cell = summary.cells[row * 7 + col]
-                        Box(Modifier.weight(1f).height(24.dp * fontScale), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).height(18.dp * fontScale), contentAlignment = Alignment.Center) {
                             if (cell.inMonth) {
                                 if (cell.isToday) Canvas(Modifier.matchParentSize()) {
                                     drawCircle(accent.copy(alpha = 0.24f), radius = size.minDimension * 0.43f)
                                     drawCircle(accent, radius = size.minDimension * 0.43f, style = Stroke(1.dp.toPx()))
                                 }
                                 Text(cell.date.dayOfMonth.toString(), style = TextStyle(
-                                    fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium,
+                                    fontSize = 9.5.sp, lineHeight = 12.sp, fontWeight = FontWeight.Medium,
                                     fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
                                     lineHeightStyle = CalendarLineHeight, color = primary,
                                 ))
@@ -306,15 +308,15 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             if (summary.sampleEntries.isEmpty()) {
-                Text("本月暂无事件", style = TextStyle(fontSize = 10.sp, color = secondary))
+                Text("本月暂无事件", style = TextStyle(fontSize = 9.5.sp, color = secondary))
             } else summary.sampleEntries.forEach { entry ->
                 Text("${entry.date.dayOfMonth}日 · ${entry.title}", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 10.sp, color = secondary))
+                    style = TextStyle(fontSize = 9.5.sp, color = secondary))
             }
             if (summary.eventCount > summary.sampleEntries.size) {
-                Text("另 ${summary.eventCount - summary.sampleEntries.size} 次事件", style = TextStyle(fontSize = 10.sp, color = secondary))
+                Text("另 ${summary.eventCount - summary.sampleEntries.size} 次事件", style = TextStyle(fontSize = 9.5.sp, color = secondary))
             }
         }
     }

@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [EventEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class MorrowDatabase : RoomDatabase() {
@@ -57,9 +57,21 @@ abstract class MorrowDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 4.2.x 补丁：持续事件的结束日增加具体时刻（结束时间）。
+         *
+         * 只加一列 `end_time`（分钟数），旧行的结束时间沿用开始时刻（null 即可），
+         * 不改 `end_date` 的 epochDay 语义，不重建表。
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE events ADD COLUMN end_time INTEGER")
+            }
+        }
+
         fun build(context: Context): MorrowDatabase =
             Room.databaseBuilder(context, MorrowDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

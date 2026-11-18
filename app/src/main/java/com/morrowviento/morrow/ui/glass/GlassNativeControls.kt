@@ -27,7 +27,7 @@ fun <T> GlassSegmentedControl(
     selected: T,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = 32.dp,
+    height: Dp = 34.dp,
     enabled: Boolean = true,
     deferSelection: Boolean = false,
     itemContent: (@Composable BoxScope.(T, Boolean) -> Unit)? = null,

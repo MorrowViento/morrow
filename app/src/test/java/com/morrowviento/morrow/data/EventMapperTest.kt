@@ -6,6 +6,7 @@ import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
 import com.morrowviento.morrow.domain.model.RepeatType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -53,6 +54,21 @@ class EventMapperTest {
         assertEquals(com.morrowviento.morrow.domain.model.EventKind.TODO,
             EventMapper.toDomain(entity.copy(kind = "unknown"), zone).kind)
         assertEquals(null, EventMapper.toDomain(entity.copy(lastHandledOccurrence = Long.MAX_VALUE), zone).lastHandledOccurrence)
+    }
+
+    @Test
+    fun multiDayEndDateAndEndTimeRoundTrip() {
+        val original = sample().copy(
+            endDate = java.time.LocalDate.of(2026, 12, 5),
+            endTime = java.time.LocalTime.of(18, 30),
+        )
+        val entity = EventMapper.toEntity(original, zone)
+        // 结束时刻按「分钟数」落库，18:30 → 1110
+        assertEquals(1110, entity.endTime)
+        assertEquals(original, EventMapper.toDomain(entity, zone))
+        // 脏分钟数（越界）还原成 null，不让它炸掉读库
+        assertNull(EventMapper.toDomain(entity.copy(endTime = 1440), zone).endTime)
+        assertNull(EventMapper.toDomain(entity.copy(endTime = -1), zone).endTime)
     }
 
     @Test

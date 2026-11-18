@@ -38,6 +38,8 @@ data class EventEntity(
     @ColumnInfo(name = "repeat_until") val repeatUntil: Long? = null,
     /** 持续事件结束日期（epochDay），null 表示单日。 */
     @ColumnInfo(name = "end_date") val endDate: Long? = null,
+    /** 持续事件结束日的具体时刻（分钟数 0..1439）；null 表示全天或沿用开始时刻。 */
+    @ColumnInfo(name = "end_time") val endTime: Int? = null,
     /** 创建时刻（本地时区毫秒） */
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(defaultValue = "'TODO'") val kind: String = "TODO",

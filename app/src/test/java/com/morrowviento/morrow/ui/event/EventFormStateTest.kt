@@ -215,6 +215,44 @@ class EventFormStateTest {
     }
 
     @Test
+    fun multiDayEndTime_persistsOnlyForNonAllDayRangedEvents() {
+        val base = form().copy(date = LocalDate.of(2026, 9, 1), isAllDay = false)
+        // 多天 + 非全天：结束时刻原样落库
+        val ranged = requireNotNull(
+            base.copy(endDate = LocalDate.of(2026, 9, 5), endTime = LocalTime.of(18, 0)).toEvent(),
+        )
+        assertEquals(LocalTime.of(18, 0), ranged.endTime)
+
+        // 全天事件：结束时刻被清掉（整条是全天，不该有「18:00 结束」）
+        assertNull(
+            requireNotNull(
+                base.copy(isAllDay = true, endDate = LocalDate.of(2026, 9, 5), endTime = LocalTime.of(18, 0)).toEvent(),
+            ).endTime,
+        )
+
+        // 单日（无结束日）：结束时刻也是孤儿状态，归一成 null
+        assertNull(requireNotNull(base.copy(endDate = null, endTime = LocalTime.of(18, 0)).toEvent()).endTime)
+    }
+
+    @Test
+    fun endTime_clearedWhenRevertingToSingleDayOrAllDay() {
+        val ranged = form().copy(
+            date = LocalDate.of(2026, 9, 1),
+            isAllDay = false,
+            endDate = LocalDate.of(2026, 9, 5),
+            endTime = LocalTime.of(18, 0),
+        )
+        assertEquals(LocalTime.of(20, 15), ranged.withEndTime(LocalTime.of(20, 15)).endTime)
+        // 回到单日：结束时刻一并清掉，不留孤儿时间
+        assertNull(ranged.withEndDate(null).endTime)
+        // 切到全天：结束时刻一并清掉
+        assertNull(ranged.withAllDay(true).endTime)
+        // fromEvent 往返：结束时刻原样带回编辑面板
+        val event = requireNotNull(ranged.toEvent())
+        assertEquals(LocalTime.of(18, 0), EventFormState.fromEvent(event).endTime)
+    }
+
+    @Test
     fun weeklyWithoutWeekdays_usesAnchorDayAndKeepsInterval() {
         val event = requireNotNull(
             form().copy(

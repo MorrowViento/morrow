@@ -128,12 +128,9 @@ fun EventDetailScreen(
                             Spacer(Modifier.weight(1f))
                         }
                         // 归档与删除相邻但语义完全不同：归档保留数据、可原样恢复，
-                        // 删除进 6 秒撤销窗口后即消失。用文字按钮区分开，不给两者同一个图标。
-                        com.morrowviento.morrow.ui.glass.GlassTextButton(
-                            text = if (card.isArchived) "恢复" else "归档",
-                            onClick = onArchive,
-                            compact = false,
-                        )
+                        // 删除进 6 秒撤销窗口后即消失。归档与置顶/删除一样是 56dp 圆钮，
+                        // 不再塞一个 34dp 的文字按钮进来（之前它比旁边三个按钮矮一截）。
+                        DetailArchiveIcon(archived = card.isArchived, onClick = onArchive)
                         DetailActionIcon(pin = false, onClick = onDelete)
                     }
                 }
@@ -178,6 +175,49 @@ private fun DetailHeader(onDismiss: () -> Unit, onEdit: () -> Unit) {
                 .padding(horizontal = 4.dp, vertical = 4.dp),
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = primary),
         )
+    }
+}
+
+/**
+ * 归档 / 恢复圆钮。与置顶、删除同尺寸同材质，只是字形不同：
+ * 未归档画「盒子 + 向下箭头」（收进抽屉），已归档画「盒子 + 向上箭头」（拿出来）。
+ */
+@Composable
+private fun DetailArchiveIcon(archived: Boolean, onClick: () -> Unit) {
+    val color = glassTextPrimary()
+    val description = if (archived) "恢复" else "归档"
+    com.morrowviento.morrow.ui.glass.GlassCirclePanel(
+        modifier = Modifier.size(PageChrome.ActionButtonSize).semantics {
+            contentDescription = description
+            if (archived) selected = true
+        },
+        prominent = archived,
+        onClick = onClick,
+    ) {
+        Canvas(Modifier.size(24.dp)) {
+            val w = size.width
+            val h = size.height
+            val stroke = 1.8.dp.toPx()
+            fun line(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(
+                color, Offset(w * x1, h * y1), Offset(w * x2, h * y2), stroke,
+            )
+            // 盒子（抽屉）：顶部开口，左右壁与底部
+            line(.2f, .4f, .8f, .4f)
+            line(.3f, .4f, .3f, .82f)
+            line(.7f, .4f, .7f, .82f)
+            line(.3f, .82f, .7f, .82f)
+            if (archived) {
+                // 向上箭头：从盒子里拿出来
+                line(.5f, .56f, .5f, .12f)
+                line(.38f, .24f, .5f, .12f)
+                line(.62f, .24f, .5f, .12f)
+            } else {
+                // 向下箭头：收进盒子里
+                line(.5f, .12f, .5f, .6f)
+                line(.38f, .48f, .5f, .6f)
+                line(.62f, .48f, .5f, .6f)
+            }
+        }
     }
 }
 

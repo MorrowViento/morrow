@@ -46,6 +46,8 @@ data class EventFormState(
     val repeatUntil: LocalDate? = null,
     /** 持续事件结束日期（含当天）；null 或等于开始日即单日。 */
     val endDate: LocalDate? = null,
+    /** 持续事件结束日的具体时刻；null 表示全天事件或沿用开始时刻。 */
+    val endTime: LocalTime? = null,
     val kind: com.morrowviento.morrow.domain.model.EventKind = com.morrowviento.morrow.domain.model.EventKind.TODO,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     /** 多维标记（标签）的编辑态；保存时统一走 `EventTags.normalize`。 */
@@ -75,6 +77,7 @@ data class EventFormState(
         } else {
             null
         }
+        val safeEndDate = endDate?.takeIf { it > date }
         return CountdownEvent(
             id = id ?: UUID.randomUUID().toString(),
             title = title.trim(),
@@ -104,7 +107,9 @@ data class EventFormState(
             repeatOnLunar = repeatType == RepeatType.YEARLY && repeatOnLunar,
             repeatUntil = if (repeatType == RepeatType.NONE) null else repeatUntil,
             // 结束日不早于开始日；等于开始日即单日，归一成 null，避免「持续 1 天」这种冗余状态
-            endDate = endDate?.takeIf { it > date },
+            endDate = safeEndDate,
+            // 结束时刻只在「多天 + 非全天」时有意义；全天事件整条是全天、单日没有结束日
+            endTime = if (isAllDay || safeEndDate == null) null else endTime,
             createdAt = existing?.createdAt ?: createdAt,
             kind = kind,
             isCompleted = kind == com.morrowviento.morrow.domain.model.EventKind.TODO && existing?.isCompleted == true,
@@ -117,8 +122,9 @@ data class EventFormState(
         )
     }
 
-    /** 切换全天：切回非全天时保留用户原先选的时分。 */
-    fun withAllDay(value: Boolean): EventFormState = copy(isAllDay = value)
+    /** 切换全天：切回非全天时保留用户原先选的时分。切到全天时结束时刻一并清掉。 */
+    fun withAllDay(value: Boolean): EventFormState =
+        copy(isAllDay = value, endTime = if (value) null else endTime)
 
     /** 改月份/年份时把日夹到该月最大天数（1 月 31 日 → 2 月 28/29 日）。 */
     fun withDate(value: LocalDate): EventFormState {
@@ -153,9 +159,14 @@ data class EventFormState(
     fun withLunarYearly(enabled: Boolean): EventFormState = copy(repeatOnLunar = enabled)
 
     /** 持续事件的结束日；传 null 表示单日。早于开始日的值直接忽略。 */
-    fun withEndDate(value: LocalDate?): EventFormState = copy(
-        endDate = value?.takeIf { it > date },
-    )
+    fun withEndDate(value: LocalDate?): EventFormState {
+        val safe = value?.takeIf { it > date }
+        // 回到单日时结束时刻一并清掉，避免留下没有结束日的「孤儿时间」
+        return copy(endDate = safe, endTime = if (safe == null) null else endTime)
+    }
+
+    /** 持续事件结束日的具体时刻；null 表示沿用开始时刻。 */
+    fun withEndTime(value: LocalTime?): EventFormState = copy(endTime = value)
 
     /**
      * 跟随分类改名 / 删除迁移：把选中的分类沿 [aliases] 解到最终名称（支持 A→B→C 链式改名）。
@@ -235,6 +246,7 @@ data class EventFormState(
             repeatOnLunar = event.repeatOnLunar,
             repeatUntil = event.repeatUntil,
             endDate = event.endDate,
+            endTime = event.endTime,
             kind = event.kind,
             createdAt = event.createdAt,
             tags = event.tags,

@@ -152,14 +152,16 @@ fun EventEditSheet(
                     form.endDate?.let { end ->
                         WheelDateTimePicker(
                             date = end,
-                            time = form.time,
-                            isAllDay = true,
+                            time = form.endTime ?: form.time,
+                            // 结束日跟随开始日的「全天 / 具体时间」：上面能选时分，下面也能选；
+                            // 上面是全天，下面也只选日期，不再硬编码成全天
+                            isAllDay = form.isAllDay,
                             // 滚到开始日之前就夹回「开始日 + 1」：否则 withEndDate 会把
                             // 结束日归零、滚轮当场消失，手指还在滑
                             onDateChange = {
                                 form = form.withEndDate(if (it <= form.date) form.date.plusDays(1) else it)
                             },
-                            onTimeChange = {},
+                            onTimeChange = { form = form.withEndTime(it) },
                         )
                         val span = java.time.temporal.ChronoUnit.DAYS.between(form.date, end) + 1
                         Text(

@@ -1,6 +1,7 @@
 package com.morrowviento.morrow.domain.model
 
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * 倒数日事件。保留 ying 原事件字段，新增业务类型与已处理周期，旧事件默认按待办兼容。
@@ -51,6 +52,13 @@ data class CountdownEvent(
      * 因此这里存的是**绝对结束日**，只有起点由重复规则推进。
      */
     val endDate: LocalDate? = null,
+    /**
+     * 持续事件结束日的具体时刻；null 表示全天事件，或非全天但结束时刻沿用开始时刻。
+     *
+     * 只对「多天 + 非全天」的事件有意义：9/1 14:00 → 9/5 18:00 这类安排里，
+     * 结束日的 18:00 与开始日的 14:00 分开存。提醒与倒计时仍按第一天，这里只服务展示。
+     */
+    val endTime: LocalTime? = null,
     val createdAt: java.time.LocalDateTime,
     val kind: EventKind = EventKind.TODO,
     val lastHandledOccurrence: java.time.LocalDate? = null,

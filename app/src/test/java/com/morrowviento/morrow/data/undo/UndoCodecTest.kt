@@ -79,6 +79,24 @@ class UndoCodecTest {
     }
 
     @Test
+    fun `多天事件结束时刻也能往返`() {
+        val event = sampleEvent().copy(
+            isAllDay = false,
+            endDate = java.time.LocalDate.of(2027, 2, 10),
+            endTime = java.time.LocalTime.of(18, 30),
+        )
+        val operation = UndoOperation("u-end", UndoKind.DELETE, "已删除", listOf(event), 42L)
+        assertEquals(operation, UndoCodec.decode(UndoCodec.encode(operation)))
+        // 旧快照没有 endTime：解码为 null，不炸
+        val legacy = UndoCodec.decode(
+            """{"id":"u","kind":"DELETE","message":"m","expiresAt":1,
+            "events":[{"id":"e","targetDate":"2027-02-06T09:30","endDate":"2027-02-10","repeatType":"none"}]}""",
+        )!!.snapshot.single()
+        assertNull(legacy.endTime)
+        assertEquals(java.time.LocalDate.of(2027, 2, 10), legacy.endDate)
+    }
+
+    @Test
     fun `null 与空白输入返回 null`() {
         assertNull(UndoCodec.decode(null))
         assertNull(UndoCodec.decode(""))

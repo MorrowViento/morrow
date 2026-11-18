@@ -111,6 +111,22 @@ class BackupCodecTest {
     }
 
     @Test
+    fun multiDayEndTimeRoundTripsThroughBackup() {
+        val original = event().copy(
+            isAllDay = false,
+            endDate = java.time.LocalDate.of(2027, 3, 10),
+            endTime = java.time.LocalTime.of(18, 30),
+        )
+        val raw = BackupCodec.encode(document(listOf(original)))
+        val parsed = BackupCodec.decode(raw) as BackupParse.Ok
+        assertEquals(original, BackupMapper.toDomain(parsed.document.events.single()))
+        // 旧备份没有 endTime 字段：解码为 null，不影响导入
+        val legacy = BackupCodec.decode("""{"format":"morrow-backup","version":4,
+            "events":[{"id":"old","targetDate":"2027-05-01T08:00","endDate":"2027-05-03"}]}""") as BackupParse.Ok
+        assertNull(BackupMapper.toDomain(legacy.document.events.single())!!.endTime)
+    }
+
+    @Test
     fun `分类与小部件样式原样往返`() {
         val ok = BackupCodec.decode(BackupCodec.encode(document())) as BackupParse.Ok
         assertEquals(listOf("生活", "工作"), ok.document.categories)

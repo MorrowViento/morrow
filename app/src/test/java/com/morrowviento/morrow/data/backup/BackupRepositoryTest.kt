@@ -103,6 +103,7 @@ class BackupRepositoryTest {
                 MorrowDatabase.MIGRATION_1_2,
                 MorrowDatabase.MIGRATION_2_3,
                 MorrowDatabase.MIGRATION_3_4,
+                MorrowDatabase.MIGRATION_4_5,
             )
             .allowMainThreadQueries().build()
         val updated = original.copy(isCompleted = false,
@@ -113,8 +114,8 @@ class BackupRepositoryTest {
         try {
             val repository = EventRepository(migrated.eventDao())
             assertEquals(original, repository.findById(original.id))
-            // 4.2.0 第二批：升级到 schema 4（标签 / 归档 / 时长），1→4 一步到位也要能过
-            assertEquals(4, migrated.openHelper.writableDatabase.version)
+            // 4.2.x 补丁：升级到 schema 5（标签 / 归档 / 时长 + 结束时刻），1→5 一步到位也要能过
+            assertEquals(5, migrated.openHelper.writableDatabase.version)
             repository.save(updated)
         } finally { migrated.close() }
         val reopened = open()

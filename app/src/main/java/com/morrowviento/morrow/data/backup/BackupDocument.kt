@@ -66,6 +66,8 @@ data class BackupEvent(
     val repeatUntil: String? = null,
     /** 持续事件的结束日期（ISO 本地日期）。 */
     val endDate: String? = null,
+    /** 持续事件结束日的具体时刻（ISO 本地时间 HH:mm）；缺省沿用开始时刻。 */
+    val endTime: String? = null,
     val createdAt: String,
     val kind: String = EventKind.TODO.name,
     val lastHandledOccurrence: String? = null,
@@ -193,6 +195,7 @@ object BackupCodec {
         if (event.repeatOnLunar) addProperty("repeatOnLunar", true)
         event.repeatUntil?.let { addProperty("repeatUntil", it) }
         event.endDate?.let { addProperty("endDate", it) }
+        event.endTime?.let { addProperty("endTime", it) }
         // 标签用数组而不是逗号串：备份是给人看的，数组比 "a,b,c" 更不容易被手改坏
         if (event.tags.isNotEmpty()) {
             add("tags", JsonArray().apply { event.tags.forEach { add(it) } })
@@ -336,6 +339,7 @@ object BackupCodec {
             repeatOnLunar = obj.boolOrNull("repeatOnLunar") ?: false,
             repeatUntil = obj.stringOrNull("repeatUntil")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
             endDate = obj.stringOrNull("endDate")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
+            endTime = obj.stringOrNull("endTime")?.takeIf { runCatching { java.time.LocalTime.parse(it) }.isSuccess },
             createdAt = createdAtRaw,
             kind = obj.stringOrNull("kind") ?: EventKind.TODO.name,
             lastHandledOccurrence = obj.stringOrNull("lastHandledOccurrence")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
@@ -493,6 +497,7 @@ object BackupMapper {
         repeatOnLunar = event.repeatOnLunar,
         repeatUntil = event.repeatUntil?.toString(),
         endDate = event.endDate?.toString(),
+        endTime = event.endTime?.toString(),
         createdAt = event.createdAt.toString(),
         kind = event.kind.name,
         lastHandledOccurrence = event.lastHandledOccurrence?.toString(),
@@ -529,6 +534,7 @@ object BackupMapper {
             repeatOnLunar = backup.repeatOnLunar,
             repeatUntil = backup.repeatUntil?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
             endDate = backup.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            endTime = backup.endTime?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() },
             createdAt = created,
             kind = enumOrDefault(backup.kind, EventKind.TODO),
             lastHandledOccurrence = backup.lastHandledOccurrence?.let { runCatching { LocalDate.parse(it) }.getOrNull() },

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  「朝夕」自适应图标前景：一轮日轮 + 地平线 + 水面倒影。
-  构图控制在中心 66dp 安全圆内（最远点距中心约 29dp），
+  「朝夕」自适应图标前景：实心日轮 + 八道放射光芒 + 清晰地平线 + 三道倒影。
+  用户要求「非渐变、线条分明」——全部用纯色块与描边线条，不再有任何渐变；
+  光芒、地平线与倒影都是等宽描边，边缘干净利落。
+  构图控制在中心 66dp 安全圆内（最远点距中心约 33dp），
   圆形 / 方圆 / 水滴等厂商遮罩都不会切到主体。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,23 +11,44 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 日轮 -->
+    <!-- 日轮：实心圆 -->
     <path
-        android:pathData="M54,46m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0"
-        android:fillColor="#FFF8EA" />
-    <!-- 地平线：向上一拱，日轮恰好落在弧顶 -->
+        android:pathData="M42,42 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"
+        android:fillColor="#FFC961" />
+    <!-- 光芒：八道等宽描边，自日轮向外放射 -->
     <path
-        android:pathData="M30,70 Q54,54 78,70"
+        android:pathData="M70,42 L74.5,42 M65.3,53.3 L68.5,56.5 M54,58 L54,62.5 M42.7,53.3 L39.5,56.5 M38,42 L33.5,42 M42.7,30.7 L39.5,27.5 M54,26 L54,21.5 M65.3,30.7 L68.5,27.5"
         android:fillColor="#00000000"
-        android:strokeColor="#FFF8EA"
-        android:strokeWidth="3.6"
+        android:strokeColor="#FFC961"
+        android:strokeWidth="3.5"
         android:strokeLineCap="round" />
-    <!-- 倒影：更短、更淡的一条弧 -->
+    <!-- 地平线：向上一拱，日轮悬于其上 -->
     <path
-        android:pathData="M38,79 Q54,72 70,79"
+        android:pathData="M24,72 Q54,60 84,72"
         android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
-        android:strokeAlpha="0.55"
-        android:strokeWidth="3"
+        android:strokeColor="#F6EFDF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+    <!-- 倒影：三道等宽短横线，越往下越淡，形似水面反光 -->
+    <path
+        android:pathData="M42,78 L66,78"
+        android:fillColor="#00000000"
+        android:strokeColor="#F6EFDF"
+        android:strokeAlpha="0.62"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M47,83 L61,83"
+        android:fillColor="#00000000"
+        android:strokeColor="#F6EFDF"
+        android:strokeAlpha="0.44"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M50,86 L58,86"
+        android:fillColor="#00000000"
+        android:strokeColor="#F6EFDF"
+        android:strokeAlpha="0.28"
+        android:strokeWidth="2.6"
         android:strokeLineCap="round" />
 </vector>
