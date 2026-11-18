@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.2.0",
-  "name": "朝夕 4.2.0",
-  "body": "## 朝夕 4.2.0\n\n两批一起发。\n\n### 重复与时间跨度\n- 完整重复规则：每天 / 每周（可多选星期）/ 每月 / 每年，支持「每 N 个周期」与结束日期\n- 农历年循环：农历生日、忌日逐年回算公历，短月与闰月自动回落\n- 多点提醒：除预设外可自定义提前分钟数\n- 持续事件：跨多天，日历铺满整个区间，进行中显示「还剩 N 天」\n\n### 时间块 / 标记 / 计算器 / 归档\n- 时间块视图：一天内按小时排布，重叠事件自动分列，含当前时刻线\n- 多维标记：一条事件可挂多个标签，参与搜索与展示\n- 日期计算器：两个日期相差、基准日加减、含首尾天数、农历换算\n- 归档：与「已完成」分开的第三条状态线，归档箱可恢复/删除/清空\n\n### 修复\n- 节日皮肤「没效果」：柔光调浓并加底部第二团，设置页新增预览（不必等到节日当天）\n\n> 安装包 `morrow-73-4.2.0-release.apk`（versionCode 73）。可从 4.1.x / 72 原位升级，数据自动迁移。",
-  "published_at": "2026-11-18T16:52:14Z",
+  "tag_name": "v4.3.0",
+  "name": "朝夕 4.3.0",
+  "body": "## 朝夕 4.3.0\n\n4.2.0 的修复打磨版。\n\n### 修复\n- 修「添加有时长的事件后点列表闪退」\n- 多天事件结束日滚轮与开始时间保持一致（上面能选时分下面也能选，上面全天下面全天）\n\n### 界面打磨\n- 详情页「归档」改成与置顶/删除同尺寸的 56dp 圆钮\n- 日历年视图每月板块缩小，突出预览\n- 首页排序与「⋯」按钮和全站顶栏按钮高度统一\n- 重绘应用图标：非渐变、线条分明（金色日轮 + 放射光芒 + 地平线 + 倒影）\n\n> 安装包 morrow-74-4.3.0-release.apk（versionCode 74）。可从 4.2.x / 73 原位升级，数据自动迁移（Room schema 4→5）。",
+  "published_at": "2026-11-18T19:10:27Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-73-4.2.0-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.2.0/morrow-73-4.2.0-release.apk",
-      "size": 5313701,
-      "digest": "sha256:d1c02522aa9f39302a69771829c23d893659ab57121d35fdb1cdaa8dfafd097d"
+      "name": "morrow-74-4.3.0-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.3.0/morrow-74-4.3.0-release.apk",
+      "size": 5313569,
+      "digest": "sha256:376dba9c7fea8ad5ef9fab7aab158576473bdd46e2d8d7cff787cc6c8927455b"
     }
   ]
 }
