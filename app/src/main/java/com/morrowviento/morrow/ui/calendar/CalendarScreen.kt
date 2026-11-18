@@ -1,5 +1,14 @@
 package com.morrowviento.morrow.ui.calendar
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Transition
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +26,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +46,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -46,15 +57,18 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.domain.time.LunarCalendar
-import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
+import com.morrowviento.morrow.ui.glass.GlassMotion
+import com.morrowviento.morrow.ui.glass.LocalReduceMotion
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTextButton
@@ -72,8 +86,8 @@ import kotlin.math.abs
  * 性能取舍：整月格子只套**一个** GlassPanel，格子内部用纯文字与浅色块区分状态。
  * 42 个独立玻璃面在低端机上会明显掉帧，而玻璃材质的表现力在「一块大面板」上并不损失。
  *
- * 这是**整页覆盖**而非浮层：必须自己铺一层不透明底色（[GlassBackdrop]），
- * 否则下层首页的标题与卡片会从缝隙里透出来形成"两页重叠"。
+ * 与首页在同一个活动内容槽中互斥绘制；背景由全窗口宿主提供，
+ * 不在安全区内重绘壁纸，避免渐变原点和图片裁剪比例与系统栏不一致。
  */
 @Composable
 fun CalendarScreen(
@@ -85,12 +99,9 @@ fun CalendarScreen(
     canPrev: Boolean = false,
     canNext: Boolean = false,
 ) {
+    val transition = updateTransition(state, label = "calendarSnapshot")
     Box(Modifier.fillMaxSize()) {
-        GlassBackdrop()
-
-        // 拦住触摸穿透。日历是整页覆盖，但格子之间留了 1dp 缝、面板四周也有留白，
-        // 这些位置没有任何可点击节点，手指落下去会穿到下层首页的卡片上
-        // （真机表现：点日期数字之间的空白，结果打开了某个首页事件）。这层什么都不做，只吃触摸。
+        // 页面留白仍消费触摸；日期格子与实际控件在其上正常处理手势。
         Box(
             Modifier
                 .matchParentSize()
@@ -98,7 +109,7 @@ fun CalendarScreen(
         )
 
         Column(Modifier.fillMaxSize()) {
-            CalendarHeader(state, actions, onDismiss)
+            CalendarHeader(state, transition, actions, onDismiss, canPrev, canNext)
             when {
                 state.error != null -> CenterHint("读取事件失败", state.error)
                 state.isLoading -> CenterHint("载入中…", null)
@@ -113,11 +124,63 @@ fun CalendarScreen(
                         if (state.view == CalendarView.MONTH) actions.shiftMonth(1) else actions.shiftYear(1)
                     },
                 ) {
-                    CalendarPage(state, actions, onOpenEvent)
+                    CalendarAnimatedContent(transition, Modifier.fillMaxSize().clipToBounds()) { snapshot ->
+                        // 退出页只保留旧快照绘制；过期格子/事件点击不能再次导航。
+                        val active = calendarPageKey(snapshot) == calendarPageKey(state)
+                        val pageActions = actions.copy(
+                            selectDay = { if (active) actions.selectDay(it) },
+                            openMonth = { if (active) actions.openMonth(it) },
+                        )
+                        CalendarPage(snapshot, pageActions) { if (active) onOpenEvent(it) }
+                    }
                 }
             }
         }
     }
+}
+
+internal data class CalendarPageKey(val view: CalendarView, val period: Long)
+
+internal fun calendarPageKey(state: CalendarUiState): CalendarPageKey = CalendarPageKey(
+    state.view,
+    if (state.view == CalendarView.MONTH) state.month.year * 12L + state.month.monthValue - 1 else state.month.year.toLong(),
+)
+
+internal fun calendarTransitionDirection(from: CalendarUiState, to: CalendarUiState): Int =
+    if (from.view != to.view) 0 else calendarPageKey(to).period.compareTo(calendarPageKey(from).period)
+
+/** 标签和日期页共用完整状态快照及同一 Transition，不维护独立位移/邻页状态。 */
+@Composable
+internal fun CalendarAnimatedContent(
+    transition: Transition<CalendarUiState>,
+    modifier: Modifier = Modifier,
+    slide: Boolean = true,
+    reduceMotion: Boolean = LocalReduceMotion.current,
+    content: @Composable (CalendarUiState) -> Unit,
+) {
+    transition.AnimatedContent(
+        modifier = modifier,
+        contentAlignment = Alignment.TopCenter,
+        contentKey = ::calendarPageKey,
+        transitionSpec = {
+            val direction = calendarTransitionDirection(initialState, targetState)
+            val transform: ContentTransform = when {
+                reduceMotion -> EnterTransition.None togetherWith ExitTransition.None
+                slide && direction != 0 -> {
+                    val towards = if (direction > 0) {
+                        androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Left
+                    } else {
+                        androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Right
+                    }
+                    (slideIntoContainer(towards, GlassMotion.navigationSlide) + fadeIn(GlassMotion.enterFade)) togetherWith
+                        (slideOutOfContainer(towards, GlassMotion.navigationSlide) + fadeOut(GlassMotion.enterFade))
+                }
+                else -> fadeIn(GlassMotion.enterFade) togetherWith fadeOut(GlassMotion.enterFade)
+            }
+            // 不插值页面高度；日期格和标题字体不跟着容器尺寸缩放。
+            transform.using(null)
+        },
+    ) { snapshot -> content(snapshot) }
 }
 
 // ---------------------------------------------------------------- 翻页手势
@@ -143,16 +206,9 @@ internal fun swipeDirection(
 private const val SWIPE_DISTANCE_RATIO = 0.18f
 
 /**
- * 左右滑动翻页：**只做手势判定**，翻页动作与点头部箭头完全一致（瞬时切页）。
- *
- * 之前试过三版带动画的实现，真机上都会留下「翻完之后整页日期抖一下」：
- * 双页位移要求相邻页跟着数据重组跑（先闪一帧再换回来）；换页那一帧的位移归零
- * 与内容切换又跨了两次状态更新（图层先动、重组后到）。它们的共同点是
- * **屏上内容由两个状态源共同决定**，只要两者差一帧就会被看见。
- *
- * 所以这里干脆不做位移、不渲染相邻页：松手即切页，与点箭头走同一条路径，
- * 屏幕上永远只有一个内容来源，没有能抖的余地。判定仍在松手时做
- * （甩动速度优先、位移其次），滑动灵敏度与之前一致。
+ * 左右滑动只判定导航意图；松手与箭头更新同一个 CalendarNav，
+ * 页面位移由完整快照的 Transition 接管，不维护另一份拖动位置或同步构建邻页。
+ * 判定仍为甩动速度优先、位移其次，动画不锁住下一次手势。
  *
  * 回调必须经 [rememberUpdatedState] 取：手势协程只启动一次且一直存活，
  * 直接捕获 `onPrev` / `onNext` 会永远用第一帧那份闭包（滚轮就是这么错的）。
@@ -240,8 +296,11 @@ private fun onTodayPeriod(state: CalendarUiState): Boolean =
 @Composable
 private fun CalendarHeader(
     state: CalendarUiState,
+    transition: Transition<CalendarUiState>,
     actions: CalendarActions,
     onDismiss: () -> Unit,
+    canPrev: Boolean,
+    canNext: Boolean,
 ) {
     val isMonthView = state.view == CalendarView.MONTH
     Row(
@@ -250,31 +309,32 @@ private fun CalendarHeader(
             .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NavButton("‹", "上一${if (isMonthView) "月" else "年"}") {
+        NavButton("‹", "上一${if (isMonthView) "月" else "年"}", enabled = canPrev) {
             if (isMonthView) actions.shiftMonth(-1) else actions.shiftYear(-1)
         }
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = if (isMonthView) {
-                    "${state.month.year}年${state.month.monthValue}月"
-                } else {
-                    "${state.month.year}年"
-                },
-                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = glassTextPrimary()),
-            )
-            Text(
-                text = if (isMonthView) {
-                    "本月 ${state.monthEventCount} 次事件"
-                } else {
-                    "全年 ${state.yearEventCount} 次事件"
-                },
-                style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
-            )
+        CalendarAnimatedContent(transition, Modifier.weight(1f), slide = false) { snapshot ->
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                val monthView = snapshot.view == CalendarView.MONTH
+                Text(
+                    text = if (monthView) "${snapshot.month.year}年${snapshot.month.monthValue}月" else "${snapshot.month.year}年",
+                    maxLines = 1,
+                    style = TextStyle(
+                        fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold,
+                        fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
+                        lineHeightStyle = CalendarLineHeight, color = glassTextPrimary(),
+                    ),
+                )
+                Text(
+                    text = if (monthView) "本月 ${snapshot.monthEventCount} 次事件" else "全年 ${snapshot.yearEventCount} 次事件",
+                    maxLines = 1,
+                    style = TextStyle(
+                        fontSize = 11.sp, lineHeight = 15.sp, fontFeatureSettings = "tnum",
+                        platformStyle = CalendarFontMetrics, lineHeightStyle = CalendarLineHeight, color = glassTextSecondary(),
+                    ),
+                )
+            }
         }
-        NavButton("›", "下一${if (isMonthView) "月" else "年"}") {
+        NavButton("›", "下一${if (isMonthView) "月" else "年"}", enabled = canNext) {
             if (isMonthView) actions.shiftMonth(1) else actions.shiftYear(1)
         }
         Spacer(Modifier.width(10.dp))
@@ -306,12 +366,13 @@ private fun CalendarHeader(
 
 /** 头部圆钮：玻璃材质自己的按压光学。 */
 @Composable
-private fun NavButton(glyph: String, description: String? = null, onClick: () -> Unit) {
+private fun NavButton(glyph: String, description: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
     val primary = glassTextPrimary()
     GlassCirclePanel(
         modifier = Modifier
             .size(34.dp)
             .semantics { description?.let { contentDescription = it } },
+        enabled = enabled,
         onClick = onClick,
     ) {
         Text(
@@ -320,6 +381,9 @@ private fun NavButton(glyph: String, description: String? = null, onClick: () ->
         )
     }
 }
+
+private val CalendarFontMetrics = PlatformTextStyle(includeFontPadding = false)
+private val CalendarLineHeight = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
 
 // ---------------------------------------------------------------- 月视图
 
@@ -373,6 +437,7 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     val dimmed = !cell.inMonth
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val textAlpha = when {
         dimmed -> 0.3f
         cell.isToday || cell.isSelected -> 1f
@@ -390,6 +455,7 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
 
     Box(
         modifier = modifier
+            .heightIn(min = 30.dp * fontScale + 8.dp)
             .aspectRatio(1f)
             // 手势范围要盖满整格：`padding` 若排在 `clickable` 之前，格与格之间那 1dp 缝
             // 就不属于任何格子，点上去等于点在空气上（旧版会穿透到首页卡片）。
@@ -419,7 +485,11 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
                 text = cell.date.dayOfMonth.toString(),
                 style = TextStyle(
                     fontSize = 15.sp,
-                    fontWeight = if (cell.isToday || cell.isSelected) FontWeight.Bold else FontWeight.Medium,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFeatureSettings = "tnum",
+                    platformStyle = CalendarFontMetrics,
+                    lineHeightStyle = CalendarLineHeight,
                     color = primary.copy(alpha = textAlpha),
                 ),
             )
@@ -429,6 +499,9 @@ private fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit)
                 overflow = TextOverflow.Clip,
                 style = TextStyle(
                     fontSize = 8.5.sp,
+                    lineHeight = 12.sp,
+                    platformStyle = CalendarFontMetrics,
+                    lineHeightStyle = CalendarLineHeight,
                     fontWeight = if (cell.isFestival) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (cell.isFestival) {
                         primary.copy(alpha = if (dimmed) 0.35f else 0.85f)
@@ -520,6 +593,7 @@ private fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () -> 
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     val accent = glassAccent()
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     GlassPanel(modifier = modifier, onClick = onClick) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -540,14 +614,17 @@ private fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () -> 
                 Row(Modifier.fillMaxWidth()) {
                     for (col in 0 until 7) {
                         val cell = summary.cells[row * 7 + col]
-                        Box(Modifier.weight(1f).height(24.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).height(24.dp * fontScale), contentAlignment = Alignment.Center) {
                             if (cell.inMonth) {
                                 if (cell.isToday) Canvas(Modifier.matchParentSize()) {
                                     drawCircle(accent.copy(alpha = 0.24f), radius = size.minDimension * 0.43f)
                                     drawCircle(accent, radius = size.minDimension * 0.43f, style = Stroke(1.dp.toPx()))
                                 }
-                                Text(cell.date.dayOfMonth.toString(), style = TextStyle(fontSize = 10.sp,
-                                    fontWeight = if (cell.isToday) FontWeight.Bold else FontWeight.Normal, color = primary))
+                                Text(cell.date.dayOfMonth.toString(), style = TextStyle(
+                                    fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium,
+                                    fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
+                                    lineHeightStyle = CalendarLineHeight, color = primary,
+                                ))
                                 if (cell.eventCount > 0) Canvas(Modifier.align(Alignment.BottomCenter).size(3.dp)) {
                                     drawCircle(accent)
                                 }

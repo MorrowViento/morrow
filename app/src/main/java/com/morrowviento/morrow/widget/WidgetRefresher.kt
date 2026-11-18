@@ -9,6 +9,9 @@ import android.content.res.Configuration
 import androidx.core.net.toUri
 import android.util.Log
 import android.util.TypedValue
+import android.os.Bundle
+import android.util.SizeF
+import com.morrowviento.morrow.data.settings.AppSettings
 import android.view.View
 import android.widget.RemoteViews
 import com.morrowviento.morrow.MainActivity
@@ -78,28 +81,29 @@ class WidgetRefresher(
         val systemDark = isSystemDark()
         // 配色方案从小部件之外来：设置 → 外观 → 配色方案（或背景图取色）。
         // 小部件与 App 必须同源，否则会出现「应用里换成青竹、桌面还是海蓝」。
-        val palette = settings.appSettings.first().resolvedAccent
+        val appearance = settings.appSettings.first()
         val density = appContext.resources.displayMetrics.density
-        // 同一次刷新里多个小部件常常同尺寸同配色，位图只画一次。
-        val bitmaps = HashMap<Int, android.graphics.Bitmap>()
         // 只有总览需要「没配置就用默认样式」，单事件小部件必须有自己的 eventId
         val styleById = if (isDetail) emptyMap() else store.loadAll()
         val fallback = if (isDetail) null else store.defaultStyle()
 
         ids.forEach { widgetId ->
             val style = if (isDetail) store.load(widgetId) else (styleById[widgetId] ?: fallback ?: WidgetStyle())
-            val colors = style.colors(systemDark, palette)
-            val (widthPx, heightPx) = widgetSizePx(widgetId, density)
-            val key = widthPx * 31 + heightPx * 17 + palette.hashCode() * 7 +
-                (if (colors.dark) 1 else 0) * 3 + (if (colors.vivid) 1 else 0)
-            val background = bitmaps.getOrPut(key) {
-                WidgetAppearance.render(widthPx, heightPx, density, palette, colors.dark, colors.vivid)
+            val colors = style.colors(appearance, systemDark)
+            val sizes = widgetSizes(manager.getAppWidgetOptions(widgetId),
+                appContext.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
+            val layouts = LinkedHashMap<SizeF, RemoteViews>()
+            sizes.forEach { size ->
+                val background = WidgetAppearance.render(appContext,
+                    (size.width * density).toInt(), (size.height * density).toInt(), density,
+                    appearance, colors, maxPixels = WidgetAppearance.MAX_PIXELS / sizes.size)
+                layouts[size] = if (isDetail) {
+                    buildDetail(widgetId, style, colors, background, all, today, now)
+                } else {
+                    buildOverview(widgetId, style, colors, background, all, today, now, appearance)
+                }
             }
-            val views = if (isDetail) {
-                buildDetail(widgetId, style, colors, background, all, today, now)
-            } else {
-                buildOverview(widgetId, style, colors, background, all, today, now)
-            }
+            val views = RemoteViews(layouts)
             manager.updateAppWidget(widgetId, views)
             if (!isDetail) {
                 // 集合视图的内容不在 RemoteViews 里，改完必须单独通知一次数据变化，
@@ -120,6 +124,7 @@ class WidgetRefresher(
         events: List<CountdownEvent>,
         today: LocalDate,
         now: LocalDateTime,
+        appearance: AppSettings,
     ): RemoteViews {
         val views = RemoteViews(appContext.packageName, R.layout.widget_overview)
         // 背景是一张按当前配色画好的位图（见 WidgetAppearance），不是静态 drawable——
@@ -148,6 +153,11 @@ class WidgetRefresher(
         // extras 不参与 Intent 的相等性比较，只有 data 能起到这个作用。
         val adapter = Intent(appContext, WidgetListService::class.java)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            .putExtra(WidgetListService.EXTRA_STYLE, WidgetStyleCodec.encode(style))
+            .putExtra(WidgetListService.EXTRA_DARK, colors.dark)
+            .putExtra(WidgetListService.EXTRA_ACCENT, colors.accent)
+            .putExtra(WidgetListService.EXTRA_FROST, appearance.glassFrost)
+            .putExtra(WidgetListService.EXTRA_OPAQUE, appearance.usesOpaqueGlass)
             .setData("morrow://widget/list/$widgetId?v=${adapterSeq.incrementAndGet()}".toUri())
         views.setRemoteAdapter(widgetId, R.id.widget_list, adapter)
         // 条目点击 = 模板（目标 Activity）+ fill-in（事件 id/data），模板必须是 MUTABLE 才能被填
@@ -294,26 +304,23 @@ class WidgetRefresher(
         )
     }
 
-    /**
-     * 小部件在桌面上的当前尺寸（px），用来画背景位图。
-     *
-     * `OPTION_APPWIDGET_MIN_WIDTH/HEIGHT` 的单位是 dp，且把宿主的网格留白也算在内，
-     * 所以位图会比可见区域略大一圈——`fitXY` 缩回去只会让圆角稍微圆一点，不会变形。
-     * 上限卡在 1800px：再大的位图在桌面缩放时也没有收益，只是多占内存。
-     */
-    private fun widgetSizePx(widgetId: Int, density: Float): Pair<Int, Int> {
-        val options = manager.getAppWidgetOptions(widgetId)
-        val widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300)
-        val heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 150)
-        return (widthDp * density).toInt().coerceIn(160, 1800) to
-            (heightDp * density).toInt().coerceIn(120, 1800)
-    }
-
     private fun isSystemDark(): Boolean =
         appContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
             Configuration.UI_MODE_NIGHT_YES
 
     companion object {
+        /** API 31+ 宿主实际尺寸列表，RemoteViews 为横竖屏选择匹配图；总位图预算按变体均分。 */
+        internal fun widgetSizes(options: Bundle, landscape: Boolean): List<SizeF> {
+            val supplied = options.getParcelableArrayList(AppWidgetManager.OPTION_APPWIDGET_SIZES, SizeF::class.java)
+                .orEmpty().filter { it.width.isFinite() && it.height.isFinite() && it.width > 0 && it.height > 0 }
+                .distinct().take(16)
+            if (supplied.isNotEmpty()) return supplied
+            val widthKey = if (landscape) AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH else AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH
+            val heightKey = if (landscape) AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT else AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT
+            return listOf(SizeF(options.getInt(widthKey, 300).coerceAtLeast(1).toFloat(),
+                options.getInt(heightKey, 150).coerceAtLeast(1).toFloat()))
+        }
+
         private const val TAG = "MorrowWidget"
 
         /** 集合视图 adapter 的刷新序号：让每次 setRemoteAdapter 的 data URI 都不同。 */

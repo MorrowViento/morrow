@@ -1,6 +1,9 @@
 package com.morrowviento.morrow.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
@@ -241,12 +244,14 @@ fun HomeScreen(
                         .fillMaxSize()
                         .safeDrawingPadding(),
                 ) {
-                    // 这一整列（标题 + 事件列表）登记为底栏的采样源。
-                    // 玻璃采的是 backdrop 层而不是屏幕上压在它下面的像素：只把壁纸放进
-                    // sampledContent 的话，卡片再怎么从底栏背后滚过去也永远透不出来。
-                    // 底栏与所有浮层都在这列之外，避免玻璃采到自己。
-                    //
-                    Column(Modifier.fillMaxSize().imePadding().glassContentSource(contentBackdrop)) {
+                    // 唯一活动页登记为底栏采样源；浮层和底栏留在槽外，避免自我采样。
+                    HomeCalendarContent(
+                        calendarActive = showCalendar,
+                        reduceMotion = appSettings.reduceMotion,
+                        modifier = Modifier.fillMaxSize().imePadding().glassContentSource(contentBackdrop),
+                    ) { calendarActive ->
+                    if (!calendarActive) {
+                    Column(Modifier.fillMaxSize()) {
                         HomeHeader(
                             state = state,
                             listState = shownListState,
@@ -340,23 +345,17 @@ fun HomeScreen(
                         }
                     }
 
-                    // 日历是整页替换（不是浮层）：盖住列表与 FAB，但与列表共用同一个 backdrop，
-                    // 换成独立窗口会切断采样源让玻璃材质失效。它自己会重铺一层不透明底色，
-                    // 不能依赖下层首页透出来。
-                    GlassPage(
-                        visible = showCalendar,
-                        modifier = Modifier.fillMaxSize(),
-                        reduceMotion = appSettings.reduceMotion,
-                    ) {
+                    } else {
                         CalendarScreen(
                             state = calendar.current,
-                            // 直接用布尔量：邻页现在是惰性的，读 `prev` 会真的去算一整页
+                            // 不读惰性邻页，避免组合期同步构建日历。
                             canPrev = calendar.canPrev,
                             canNext = calendar.canNext,
                             actions = calendarActions,
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },
                         )
+                    }
                     }
 
                     // 设置中心同样是整页覆盖：自带不透明底色与返回处理（见 SettingsScreen）。
@@ -529,6 +528,35 @@ fun HomeScreen(
                     }
                 },
             )
+        }
+    }
+}
+
+@Composable
+internal fun HomeCalendarContent(
+    calendarActive: Boolean,
+    reduceMotion: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable (Boolean) -> Unit,
+) {
+    AnimatedContent(
+        targetState = calendarActive,
+        modifier = modifier,
+        contentAlignment = Alignment.TopStart,
+        transitionSpec = {
+            // 旧页面立即退场，不用重新铺壁纸遮挡隐藏首页。
+            val enter = if (reduceMotion) EnterTransition.None else {
+                fadeIn(GlassMotion.enterFade) + slideInHorizontally(GlassMotion.navigationSlide) { width ->
+                    if (targetState) width / 12 else -width / 12
+                }
+            }
+            (enter togetherWith ExitTransition.None).using(null)
+        },
+        label = "homeCalendarPage",
+    ) { active ->
+        Box(Modifier.fillMaxSize()) {
+            // AnimatedContent 在新页入场完成前仍保留旧槽，旧槽不再绘制或接收触摸。
+            if (active == calendarActive) content(active)
         }
     }
 }

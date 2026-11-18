@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -35,17 +36,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.ImageBitmap
+import com.kyant.capsule.ContinuousRoundedRectangle
+import com.morrowviento.morrow.ui.glass.GlassOptics
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -64,7 +70,6 @@ import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassBackdropHost
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.GlassTheme
-import com.morrowviento.morrow.ui.glass.LocalAccentPalette
 import com.morrowviento.morrow.ui.glass.LocalBackdropSettings
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -153,6 +158,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
 
                         ConfigContent(
                             style = style,
+                            settings = prefs,
                             isDetail = isDetail,
                             pinMode = pinMode,
                             events = events,
@@ -162,10 +168,11 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                                 // 连点两下会 pin 两个实例，用标志挡住
                                 if (!adding) {
                                     adding = true
+                                    val savedStyle = style
                                     scope.launch {
                                         if (!pinMode) {
                                             // 一行可能代表多个同类实例：样式逐个落盘，再整组刷新。
-                                            appWidgetIds.forEach { id -> store.save(id, style) }
+                                            appWidgetIds.forEach { id -> store.save(id, savedStyle) }
                                             // 配置完成时系统还没走 onUpdate，先主动刷一次，点完成就能看到效果
                                             app.widgetRefresher.refreshIds(appWidgetIds, isDetail)
                                             setResult(
@@ -177,7 +184,7 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                                         }
                                         // 待认领：pin 成功前桌面还没给 id，样式只能先挂在槽位上，
                                         // 由新实例的首次 onUpdate 认领（见 WidgetRefresher.refresh）
-                                        store.savePending(isDetail, style)
+                                        store.savePending(isDetail, savedStyle)
                                         if (pinToHomeScreen()) {
                                             finish()
                                         } else {
@@ -239,6 +246,7 @@ class DetailWidgetConfigActivity : BaseWidgetConfigActivity() {
 @Composable
 private fun ConfigContent(
     style: WidgetStyle,
+    settings: AppSettings,
     isDetail: Boolean,
     pinMode: Boolean,
     events: List<CountdownEvent>,
@@ -302,7 +310,7 @@ private fun ConfigContent(
                 }
 
                 item(key = "preview") {
-                    WidgetPreview(style, isDetail)
+                    WidgetPreview(style, isDetail, settings)
                 }
 
                 item(key = "preset-title") { SectionTitle("样式预设") }
@@ -396,54 +404,41 @@ private fun ConfigContent(
  * 实时预览：把当前字号/配色/显隐按真实小部件的样子画一遍。
  *
  * 背景不再用手写的渐变近似，而是**直接调 [WidgetAppearance.render]**——桌面拿到的
- * 就是这张位图，所以预览与真机像素级一致，不会出现「这里好看、桌面变样」。
+ * 使用同一渲染函数；桌面实际尺寸和原生文字由启动器决定，预览不代表逐像素真机验收。
  */
 @Composable
-private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
-    val systemDark = isSystemInDarkTheme()
-    val dark = when (style.palette) {
-        WidgetPalette.SYSTEM, WidgetPalette.ACCENT -> systemDark
-        WidgetPalette.DARK -> true
-        WidgetPalette.LIGHT -> false
-    }
-    val vivid = style.palette == WidgetPalette.ACCENT
-    val accent = LocalAccentPalette.current
+internal fun WidgetPreview(style: WidgetStyle, isDetail: Boolean, settings: AppSettings) {
+    val colors = style.colors(settings, isSystemInDarkTheme())
+    val dark = colors.dark
+    val context = LocalContext.current
     val density = LocalDensity.current.density
-    // 预览高度按预设给：真机高度由桌面决定，这里只要比例对得上就够
-    val previewHeight = when {
-        isDetail -> 118.dp
-        style.preset == WidgetPreset.MINIMAL -> 78.dp
-        style.preset == WidgetPreset.DETAILED -> 190.dp
-        else -> 134.dp
-    }
-    // 宽度按屏幕估算（配置页左右各留一圈内边距）；位图会被 fitXY 缩到实际宽度
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val background = remember(accent, dark, vivid, density, previewHeight, screenWidthDp) {
-        val w = ((screenWidthDp - 88) * density).toInt().coerceAtLeast(160)
-        val h = (previewHeight.value * density).toInt().coerceAtLeast(120)
-        WidgetAppearance.render(w, h, density, accent, dark, vivid).asImageBitmap()
-    }
-    val primary = if (dark) Color.White else Color(WidgetStyle.INK)
-    val secondary = if (dark) Color.White.copy(alpha = 0.62f) else Color(WidgetStyle.INK_60)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(previewHeight)
-            .clip(RoundedCornerShape(22.dp))
-            .drawBehind {
-                drawImage(
-                    background,
-                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                )
+    val fontScale = LocalDensity.current.fontScale
+    val previewHeight = ((if (isDetail) 170f else when (style.preset) {
+        WidgetPreset.MINIMAL -> 150f
+        WidgetPreset.STANDARD -> 340f
+        WidgetPreset.DETAILED -> 400f
+    }) * fontScale).dp
+    val primary = Color(colors.textPrimary)
+    val secondary = Color(colors.textSecondary)
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    Box(Modifier.fillMaxWidth().height(previewHeight).onSizeChanged { size = it }
+        .clip(ContinuousRoundedRectangle(GlassOptics.CARD_CORNER_DP.dp))) {
+        androidx.compose.runtime.key(size, settings, colors, density) {
+            val background by produceState<ImageBitmap?>(null) {
+                if (size.width > 0 && size.height > 0) {
+                    value = WidgetAppearance.render(context, size.width, size.height, density, settings, colors).asImageBitmap()
+                }
             }
-            .padding(16.dp),
-    ) {
+            background?.let {
+                Image(it, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+            }
+        }
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)) {
         if (!isDetail) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("朝夕", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = primary))
                 Spacer(Modifier.weight(1f))
-                Text("3 个事件", style = TextStyle(fontSize = 11.sp, color = secondary))
+                Text("${minOf(style.rows, 3)} 个示例事件", style = TextStyle(fontSize = 11.sp, color = secondary))
             }
         }
         val samples = if (isDetail) {
@@ -457,7 +452,12 @@ private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
         }
         samples.forEach { (title, badge, unit) ->
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 7.dp).then(
+                    if (isDetail) Modifier else Modifier
+                        .background(Color(WidgetAppearance.rowTint(colors, settings.glassFrost, settings.usesOpaqueGlass)), RoundedCornerShape(26.dp))
+                        .border(1.dp, Color(colors.separator), RoundedCornerShape(26.dp))
+                        .padding(horizontal = 18.dp, vertical = 14.dp)
+                ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
@@ -466,7 +466,7 @@ private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = TextStyle(
-                            fontSize = (style.fontScale.titleSp * 0.9f).sp,
+                            fontSize = style.fontScale.titleSp.sp,
                             color = primary,
                         ),
                     )
@@ -478,7 +478,7 @@ private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
                         Text(
                             text = meta,
                             maxLines = 1,
-                            style = TextStyle(fontSize = (style.fontScale.metaSp * 0.9f).sp, color = secondary),
+                            style = TextStyle(fontSize = style.fontScale.metaSp.sp, color = secondary),
                         )
                     }
                     if (style.showProgress) {
@@ -505,17 +505,18 @@ private fun WidgetPreview(style: WidgetStyle, isDetail: Boolean) {
                     Text(
                         text = badge,
                         style = TextStyle(
-                            fontSize = (style.fontScale.badgeSp * 0.9f).sp,
+                            fontSize = (style.fontScale.badgeSp * if (isDetail) 1.25f else 1f).sp,
                             fontWeight = FontWeight.Bold,
                             color = primary,
                         ),
                     )
                     Text(
                         text = unit,
-                        style = TextStyle(fontSize = (style.fontScale.metaSp * 0.9f).sp, color = secondary),
+                        style = TextStyle(fontSize = style.fontScale.metaSp.sp, color = secondary),
                     )
                 }
             }
+        }
         }
     }
 }

@@ -13,7 +13,6 @@ import com.morrowviento.morrow.MainActivity
 import com.morrowviento.morrow.R
 import com.morrowviento.morrow.MorrowApp
 import com.morrowviento.morrow.data.settings.AccentColor
-import com.morrowviento.morrow.data.settings.AccentPalette
 import com.morrowviento.morrow.data.widget.WidgetRow
 import com.morrowviento.morrow.data.widget.WidgetSnapshotBuilder
 import kotlinx.coroutines.flow.first
@@ -35,59 +34,88 @@ class WidgetListService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = WidgetListFactory(
         applicationContext,
         intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID),
+        intent,
     )
+
+    companion object {
+        internal const val EXTRA_STYLE = "widget_style"
+        internal const val EXTRA_DARK = "widget_dark"
+        internal const val EXTRA_ACCENT = "widget_accent"
+        internal const val EXTRA_FROST = "widget_frost"
+        internal const val EXTRA_OPAQUE = "widget_opaque"
+    }
 }
 
-private class WidgetListFactory(
+internal class WidgetListFactory(
     private val context: Context,
     private val widgetId: Int,
+    private val intent: Intent,
 ) : RemoteViewsService.RemoteViewsFactory {
 
-    private var rows: List<WidgetRow> = emptyList()
-    private var style: WidgetStyle = WidgetStyle()
+    private data class Snapshot(
+        val rows: List<WidgetRow> = emptyList(),
+        val style: WidgetStyle = WidgetStyle(),
+        val colors: WidgetColors = WidgetStyle().colors(false, AccentColor.DEFAULT.palette),
+        val frost: Float = 0f,
+        val opaque: Boolean = false,
+    )
 
-    /** 应用内实际生效的配色；行文字与进度条跟着它走，和刷新器用的是同一份。 */
-    private var palette: AccentPalette = AccentColor.DEFAULT.palette
+    @Volatile private var snapshot = Snapshot()
 
     /** 读库只在 onDataSetChanged 里做一次，getViewAt 只做排版。 */
     override fun onDataSetChanged() {
         val app = context.applicationContext as? MorrowApp ?: return
         runBlocking {
             runCatching {
-                palette = app.settingsRepository.appSettings.first().resolvedAccent
-                style = WidgetConfigStore(app.settingsRepository).load(widgetId)
+                val appearance = app.settingsRepository.appSettings.first()
+                val style = WidgetStyleCodec.decode(intent.getStringExtra(WidgetListService.EXTRA_STYLE))
+                    ?: WidgetConfigStore(app.settingsRepository).load(widgetId)
+                val systemDark = context.resources.configuration.uiMode and
+                    Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+                val colors = if (intent.hasExtra(WidgetListService.EXTRA_DARK)) {
+                    val dark = intent.getBooleanExtra(WidgetListService.EXTRA_DARK, false)
+                    WidgetColors(WidgetAppearance.textPrimary(dark), WidgetAppearance.textSecondary(dark),
+                        intent.getIntExtra(WidgetListService.EXTRA_ACCENT, 0), WidgetAppearance.separator(dark),
+                        dark, style.palette == WidgetPalette.ACCENT)
+                } else style.colors(appearance, systemDark)
                 val events = app.eventRepository.loadAll()
-                rows = WidgetSnapshotBuilder.overview(
+                val rows = WidgetSnapshotBuilder.overview(
                     events = events,
                     today = LocalDate.now(),
                     now = LocalDateTime.now(),
                     // 集合视图自己会滚，不再按预设截断；上限只是防御超大列表拖慢 binder
                     limit = ROW_LIMIT,
                 ).rows
+                snapshot = Snapshot(rows, style, colors,
+                    intent.getFloatExtra(WidgetListService.EXTRA_FROST, appearance.glassFrost),
+                    intent.getBooleanExtra(WidgetListService.EXTRA_OPAQUE, appearance.usesOpaqueGlass))
             }.onFailure {
                 // 小部件是顺带能力：读失败就让列表空着，不能把桌面进程的绑定弄崩
-                rows = emptyList()
+                snapshot = snapshot.copy(rows = emptyList())
             }
         }
         // 桌面是否真的回调了这里，是「列表不更新」问题的第一现场，
         // 用 logcat -s MorrowWidget 一眼可辨
-        android.util.Log.i("MorrowWidget", "onDataSetChanged widgetId=$widgetId rows=${rows.size}")
+        android.util.Log.i("MorrowWidget", "onDataSetChanged widgetId=$widgetId rows=${snapshot.rows.size}")
     }
 
     override fun onCreate() = Unit
 
     override fun onDestroy() {
-        rows = emptyList()
+        snapshot = snapshot.copy(rows = emptyList())
     }
 
-    override fun getCount(): Int = rows.size
+    override fun getCount(): Int = snapshot.rows.size
 
     override fun getViewAt(position: Int): RemoteViews {
-        val row = rows.getOrNull(position) ?: return RemoteViews(context.packageName, R.layout.widget_row)
+        val current = snapshot
+        val row = current.rows.getOrNull(position) ?: return RemoteViews(context.packageName, R.layout.widget_row)
         val views = RemoteViews(context.packageName, R.layout.widget_row)
-        val dark = context.resources.configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        val colors = style.colors(systemDark = dark, accent = palette)
+        val style = current.style
+        val colors = current.colors
+        views.setInt(R.id.widget_row_bg, "setColorFilter",
+            WidgetAppearance.rowTint(colors, current.frost, current.opaque))
+        views.setInt(R.id.widget_row_edge, "setColorFilter", colors.separator)
 
         views.setTextViewText(R.id.widget_row_title, row.title)
         views.setTextColor(R.id.widget_row_title, colors.textPrimary)
@@ -118,11 +146,6 @@ private class WidgetListFactory(
             )
         }
 
-        // 行分隔线：颜色在运行时写（RemoteViews 没有「设 drawable」的能力，
-        // 但 setBackgroundColor 是 @RemotableViewMethod，可以按反射调用）。
-        // 最后一行也画——List 底部本来就有留白，多一条线正好收边。
-        views.setInt(R.id.widget_row_divider, "setBackgroundColor", colors.separator)
-
         // 点击由父级（WidgetRefresher 里的 setPendingIntentTemplate）+ 这里的 fill-in 组合而成：
         // fill-in 只能补 extras/data，不能自己带 PendingIntent
         views.setOnClickFillInIntent(
@@ -138,7 +161,7 @@ private class WidgetListFactory(
 
     override fun getViewTypeCount(): Int = 1
 
-    override fun getItemId(position: Int): Long = rows.getOrNull(position)?.id?.hashCode()?.toLong() ?: position.toLong()
+    override fun getItemId(position: Int): Long = snapshot.rows.getOrNull(position)?.id?.hashCode()?.toLong() ?: position.toLong()
 
     override fun hasStableIds(): Boolean = true
 

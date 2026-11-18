@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -181,6 +183,7 @@ fun ChoiceChip(
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .heightIn(min = 44.dp)
             .padding(horizontal = 13.dp, vertical = 10.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (selected) {
@@ -196,6 +199,9 @@ fun ChoiceChip(
                 text = label,
                 style = TextStyle(
                     fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     color = if (selected) primary else secondary,
                 ),

@@ -180,6 +180,46 @@ class SettingsViewModelTest {
         withTimeout(10_000) { vm.state.first { it.update.stage == com.morrowviento.morrow.ui.update.UpdateStage.IDLE } }
     }
 
+    @Test fun glassSettingsRefreshWidgetsOnlyAfterCommittedSnapshot(): Unit = runBlocking {
+        val snapshots = kotlinx.coroutines.channels.Channel<com.morrowviento.morrow.data.settings.AppSettings>(
+            kotlinx.coroutines.channels.Channel.UNLIMITED)
+        val vm = model(refresh = object : WidgetRefreshTrigger {
+            override suspend fun refreshAll() { snapshots.send(settings.snapshotSettings()) }
+        })
+        for (level in com.morrowviento.morrow.data.settings.GlassFrostLevel.entries) {
+            vm.setGlassFrostLevel(level)
+            val committed = withTimeout(10_000) { snapshots.receive() }
+            assertEquals(level.frost, committed.glassFrost, 0f)
+            assertEquals(level.frost >= 0.85f, committed.usesOpaqueGlass)
+        }
+        vm.setReduceTransparency(false)
+        assertFalse(withTimeout(10_000) { snapshots.receive() }.usesOpaqueGlass)
+        vm.setReduceTransparency(true)
+        assertTrue(withTimeout(10_000) { snapshots.receive() }.usesOpaqueGlass)
+        snapshots.close()
+    }
+
+    @Test fun failedGlassSettingsWriteDoesNotRefreshWidgets() = runBlocking {
+        val failing = SettingsRepository(object : DataStore<Preferences> by store {
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+                throw IOException("write failed")
+        })
+        var refreshes = 0
+        val vm = model(failing, object : WidgetRefreshTrigger {
+            override suspend fun refreshAll() { refreshes++ }
+        })
+        val before = settings.snapshotSettings()
+        vm.setGlassFrostLevel(com.morrowviento.morrow.data.settings.GlassFrostLevel.HEAVY)
+        assertTrue(finished(vm).message!!.startsWith("保存设置失败"))
+        assertEquals(0, refreshes)
+        assertEquals(before, settings.snapshotSettings())
+        vm.consumeMessage()
+        vm.setReduceTransparency(true)
+        assertTrue(finished(vm).message!!.startsWith("保存设置失败"))
+        assertEquals(0, refreshes)
+        assertEquals(before, settings.snapshotSettings())
+    }
+
     @Test fun widgetRefreshFailureCannotDeleteCommittedImage() = runBlocking {
         val vm = model(refresh = object : WidgetRefreshTrigger {
             override suspend fun refreshAll(): Unit = throw IOException("binder failed")

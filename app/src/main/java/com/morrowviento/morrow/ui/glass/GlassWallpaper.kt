@@ -98,7 +98,7 @@ internal object GlassWallpaper {
         val h = heightPx.coerceAtLeast(1)
         val key = keyOf(w, h, base, dark, blobs)
         synchronized(cache) { cache[key]?.let { return it } }
-        val rendered = draw(w, h, base, dark, blobs)
+        val rendered = renderUncached(w, h, base, dark, blobs)
         synchronized(cache) {
             cache[key] = rendered
             lastRendered = rendered
@@ -108,7 +108,8 @@ internal object GlassWallpaper {
 
     // ---------------------------------------------------------------- 绘制
 
-    private fun draw(
+    /** 小部件离线绘制不写首页缓存或 lastRendered。 */
+    fun renderUncached(
         w: Int,
         h: Int,
         base: Color,

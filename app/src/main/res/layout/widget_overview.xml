@@ -10,8 +10,8 @@
   XML drawable 写不了动态色；`RemoteViews` 也没有「运行时设 drawable」的能力。
   改成一层铺满的 ImageView，刷新时用 `setImageViewBitmap` 塞一张按当前配色画好的
   位图（见 WidgetAppearance），观感与应用内的卡片同源。
-  注意：这张位图必须铺在最底层，且 scaleType 用 fitXY——位图已按小部件实际尺寸生成，
-  圆角不会被拉伸。
+  位图按宿主提供的 SizeF 变体生成，并保持比例缩小以限制 binder 预算；fitXY 恢复对应尺寸。
+  未提供实际尺寸的旧宿主使用横竖屏范围回落，最终效果仍需启动器验收。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
@@ -29,10 +29,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
         android:paddingTop="14dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:id="@+id/widget_header"

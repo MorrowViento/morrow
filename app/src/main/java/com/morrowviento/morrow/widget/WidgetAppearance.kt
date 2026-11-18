@@ -1,262 +1,210 @@
 package com.morrowviento.morrow.widget
 
+import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import com.morrowviento.morrow.data.backdrop.BackdropImage
 import com.morrowviento.morrow.data.settings.AccentPalette
+import com.morrowviento.morrow.data.settings.AppSettings
+import com.morrowviento.morrow.data.settings.BackdropMode
+import com.morrowviento.morrow.ui.glass.GlassOptics
+import com.morrowviento.morrow.ui.glass.GlassWallpaper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
-/**
- * 小部件的「液态玻璃」外观。
- *
- * ## 为什么是画一张位图
- *
- * 应用内的质感来自**实时模糊背后的壁纸**，RemoteViews 没有这条通道：`GlassSurface`
- * 是 Compose 的绘制，跨进程给小部件用不了；`android:background` 只能是静态 drawable，
- * 而配色是用户可选、运行时才知道的，XML 里写不了。
- *
- * 所以这里用 Canvas 把「同一幅壁纸」画进一张位图：同样的四团色斑、同样的斜向光带、
- * 同样的圆角与描边。桌面拿到的是一张图，静态、零成本，但观感与应用内的卡片同源——
- * 换配色时位图跟着重画，小部件与 App 不会各说各话。
- *
- * ## 与应用内的对应关系
- *
- * | 应用内 | 这里 |
- * |---|---|
- * | `GlassBackdrop` 的四团径向色斑 | 同 `AccentColor.blobs(dark)`，同相对位置 |
- * | 斜向光带（布料折了一下） | 一条对角 LinearGradient |
- * | 玻璃上沿收光 | 顶部 34% 高度的白色柔光 + 1.5dp 发丝高光 |
- * | 玻璃有厚度 | 底部 24% 的暗渐变（内阴影） |
- * | 边缘折射出一圈亮 | 沿圆角画模糊描边（只留内侧那半，见 [render] 第 6 步） |
- * | 卡片圆角 22dp | 同 22dp，位图外圈透明 |
- *
- * 位图按小部件实际尺寸生成（见 [render]），圆角不会被拉伸成椭圆。
- */
+/** 模糊应用自己的壁纸像素，不采样启动器壁纸；原生文字不进入位图。 */
 internal object WidgetAppearance {
+    const val MAX_PIXELS = 262_144
+    const val CACHE_BYTES = 8 * 1024 * 1024
+    private const val WORK_SIDE = 384
+    private val cache = LinkedHashMap<RenderKey, Bitmap>(8, 0.75f, true)
+    private val renderMutex = Mutex()
+    internal val cachedBytes: Int get() = synchronized(cache) { cache.values.sumOf { it.allocationByteCount } }
 
-    /** 与应用内卡片一致的圆角。 */
-    private const val CornerRadiusDp = 22f
-
-    /** 四个色斑的中心（相对宽高的比例），与应用内 `GlassBackdrop` 同序：暖 / 冷 / 天青 / 深。 */
-    private val BlobCenters = arrayOf(
-        0.08f to 0.05f,
-        0.98f to 0.30f,
-        0.18f to 0.90f,
-        0.92f to 1.00f,
+    internal data class RenderKey(
+        val width: Int,
+        val height: Int,
+        val density: Float,
+        val imageIdentity: String?,
+        val palette: AccentPalette,
+        val dark: Boolean,
+        val vivid: Boolean,
+        val frost: Float,
+        val opaque: Boolean,
     )
 
-    /**
-     * 生成一张小部件背景。
-     *
-     * @param vivid true = 「主题色」档：底色以强调色为主，色斑往强调色上偏；
-     *   false = 「玻璃」档：底色是中性玻璃，色斑保持配色方案原本的冷暖。
-     * @return 一张 [widthPx] × [heightPx] 的位图，圆角外是透明的。
-     */
-    fun render(
+    /** 同比缩小且同时限制长边和总像素，保持圆角在宿主坐标中的 dp 大小。 */
+    internal fun boundedSize(width: Int, height: Int, maxPixels: Int = MAX_PIXELS): Pair<Int, Int> {
+        val w = width.coerceAtLeast(1)
+        val h = height.coerceAtLeast(1)
+        val scale = minOf(1.0, 1024.0 / maxOf(w, h), sqrt(maxPixels.coerceIn(1, MAX_PIXELS).toDouble() / (w.toDouble() * h)))
+        return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
+    }
+
+    suspend fun render(
+        context: Context,
         widthPx: Int,
         heightPx: Int,
         density: Float,
-        accent: AccentPalette,
-        dark: Boolean,
-        vivid: Boolean,
+        settings: AppSettings,
+        colors: WidgetColors,
+        maxPixels: Int = MAX_PIXELS,
     ): Bitmap {
-        val w = widthPx.coerceAtLeast(1)
-        val h = heightPx.coerceAtLeast(1)
-        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val radius = CornerRadiusDp * density
-        val rect = RectF(0f, 0f, w.toFloat(), h.toFloat())
-
-        val clip = Path().apply { addRoundRect(rect, radius, radius, Path.Direction.CW) }
-        canvas.save()
-        canvas.clipPath(clip)
-
-        // 1) 底色。
-        //
-        // 4.1.0 又整体提亮了一档：上一版深色底 #2A2A34 在桌面上仍读作「一块深灰板」，
-        // 而玻璃本身是**浅而透**的——底色一黑，铺在上面的色斑与高光就浮不出来。
-        // 现在深色底抬到 #3E3E4A（约 24% 亮度），主题色档也不再往黑里压那么狠
-        // （0.40 → 0.24），否则鲜艳的配色在桌面上反而更像黑卡。
-        val accentArgb = accent.argb(dark).toInt()
-        val base = when {
-            vivid && dark -> blend(blend(accentArgb, WHITE, 0.12f), BLACK, 0.24f)
-            vivid -> blend(accentArgb, WHITE, 0.78f)
-            dark -> rgb(62, 62, 74)
-            else -> rgb(252, 252, 254)
+        val imageMode = settings.backdrop.effectiveMode == BackdropMode.IMAGE
+        val identity = if (imageMode) withContext(Dispatchers.IO) {
+            BackdropImage.file(context, settings.backdrop.image).let {
+                "${it.absolutePath}:${it.lastModified()}:${it.length()}"
+            }
+        } else null
+        val (w, h) = boundedSize(widthPx, heightPx, maxPixels)
+        val scaledDensity = density * minOf(w.toFloat() / widthPx.coerceAtLeast(1), h.toFloat() / heightPx.coerceAtLeast(1))
+        val key = RenderKey(w, h, scaledDensity, identity, settings.resolvedAccent,
+            colors.dark, colors.vivid, settings.glassFrost, settings.usesOpaqueGlass)
+        synchronized(cache) { cache[key]?.let { return it } }
+        return withContext(Dispatchers.Default) {
+            // 用挂起锁串行工作图；不能持有 cache monitor 渲染，否则主线程查询也会被阻塞。
+            renderMutex.withLock {
+                synchronized(cache) { cache[key] } ?: run {
+                    val image = if (imageMode) withContext(Dispatchers.IO) {
+                        BackdropImage.load(context, settings.backdrop.image)
+                    } else null
+                    val bitmap = draw(key, image)
+                    synchronized(cache) {
+                        cache[key] = bitmap
+                        while (cache.values.sumOf { it.allocationByteCount } > CACHE_BYTES) {
+                            cache.remove(cache.keys.first()) // 不 recycle 已借给 Compose/RemoteViews 的图。
+                        }
+                    }
+                    bitmap
+                }
+            }
         }
-        canvas.drawColor(base)
-
-        // 2) 四团色斑。半径给到长边的 0.70，几团光连成一片才像「被模糊过的壁纸」，
-        //    小一点就退化成四个彩色圆点。深色下先把色斑往白里提一档：
-        //    暗色斑铺在暗底上等于没有颜色。
-        val blobs = accent.blobs(dark)
-        val blobRadius = maxOf(w, h) * 0.70f
-        val blobAlpha = if (dark) 215 else 210
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        BlobCenters.forEachIndexed { index, (fx, fy) ->
-            val raw = blobs[index].toInt()
-            // 深色下提亮的比例从 0.24 提高到 0.34：底色抬亮之后，色斑也得跟着亮，
-            // 否则两者亮度接近，四团色就「糊」成一片没有层次的灰。
-            val lifted = if (dark) blend(raw, WHITE, 0.34f) else raw
-            val tint = if (vivid) blend(accentArgb, lifted, 0.36f) else lifted
-            paint.shader = RadialGradient(
-                w * fx,
-                h * fy,
-                blobRadius,
-                withAlpha(tint, blobAlpha),
-                withAlpha(tint, 0),
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRect(rect, paint)
-        }
-        paint.shader = null
-
-        // 3) 斜向光带：一条亮面接一条暗面，位置与应用内那条折痕一致（斜 18°，
-        //    屏幕上大约落在 46% 高度处）。小部件矮，所以直接用对角渐变近似。
-        val sheen = if (dark) 0.20f else 0.46f
-        val shade = if (dark) 0.12f else 0.10f
-        paint.shader = LinearGradient(
-            0f, 0f, w.toFloat(), h.toFloat(),
-            intArrayOf(
-                withAlpha(WHITE, 0),
-                withAlpha(WHITE, (255 * sheen).toInt()),
-                withAlpha(WHITE, 0),
-                withAlpha(BLACK, (255 * shade).toInt()),
-            ),
-            floatArrayOf(0.0f, 0.42f, 0.58f, 1.0f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(rect, paint)
-        paint.shader = null
-
-        // 4) 顶部柔光 + 底部内阴影。
-        //
-        //    这两条是「玻璃有厚度」最省事也最有效的表达：上沿把环境光收进来，
-        //    下沿压一点暗，中间就鼓起来了。只画一条 1.5dp 的发丝线是不够的——
-        //    远看那只是一个白边，读不出体积。
-        //
-        //    底部的暗再收一档（70 → 44）：小部件上「下半张明显比上半张黑」是
-        //    「颜色太深」的第二个来源，它比底色本身更刺眼。
-        val topGlow = h * 0.34f
-        paint.shader = LinearGradient(
-            0f, 0f, 0f, topGlow,
-            withAlpha(WHITE, if (dark) 64 else 104),
-            withAlpha(WHITE, 0),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(0f, 0f, w.toFloat(), topGlow, paint)
-        paint.shader = null
-
-        val bottomShade = h * 0.24f
-        paint.shader = LinearGradient(
-            0f, h.toFloat(), 0f, h - bottomShade,
-            withAlpha(BLACK, if (dark) 44 else 20),
-            withAlpha(BLACK, 0),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(0f, h - bottomShade, w.toFloat(), h.toFloat(), paint)
-        paint.shader = null
-
-        // 5) 顶部发丝高光：玻璃上沿被光擦亮的那一条，1.5dp 就够，再宽就像贴了张白纸。
-        val highlight = 1.5f * density
-        paint.shader = LinearGradient(
-            0f, 0f, 0f, highlight,
-            withAlpha(WHITE, if (dark) 90 else 180),
-            withAlpha(WHITE, 0),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(0f, 0f, w.toFloat(), highlight, paint)
-        paint.shader = null
-
-        // 6) 内发光：沿圆角画一圈**模糊的**亮边，一半被裁剪掉，只剩内侧那圈柔光。
-        //    这是玻璃「边缘在折射光」的替身——静态位图做不了真折射，但一圈柔光
-        //    足以让边缘看起来是有厚度的弧面，而不是一条 1px 的线。
-        val glowWidth = 3f * density
-        val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = glowWidth
-            color = if (dark) withAlpha(WHITE, 64) else withAlpha(WHITE, 150)
-            maskFilter = BlurMaskFilter(glowWidth * 0.9f, BlurMaskFilter.Blur.NORMAL)
-        }
-        val glowInset = glowWidth / 2f
-        canvas.drawRoundRect(
-            RectF(glowInset, glowInset, w - glowInset, h - glowInset),
-            radius,
-            radius,
-            glow,
-        )
-
-        canvas.restore()
-
-        // 7) 一圈描边：浅色壁纸上没有它，小部件会与桌面糊在一起。
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 1f * density
-            color = if (dark) withAlpha(WHITE, 56) else withAlpha(BLACK, 30)
-        }
-        val inset = stroke.strokeWidth / 2f
-        canvas.drawRoundRect(
-            RectF(inset, inset, w - inset, h - inset),
-            radius,
-            radius,
-            stroke,
-        )
-        return bitmap
     }
 
-    /** 文字色：深底白、浅底近黑，与 `GlassColors.content` 同一档。 */
+    private fun draw(key: RenderKey, image: Bitmap?): Bitmap {
+        val scale = minOf(1f, WORK_SIDE.toFloat() / maxOf(key.width, key.height))
+        val w = (key.width * scale).roundToInt().coerceAtLeast(1)
+        val h = (key.height * scale).roundToInt().coerceAtLeast(1)
+        val base = if (key.dark) BLACK else 0xFFF2F2F7.toInt()
+        val work = if (image == null) {
+            GlassWallpaper.renderUncached(w, h, Color(base), key.dark, key.palette.blobs(key.dark)).asAndroidBitmap()
+        } else {
+            Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { bitmap ->
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(base)
+                val cover = maxOf(w.toFloat() / image.width, h.toFloat() / image.height)
+                val dw = image.width * cover
+                val dh = image.height * cover
+                canvas.drawBitmap(image, null, RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+                canvas.drawColor(withAlpha(base, if (key.dark) 0.30f else 0.16f))
+            }
+        }
+        try {
+            blur(work, (GlassOptics.frostRadiusDp(key.frost) * key.density * scale / 2f).roundToInt().coerceAtLeast(1))
+            val result = Bitmap.createBitmap(key.width, key.height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(result)
+            val rect = RectF(0f, 0f, key.width.toFloat(), key.height.toFloat())
+            val path = GlassOptics.cardPath(key.width, key.height, key.density)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.save()
+            canvas.clipPath(path)
+            canvas.drawBitmap(work, null, rect, paint)
+            val elevated = if (key.dark) INK else WHITE
+            canvas.drawColor(withAlpha(elevated, GlassOptics.veilAlpha(key.frost, key.opaque)))
+            canvas.drawColor(withAlpha(key.palette.argb(key.dark).toInt(),
+                if (key.vivid) 0.18f else GlassOptics.accentAlpha(key.dark)))
+            paint.shader = LinearGradient(0f, 0f, 0f, key.height.toFloat(),
+                intArrayOf(withAlpha(WHITE, if (key.dark) 0.10f else 0.16f), 0, withAlpha(BLACK, 0.04f)),
+                floatArrayOf(0f, 0.35f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawRect(rect, paint)
+            paint.shader = null
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = key.density.coerceAtLeast(0.5f)
+            paint.color = withAlpha(WHITE, if (key.dark) 0.22f else 0.38f)
+            canvas.drawPath(path, paint)
+            canvas.restore()
+            return result
+        } finally {
+            work.recycle() // 仅本次渲染拥有的工作图；不动 BackdropImage 的共享源图。
+        }
+    }
+
+    /** 三次可分离盒滤波近似高斯，预乘 alpha 避免透明像素 RGB 产生暗边。 */
+    internal fun blur(bitmap: Bitmap, radius: Int) {
+        if (radius <= 0) return
+        val w = bitmap.width
+        val h = bitmap.height
+        var pixels = IntArray(w * h)
+        var buffer = IntArray(pixels.size)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        pixels.indices.forEach { i ->
+            val p = pixels[i]
+            val a = p ushr 24
+            pixels[i] = (a shl 24) or ((((p ushr 16) and 255) * a / 255) shl 16) or
+                ((((p ushr 8) and 255) * a / 255) shl 8) or ((p and 255) * a / 255)
+        }
+        repeat(3) {
+            filter(pixels, buffer, w, h, radius, horizontal = true)
+            val swap = pixels; pixels = buffer; buffer = swap
+            filter(pixels, buffer, w, h, radius, horizontal = false)
+            val swapBack = pixels; pixels = buffer; buffer = swapBack
+        }
+        pixels.indices.forEach { i ->
+            val p = pixels[i]
+            val a = p ushr 24
+            pixels[i] = if (a == 0) 0 else (a shl 24) or
+                (((((p ushr 16) and 255) * 255 / a).coerceAtMost(255)) shl 16) or
+                (((((p ushr 8) and 255) * 255 / a).coerceAtMost(255)) shl 8) or
+                (((p and 255) * 255 / a).coerceAtMost(255))
+        }
+        bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+    }
+
+    private fun filter(src: IntArray, dst: IntArray, w: Int, h: Int, radius: Int, horizontal: Boolean) {
+        val length = if (horizontal) w else h
+        val lines = if (horizontal) h else w
+        val step = if (horizontal) 1 else w
+        val window = radius * 2 + 1
+        repeat(lines) { line ->
+            val start = if (horizontal) line * w else line
+            var a = 0; var r = 0; var g = 0; var b = 0
+            fun add(p: Int, sign: Int) {
+                a += (p ushr 24) * sign; r += ((p ushr 16) and 255) * sign
+                g += ((p ushr 8) and 255) * sign; b += (p and 255) * sign
+            }
+            for (i in -radius..radius) add(src[start + i.coerceIn(0, length - 1) * step], 1)
+            repeat(length) { i ->
+                dst[start + i * step] = ((a / window) shl 24) or ((r / window) shl 16) or
+                    ((g / window) shl 8) or (b / window)
+                add(src[start + (i - radius).coerceIn(0, length - 1) * step], -1)
+                add(src[start + (i + radius + 1).coerceIn(0, length - 1) * step], 1)
+            }
+        }
+    }
+
     fun textPrimary(dark: Boolean): Int = if (dark) WHITE else INK
-
-    fun textSecondary(dark: Boolean): Int = if (dark) withAlpha(WHITE, 158) else withAlpha(INK_SOFT, 153)
-
-    /**
-     * 行与行之间的分隔线。
-     *
-     * 小部件的每一行原本只靠 7dp 的留白分开，两张卡片紧挨着、行距又小的时候，
-     * 眼睛会把「一条事件的标题 + 天数」和下一行的天数读成一片（真机反馈：
-     * 「几条事件之间分割不明晰」）。一条 0.6dp、12%/10% 的细线最省地方也最有效：
-     * 它不参与配色，只在玻璃内侧划出一道边界。
-     */
-    fun separator(dark: Boolean): Int = if (dark) withAlpha(WHITE, 30) else withAlpha(BLACK, 26)
-
-    /** 进度条着色：直接用强调色，与小部件上的天数徽章同一个来源。 */
+    fun textSecondary(dark: Boolean): Int = if (dark) 0x9EFFFFFF.toInt() else 0x993C3C43.toInt()
+    fun separator(dark: Boolean): Int = if (dark) 0x1EFFFFFF else 0x1A000000
     fun accentOf(accent: AccentPalette, dark: Boolean): Int = accent.argb(dark).toInt()
-
-    // ---------------------------------------------------------------- 工具
-    //
-    // 颜色运算全部走位运算而不是 `android.graphics.Color` 的静态方法：
-    // `WidgetStyle.colors()` 是纯函数，单测要在 JVM 上直接断言（没有 Android 运行时，
-    // 调用 `Color.rgb` 会抛 "not mocked"）。位运算版本在两边行为完全一致。
-
+    fun rowTint(colors: WidgetColors, frost: Float, opaque: Boolean): Int =
+        androidx.core.graphics.ColorUtils.compositeColors(
+            withAlpha(colors.accent, GlassOptics.accentAlpha(colors.dark)),
+            withAlpha(if (colors.dark) INK else WHITE, GlassOptics.veilAlpha(frost, opaque)),
+        )
     private const val WHITE = 0xFFFFFFFF.toInt()
     private const val BLACK = 0xFF000000.toInt()
     private const val INK = 0xFF1C1C1E.toInt()
-    private const val INK_SOFT = 0xFF3C3C43.toInt()
-
-    private fun withAlpha(color: Int, alpha: Int): Int =
-        (color and 0x00FFFFFF) or ((alpha and 0xFF) shl 24)
-
-    private fun red(color: Int): Int = (color shr 16) and 0xFF
-
-    private fun green(color: Int): Int = (color shr 8) and 0xFF
-
-    private fun blue(color: Int): Int = color and 0xFF
-
-    private fun rgb(r: Int, g: Int, b: Int): Int =
-        BLACK or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
-
-    /** 按比例把 [color] 往 [target] 混（比例越大越接近 target）。 */
-    private fun blend(color: Int, target: Int, ratio: Float): Int {
-        val t = ratio.coerceIn(0f, 1f)
-        return rgb(
-            (red(color) + (red(target) - red(color)) * t).toInt(),
-            (green(color) + (green(target) - green(color)) * t).toInt(),
-            (blue(color) + (blue(target) - blue(color)) * t).toInt(),
-        )
-    }
+    private fun withAlpha(color: Int, alpha: Float): Int =
+        (color and 0x00FFFFFF) or ((alpha * 255).roundToInt().coerceIn(0, 255) shl 24)
 }

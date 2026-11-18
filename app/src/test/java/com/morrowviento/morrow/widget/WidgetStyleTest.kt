@@ -83,6 +83,19 @@ class WidgetStyleTest {
         assertEquals(AccentColor.ROSE.dark.toInt(), rose.accent)
     }
 
+    @Test fun `默认与主题色档跟随应用主题而显式覆盖保留`() {
+        val light = com.morrowviento.morrow.data.settings.AppSettings(
+            themeMode = com.morrowviento.morrow.data.settings.ThemeMode.LIGHT)
+        val dark = light.copy(themeMode = com.morrowviento.morrow.data.settings.ThemeMode.DARK)
+        for (palette in listOf(WidgetPalette.SYSTEM, WidgetPalette.ACCENT)) {
+            assertFalse(WidgetStyle(palette = palette).colors(light, true).dark)
+            assertTrue(WidgetStyle(palette = palette).colors(dark, false).dark)
+        }
+        assertTrue(WidgetStyle(palette = WidgetPalette.DARK).colors(light, false).dark)
+        assertFalse(WidgetStyle(palette = WidgetPalette.LIGHT).colors(dark, true).dark)
+        assertEquals("跟随应用", WidgetPalette.SYSTEM.label)
+    }
+
     // ---- 编解码 ----
 
     @Test

@@ -134,7 +134,7 @@ val LocalBackdropSettings = staticCompositionLocalOf { BackdropSettings() }
  *
  * 上限压在 25.5dp：再大在 3x 屏上就是 76px 的高斯，逐帧重绘的代价高于观感收益。
  */
-internal fun frostRadiusOf(frost: Float): Dp = (0.5f + 25f * frost.coerceIn(0f, 1f)).dp
+internal fun frostRadiusOf(frost: Float): Dp = GlassOptics.frostRadiusDp(frost).dp
 
 /**
  * 厚度 → 面板内侧色纱的不透明度（0 → 0.26）。
@@ -146,10 +146,7 @@ internal fun frostRadiusOf(frost: Float): Dp = (0.5f + 25f * frost.coerceIn(0f, 
  * 四个档位落在 0 / 0.03 / 0.10 / 0.23，任何一档都留得住背后的轮廓。
  * 「降低透明度」这个无障碍开关仍单独走 0.72（见 [glassVeil]），那是用户的明确诉求。
  */
-internal fun veilAlphaOf(frost: Float): Float {
-    val t = frost.coerceIn(0f, 1f)
-    return 0.26f * t * t
-}
+internal fun veilAlphaOf(frost: Float): Float = GlassOptics.veilAlpha(frost)
 
 /**
  * 所有玻璃面板统一使用的材质（见 [GlassPanel] 的说明）。

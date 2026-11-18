@@ -62,7 +62,7 @@ fun EventCardView(
     val palette = LocalAccentPalette.current
     val dark = LocalGlassDark.current
     val accentTint = Color(palette.argb(dark))
-        .copy(alpha = if (dark) 0.09f else 0.05f)
+        .copy(alpha = com.morrowviento.morrow.ui.glass.GlassOptics.accentAlpha(dark))
     // 与背景同色的薄纱：已完成的事件再叠一层，把整块面板的对比度压下去
     val scrim = if (dim >= 1f) {
         accentTint

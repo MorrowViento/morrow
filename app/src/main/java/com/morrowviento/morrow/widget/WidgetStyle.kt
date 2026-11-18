@@ -4,6 +4,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.AccentPalette
+import com.morrowviento.morrow.data.settings.AppSettings
 
 /**
  * 小部件样式：预设 + 字号 + 配色 + 元素显隐。
@@ -42,14 +43,14 @@ enum class WidgetFontScale(
 /**
  * 配色。
  *
- * [SYSTEM] 不是一种颜色，而是"按系统深浅色在深 / 浅两套之间切"——RemoteViews 读不到
- * `values-night`，所以明暗必须在代码里定，不能靠资源限定符。
+ * [SYSTEM] 保留旧存储值，实际跟随应用主题（应用再决定是否跟随系统）。
+ * 显式深 / 浅覆盖只影响小部件，不修改应用设置。
  *
  * 四档现在都**跟随应用内的配色方案**（见 `AccentColor`）：色斑、强调色、文字色全部
  * 同源，小部件不会与 App 各说各话。差别只在「底色要不要被强调色主导」。
  */
 enum class WidgetPalette(val label: String) {
-    SYSTEM("跟随系统"),
+    SYSTEM("跟随应用"),
     DARK("深色"),
     LIGHT("浅色"),
     ACCENT("主题色"),
@@ -88,6 +89,9 @@ data class WidgetStyle(
         showDate = next.defaultShowDate,
         showProgress = next.defaultShowProgress,
     )
+
+    fun colors(settings: AppSettings, systemDark: Boolean): WidgetColors =
+        colors(settings.isDark(systemDark), settings.resolvedAccent)
 
     /**
      * 解析出实际颜色。

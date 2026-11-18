@@ -135,9 +135,15 @@ class SettingsViewModel(
     }
 
     /** 切换玻璃厚度档位：直接写该档位的连续值（分段控件没有拖动预览这回事）。 */
-    fun setGlassFrostLevel(level: GlassFrostLevel) = persist { settings.setGlassFrost(level.frost) }
+    fun setGlassFrostLevel(level: GlassFrostLevel) = persist {
+        settings.setGlassFrost(level.frost)
+        refreshSavedSettingsWidgets()
+    }
 
-    fun setReduceTransparency(enabled: Boolean) = persist { settings.setReduceTransparency(enabled) }
+    fun setReduceTransparency(enabled: Boolean) = persist {
+        settings.setReduceTransparency(enabled)
+        refreshSavedSettingsWidgets()
+    }
 
     fun setReduceMotion(enabled: Boolean) = persist { settings.setReduceMotion(enabled) }
 

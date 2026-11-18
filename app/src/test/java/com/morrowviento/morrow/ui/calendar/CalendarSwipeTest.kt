@@ -15,6 +15,28 @@ class CalendarSwipeTest {
     private val fling = 600f
 
     @Test
+    fun pageIdentityIgnoresSelectionCountsAndSameYearAnchorChanges() {
+        val month = CalendarUiState(month = java.time.YearMonth.of(2026, 11), isLoading = false)
+        assertEquals(calendarPageKey(month), calendarPageKey(month.copy(selected = month.month.atDay(3), monthEventCount = 8)))
+        val year = month.copy(view = CalendarView.YEAR)
+        assertEquals(calendarPageKey(year), calendarPageKey(year.copy(month = year.month.plusMonths(1))))
+        val list = year.copy(view = CalendarView.LIST)
+        assertEquals(calendarPageKey(list), calendarPageKey(list.copy(month = list.month.withMonth(1))))
+        org.junit.Assert.assertNotEquals(calendarPageKey(year), calendarPageKey(list))
+    }
+
+    @Test
+    fun periodDirectionIsStableAcrossYearBoundaryAndModeChanges() {
+        val december = CalendarUiState(month = java.time.YearMonth.of(2026, 12))
+        val january = december.copy(month = december.month.plusMonths(1))
+        assertEquals(1, calendarTransitionDirection(december, january))
+        assertEquals(-1, calendarTransitionDirection(january, december))
+        assertEquals(0, calendarTransitionDirection(december, december.copy(selected = december.month.atDay(5))))
+        assertEquals(0, calendarTransitionDirection(december, january.copy(view = CalendarView.YEAR)))
+        assertEquals(1, calendarTransitionDirection(december.copy(view = CalendarView.YEAR), january.copy(view = CalendarView.YEAR)))
+    }
+
+    @Test
     fun shortSlowDrag_bouncesBack() {
         assertEquals(0, swipeDirection(dragged = 80f, velocity = 120f, width = width, flingVelocity = fling))
         assertEquals(0, swipeDirection(dragged = -80f, velocity = -120f, width = width, flingVelocity = fling))

@@ -1,19 +1,26 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-  总览小部件的一行。
-
-  从「5 组写死的行」改成 ListView 的一项：RemoteViews 的静态视图不能滚动，
-  只有集合视图（ListView）能由桌面接管上下滑动。这一项由 WidgetListFactory 逐条填充，
-  颜色与字号同样在运行时套。
-
-  4.1.0 起底部多了一条分隔线（widget_row_divider）：行距只有 7dp 的时候，两行
-  「标题 + 大号天数」会连成一片，远看分不清有几条事件。分隔线的颜色由
-  WidgetColors.separator 在刷新时写入（setInt + setBackgroundColor）。
--->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 原生圆角色纱与细边缘共享资源；滚动行不分配或实时采样整幅模糊背景。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_row_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical">
+    android:paddingBottom="7dp">
+
+    <ImageView
+        android:id="@+id/widget_row_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_row_fill" />
+
+    <ImageView
+        android:id="@+id/widget_row_edge"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_row_edge" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -21,8 +28,10 @@
         android:baselineAligned="false"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -73,6 +82,7 @@
                 android:id="@+id/widget_row_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
                 android:textSize="26sp"
                 android:textStyle="bold" />
 
@@ -84,14 +94,4 @@
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
-
-    <!-- 分隔线用 ImageView 而不是 <View>：RemoteViews 只认一份固定的允许清单
-         （FrameLayout / LinearLayout / TextView / ImageView / ProgressBar / ListView …），
-         裸 View 会被 lint 判成 RemoteViewLayout 错误，运行期也可能不渲染。 -->
-    <ImageView
-        android:id="@+id/widget_row_divider"
-        android:layout_width="match_parent"
-        android:layout_height="0.6dp"
-        android:importantForAccessibility="no"
-        android:scaleType="fitXY" />
-</LinearLayout>
+</FrameLayout>
