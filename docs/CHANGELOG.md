@@ -16,6 +16,7 @@
 - **验证**：**394 项单测 / 49 份 XML / 0 failures·errors·skipped**（380 + 11 项 `FontStoreTest` + 3 项 `FestivalSkinTest`）；lint release **0 errors / 15 warnings**（同基线，无新增；`Uri.parse` 已按 KTX 提示换成 `toUri`）；`assembleRelease` 成功（90 任务 / 47 执行）；`verifyRuntimeNoticeCompleteness` 退出 0，许可收集器 28 项内存回归通过。
 - **最终 APK** `morrow-72-4.1.3-release.apk`：**5,231,781 B**，SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`，146 条目；`aapt2` **72 / 4.1.3** / minSdk 33 / targetSdk 37；`apksigner` 证书 SHA-256 `8894605E…8D02` 与正式 68/70/71 一致（可原位升级）；**8 份**许可资产与源一致（6 份源文件 MATCH）；图像条目 0 且无嵌套归档；`runtime.txt` **116,447 B / `d1508af0…1449`** 与 4.1.2 完全相同——字体不随包、未引入新的第三方正文。
 - **真机未验**：字体行高与行距、节日柔光在浅色主题下的浓度、以及 68→72 原位升级保数据，仍待设备验收。
+- **发布**：tag `v4.1.3`（指向 `f5553f7`）、Release「朝夕 4.1.3」id `449719768`、`published_at` 2026-11-18T08:48:37Z；上传后把资产重新下载与本地包 `cmp` 逐字节一致才转正式；`update/manifest.json` 按 `/releases/latest` 回填（3,307 B）。
 
 ## [2026-11-18] 4.1.2 (71)：超大 UI 文件拆分 + protobuf 许可归属补齐（已发布）
 

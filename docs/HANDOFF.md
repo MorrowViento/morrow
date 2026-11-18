@@ -1,7 +1,7 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前状态：**4.1.3 / 72 已构建、核验通过**（资产 `morrow-72-4.1.3-release.apk` **5,231,781 B / SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`**；发布结果见「#24」）。本版四件事：① **修设置页透出日历**（上一版把让位写成 `if/else`，设置页打开时掉进 else 把日历画在底下）；② **各页头部与按钮尺寸统一**（新增 `ui/component/PageChrome.kt`）；③ **字体设置**（M6 遗留项，本地导入 + 就地预览，`AppText` 包装层让 148 处样式零改动生效）；④ **节日皮肤**（八个农历节日柔光 + 首页祝语，设置页可关）。回归 **394 项单测 / 49 XML / 0 失败错误跳过**、lint release 0 errors / 15 warnings、8 份许可资产与源一致、`runtime.txt` 116,447 B 未变（字体不随包）、证书同 68。上一版 4.1.2 / 71（`601b3beb…73a6`、Release `449651404`）保留未动。**剩余：人工逐组件源码层版权审阅与真机验收（含 68→72 保数据升级）。** 下方 338/366/379/380 项、69 包与 feature-update 包均为历史证据。**续接先读「#23」「#24」与「4.1.3 / 72：字体设置与节日皮肤」三节。**
+> 当前状态：**4.1.3 / 72 已发布**（tag `v4.1.3` 指向 `f5553f7`、Release「朝夕 4.1.3」id `449719768`、2026-11-18T08:48:37Z 正式、资产 `morrow-72-4.1.3-release.apk` **5,231,781 B / SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`**，`/releases/latest` 与 manifest 均已回读一致）。本版四件事：① **修设置页透出日历**（上一版把让位写成 `if/else`，设置页打开时掉进 else 把日历画在底下）；② **各页头部与按钮尺寸统一**（新增 `ui/component/PageChrome.kt`）；③ **字体设置**（M6 遗留项，本地导入 + 就地预览，`AppText` 包装层让 148 处样式零改动生效）；④ **节日皮肤**（八个农历节日柔光 + 首页祝语，设置页可关）。回归 **394 项单测 / 49 XML / 0 失败错误跳过**、lint release 0 errors / 15 warnings、8 份许可资产与源一致、`runtime.txt` 116,447 B 未变（字体不随包）、证书同 68。上一版 4.1.2 / 71（`601b3beb…73a6`、Release `449651404`）保留未动。**剩余：人工逐组件源码层版权审阅与真机验收（含 68→72 保数据升级）。** 下方 338/366/379/380 项、69 包与 feature-update 包均为历史证据。**续接先读「#24」（构建与发布实录）与「#23」（实现说明）两节。**
 
 ## 当前批次与授权
 
@@ -204,7 +204,14 @@
 - **lint**：`lintRelease` 与 `lintDebug` 均 **0 errors / 15 warnings**（同一组，无新增）。
 - **许可门槛**：`verifyRuntimeNoticeCompleteness` 退出 0，许可收集器 28 项内存回归通过；`runtime.txt` **116,447 B / `d1508af0daca478bccd9d29b62991dc5847f5adb3246a5692be7881d8f6d1449`**、9 组、109 个坐标条目，**与 4.1.2 完全相同**——字体不随包、未引入第三方正文，protobuf 的 `静态归属 1 项` + `归属正文 protobuf-bsd-3.txt SHA-256 835c9e42…5320` 仍在。8 份许可资产中 6 份源文件（`apache-2.0` / `glasmio-third-party-notices` / `material-color-utilities` / `materialkolor` / `protobuf-bsd-3` / `ying`）与 APK 内**逐字节 MATCH**。
 - **产物**：`morrow-72-4.1.3-release.apk` **5,231,781 B**，SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`，146 条目；`aapt2 dump badging` = `versionCode 72` / `versionName 4.1.3` / minSdk 33 / targetSdk 37；`apksigner verify --print-certs` 证书 SHA-256 `8894605e2b84aec593d95e9dfb8c315d18cd48d99fac1e29f69caa4b78b18d02`（`CN=Chaoxi`），与 68/70/71 一致 → 可原位升级；图像条目 0、无嵌套归档；`aapt2 dump resources` 1,341 行、`apple|sf-symbol|San Francisco|Tapback|Cupertino` **0 匹配**；副本 `../morrow-72-4.1.3-release.apk` 与构建产物 `cmp` 一致。
-- **提交**：`e47ed3e` `feat(ui): 字体设置与节日皮肤，修设置页透底并统一头部尺寸`（41 文件；因 `HomeSections`/`CalendarScreen`/`SettingsScreen` 同时承载按钮统一与字体 import 替换，无法在不交互暂存的前提下拆开），随后文档提交。`docs/MANUAL-TEST.md` 全程显式排除，摘要复核仍为 `93FBCB61…8A4A`。
+- **提交**：`e47ed3e` `feat(ui): 字体设置与节日皮肤，修设置页透底并统一头部尺寸`（41 文件；因 `HomeSections`/`CalendarScreen`/`SettingsScreen` 同时承载按钮统一与字体 import 替换，无法在不交互暂存的前提下拆开）、`f5553f7` `docs: 回填 4.1.3 / 72 的构建核验证据`。`docs/MANUAL-TEST.md` 全程显式排除，摘要复核仍为 `93FBCB61…8A4A`。
+- **推送**：`git push origin main` → `e99a1ef..f5553f7`，`pre-push` 钩子报告「127.0.0.1:10809 已在监听，无需唤醒」；`git ls-remote` 回读 `refs/heads/main = f5553f7`。
+- **发布前置**：`/releases/tags/v4.1.3` 与 `/git/refs/tags/v4.1.3` 均 **404**，标签未被占用。
+- **发布路径**（沿用 #22 的 draft 优先）：建草稿（id `449719768`、`tag_name=v4.1.3`、`target_commitish=main`、标题「朝夕 4.1.3」）→ 上传 `morrow-72-4.1.3-release.apk`（HTTP **201**，`size=5,231,781`，`digest=sha256:10258ec2…f39c`，asset id `762634465`）→ **把已上传资产重新下载**（5,231,781 B）算摘要与 `cmp` **逐字节一致** → `PATCH draft=false` 转正式（HTTP 200，`published_at` `2026-11-18T08:48:37Z`）。
+- **发布后回读**：`/releases/latest` = `v4.1.3` /「朝夕 4.1.3」/ `draft=false` / `prerelease=false` / 资产 5,231,781 B / `sha256:10258ec2…f39c` / `.../releases/download/v4.1.3/morrow-72-4.1.3-release.apk`；`git ls-remote --tags origin v4.1.3` = `f5553f7`，与发布时刻的 main 同一提交。
+- `update/manifest.json` 用 `/releases/latest` 的真实字段整体重写（3,307 B，未手抄摘要），单独提交并推送；因此 **main 前进到清单提交，而 tag `v4.1.3` 仍指向 `f5553f7`**（与 4.1.1 / 4.1.2 同例）。
+- **网络**：`api.github.com` / `uploads.github.com` / 资产下载全程走仓库级 `http.proxy=http://127.0.0.1:10809`，**未出现 59466 的 502**。
+- **未做**：未改 CI / 密钥 / 包名 / schema / 生产依赖；未覆盖旧 tag 或旧 Release；未纳入 MANUAL-TEST；未安装或卸载设备。
 
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。

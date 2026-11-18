@@ -10,6 +10,7 @@
 - [x] **节日皮肤**：八个农历节日加背景柔光与标题祝语，中元不给皮肤；设置页可关。
 - [x] **版本 4.1.3 / 72 与全量验证**：`testDebugUnitTest --rerun + lintRelease + assembleRelease` → `BUILD SUCCESSFUL in 8m 7s`（90 任务 / 47 执行）；**394 项 / 49 XML / 0 failures·errors·skipped**；lint **0 errors / 15 warnings**（同基线）；`verifyRuntimeNoticeCompleteness` 退出 0；`runtime.txt` 116,447 B / `d1508af0…1449` 与上一版相同（字体不随包）。
 - [x] **APK 核验**：**5,231,781 B / `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`**，146 条目；`aapt2` **72 / 4.1.3** / minSdk 33 / targetSdk 37；证书 `8894605E…8D02` 同 68/70/71；8 份许可资产（6 源文件 MATCH）；图像条目 0、无嵌套归档、资源表 1,341 行 Apple 关键词 0 匹配；副本 `../morrow-72-4.1.3-release.apk` 逐字节一致。
+- [x] **发布（2026-11-18，#24）**：`e47ed3e`（代码 + 版本）、`f5553f7`（文档）推送 main；draft `449719768` → 上传 asset `762634465` → 回下载 `cmp` 逐字节一致 → 转正式 `08:48:37Z`；tag `v4.1.3` = `f5553f7`；`/releases/latest` = `v4.1.3` 且 `update/manifest.json` 已按真实字段回填（3,307 B）；全程走 `127.0.0.1:10809`，未出现 59466 的 502。
 - [ ] **真机验收（未验）**：字体切换后的行高与截断、大字体下的列表、节日柔光在浅色主题的浓淡、设置页透底是否彻底、各页头部观感是否一致，以及 **68→72 原位升级保数据**。
 
 ## 4.1.2 / 71：结构重构 + protobuf 许可归属（2026-11-18 已发布）

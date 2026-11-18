@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.1.2",
-  "name": "朝夕 4.1.2",
-  "body": "这一版没有新功能，做的是两件「欠账」：把五个上千行的界面文件按职责拆开，以及补上 protobuf 缺失的 BSD-3 版权归属。\n\n## 结构重构（行为与视觉不变）\n\n设置、玻璃、首页、日历四个目录里，单文件普遍 700~1,300 行，读一处逻辑要在同文件的十几段声明之间来回跳。按「页面编排 / 视图部件 / 绘制 glyph」切开：\n\n| 文件 | 拆分前 | 拆分后 |\n|---|---|---|\n| `ui/settings/SettingsScreen.kt` | 1,345 | 461 + `SettingsRows` 363 + `SettingsGlyphs` 306 + `BackdropCropScreen` 128 + `LicensesSheet` 205 |\n| `ui/glass/GlassBottomBar.kt` | 989 | 674 + `GlassBottomBarParts` 366 |\n| `ui/home/HomeScreen.kt` | 841 | 549 + `HomeSections` 328 |\n| `ui/calendar/CalendarScreen.kt` | 806 | 357 + `CalendarViews` 477 |\n| `ui/glass/GlassTheme.kt` | 690 | 475 + `GlassBackdrop` 236 |\n\n只做声明搬移与可见性收敛（`BarFrostScale`、`CalendarFontMetrics`、`CalendarLineHeight` 等改为 `internal`，不扩大模块外可见性）。拆分后逐文件做**行多重集比对**，确认没有丢行、没有改行。\n\n## 许可：protobuf 的版权行补回来了\n\n`datastore-preferences-external-protobuf:1.3.0` 随包的 LICENSE 只有 1,434 B 的模板正文——它把上游的版权行整段删掉，还把「Google Inc.」替换成「the copyright holder」，代码生成条款也没了。BSD-3-Clause 第 1 条明确要求保留版权声明，原样转发这份模板等于没有归属。\n\n新增 `assets/licenses/protobuf-bsd-3.txt`（2,482 B）：归档原文按原字节保留不动，另附从上游 protobuf v3.25.5 LICENSE 取回的全文本，含 `Copyright 2008 Google Inc.  All rights reserved.` 与生成条款。两份并存、互不顶替。\n\n生成器因此区分两种补充义务：\n\n- `fallbackFiles()` —— 归档缺正文时补缺口（原有行为）；\n- `attributionFiles()` —— 坐标命中**就无条件追加**静态归属，文件缺失直接构建失败。\n\n清单 `assets/licenses/runtime.txt` 里，protobuf 这一条同时列出「归档原文 1 项、静态归属 1 项」、两份 SHA-256 与归属说明。设置页「开源许可」能离线读到带版权行的完整正文。\n\n## 验证\n\n- 单测 **380 项 / 47 份 XML / 0 failures·errors·skipped**（379 + 1 项新的 protobuf 归属回归）\n- `lintDebug` **0 errors / 15 warnings**，与上一版同一组，无新增（未 suppress、未借升级依赖消警告）\n- `verifyRuntimeNoticeCompleteness` 退出 0；debug 与原签名 release（含 R8 与资源裁剪）构建成功\n- 包体 **5,199,013 B**，146 条目；`versionCode 71` / `versionName 4.1.2`，minSdk 33 / targetSdk 37\n- 签名证书 SHA-256 `8894605E…8D02`，与 4.0.0(68)、4.1.1(70) **同一把密钥**，可原位覆盖升级（保数据升级仍待真机实测）\n- `assets/licenses/` **8 份**资产：6 份源文件与仓库逐字节 MATCH，`runtime.txt` 116,447 B / `morrow.txt` 为生成物\n- Apple 素材不存在性复核：包内图像条目 0、资源表 1,341 行检索 `tapback|listening|adaptive_audio` 0 命中、无嵌套归档\n\n## 升级提示\n\n`applicationId` 已从旧 Flutter 版的 `com.jiuxina.ying` 改为 `com.morrowviento.morrow`，与「萤」不是同一个应用，无法覆盖安装。从旧版迁移请先导出备份 → 卸载旧版 → 安装新版 → 导入备份。4.0.0 及之后的「朝夕」版本之间可直接覆盖升级。\n\n## 已知未完成\n\n人工逐组件源码级版权/NOTICE 终审、真机验收（浅色/深色观感、帧率、小部件、许可长文滚动、**68→71 原位保数据升级**）仍未做。本版验证停留在 Robolectric/Compose 测试与 release 构建层面，没有设备截图证据。\n\n完整变更与证据见 `docs/CHANGELOG.md`、`docs/HANDOFF.md`、`docs/LICENSE-AUDIT.md`。\n",
-  "published_at": "2026-11-18T07:32:07Z",
+  "tag_name": "v4.1.3",
+  "name": "朝夕 4.1.3",
+  "body": "## 这一版做了什么\n\n### 字体设置（M6 遗留项）\n\n设置 → 外观 → 字体。可以导入自己的 TTF / OTF / TTC，也可以从 4 款开源字体的项目主页自行下载。\n\n- 导入走系统文件选择器，上限 32 MB；按 sfnt 魔数校验，改扩展名骗不过去\n- 字体列表**每一行用自己的字体渲染自己的名字**，不用来回点选比较，也顺带证明这个文件真能加载\n- 点击即切换并关闭弹层——关掉弹层整个界面就是预览\n- 删除当前字体会自动回落系统默认\n- 同内容重复导入不会堆两份文件\n\n桌面小组件、通知栏、Canvas 内绘制的文字仍是系统字体，这是 Android 的边界。\n\n### 节日皮肤\n\n春节 / 元宵 / 端午 / 七夕 / 中秋 / 重阳 / 腊八 / 除夕 当天，背景会叠一层很淡的节日色柔光，首页标题下多一行祝语。\n\n**不改你的配色、不换你的壁纸**，节日过了自己消失。柔光画在壁纸之上、玻璃之下，所以是玻璃后面那层真的变色，而不是给屏幕贴一张半透明纸。中元不做皮肤——这类日子不适合做视觉庆祝，日历格子仍会标注节日名。设置里可以关掉。\n\n### 修复：设置页透出日历\n\n上一版为了让设置页显示整窗壁纸，把「首页让位」写成了 `if (首页可见) 首页 else 日历`。设置页打开时首页不可见，于是掉进 else 分支把日历渲染到了设置页底下，半透明底色一透就看见。改成三个分支各自判断，不再共用一个 else。\n\n### 各页头部与按钮尺寸统一\n\n原来三页各写一套内边距与圆钮直径（32 / 34 混用，头部 22/18、12/16、14/14 三种），详情页同一行里还出现 52dp 圆钮配 56dp 宽按钮。现在抽成单一来源：\n\n| 项 | 现在 |\n|---|---|\n| 头部圆钮 | 34dp，字形 17sp |\n| 头部内边距 | 16 / 12 / 4 |\n| 并排胶囊 | 34dp |\n| 主操作按钮 | 56dp（详情页、裁剪页、日历「今天」） |\n\n## 安装\n\n- 包名 `com.morrowviento.morrow`，签名与 4.1.0 / 4.1.1 / 4.1.2 相同，可直接覆盖安装，数据保留\n- 最低 Android 13（API 33）\n\n## 验证\n\n- 394 项单测 / 49 份 XML / 0 失败·错误·跳过\n- lint release 0 errors / 15 warnings（与基线同一组，无新增）\n- `verifyRuntimeNoticeCompleteness` 通过；8 份许可资产与源文件逐字节一致\n- `runtime.txt` 116,447 B，与 4.1.2 完全相同——字体不随包，未引入新的第三方正文\n- 签名证书 SHA-256 `8894605E…8D02`，与原版一致\n\n## 仍未验证\n\n真机上的字体行高与截断、大字体下的列表、节日柔光在浅色主题里的浓淡、以及 68 → 72 原位升级保数据，都还没有设备证据。本版验证只到 Robolectric / Compose 测试与 release 构建层面。\n",
+  "published_at": "2026-11-18T08:48:37Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-71-4.1.2-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.1.2/morrow-71-4.1.2-release.apk",
-      "size": 5199013,
-      "digest": "sha256:601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6"
+      "name": "morrow-72-4.1.3-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.1.3/morrow-72-4.1.3-release.apk",
+      "size": 5231781,
+      "digest": "sha256:10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c"
     }
   ]
 }
