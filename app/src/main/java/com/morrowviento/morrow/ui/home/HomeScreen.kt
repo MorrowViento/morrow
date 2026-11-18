@@ -250,7 +250,9 @@ fun HomeScreen(
                         reduceMotion = appSettings.reduceMotion,
                         modifier = Modifier.fillMaxSize().imePadding().glassContentSource(contentBackdrop),
                     ) { calendarActive ->
-                    if (!calendarActive) {
+                    // 设置页打开时首页整块让位：设置页不再自绘整页底色（见 SettingsScreen），
+                    // 若首页仍在下面组合，它的标题与卡片就会从壁纸上透出来变成「两页重叠」。
+                    if (!calendarActive && !showSettings) {
                     Column(Modifier.fillMaxSize()) {
                         HomeHeader(
                             state = state,
@@ -358,7 +360,9 @@ fun HomeScreen(
                     }
                     }
 
-                    // 设置中心同样是整页覆盖：自带不透明底色与返回处理（见 SettingsScreen）。
+                    // 设置中心同样是整页覆盖，但底色来自全窗口宿主而不是自己再画一遍：
+                    // 在 `safeDrawingPadding()` 里重绘壁纸会让渐变原点/照片裁剪与状态栏
+                    // 那一截对不上，顶上出现一道裂缝（日历页已按同一办法修过）。
                     // 它排在日历之后绘制，因此两者同时为真时设置页在上层——实际上互斥，
                     // 日历里没有设置入口。
                     GlassPage(

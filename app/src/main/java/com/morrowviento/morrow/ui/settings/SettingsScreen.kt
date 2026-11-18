@@ -82,7 +82,6 @@ import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.glass.GlassAlert
 import com.morrowviento.morrow.ui.glass.GlassAlertButton
 import com.morrowviento.morrow.ui.glass.GlassAlertRole
-import com.morrowviento.morrow.ui.glass.GlassBackdrop
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassPanel
@@ -105,8 +104,14 @@ import kotlin.math.PI
 /**
  * 设置中心（M6）。
  *
- * 与日历页同为**整页覆盖**：必须自带 [GlassBackdrop] 当不透明底（见 HANDOFF「已知坑」28），
- * 并且自己处理返回键——否则按返回会直接退出 App 而不是回到列表。
+ * 与日历页同为**整页覆盖**，但**不在安全区内重绘壁纸**：背景由全窗口宿主
+ * （`GlassBackdropHost`）提供，本页只铺内容。之前这里调 `GlassBackdrop()` 画整页底，
+ * 而它被父层的 `safeDrawingPadding()` 约束，位图从状态栏下沿才开始、渐变原点与照片
+ * 裁剪比例都和系统栏那一截对不上，顶上就露出一道「割裂」的横线——日历页 4.1.1 已用
+ * 同一套办法修过。首页在设置页打开期间由宿主整块让位（见 `HomeScreen`），
+ * 因此不需要再靠一层不透明底色遮挡透出来的标题与卡片。
+ *
+ * 返回键仍由本页自己处理——否则按返回会直接退出 App 而不是回到列表。
  *
  * 分组卡片用 [GlassPanel]（真正的 `GlassSurface`），不是 `GlasmioGroupedList`：
  * 后者画的是一层 55% 不透明的**纯色**（`SheetGroupedListBackgroundAlpha`），
@@ -155,8 +160,6 @@ fun SettingsScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        GlassBackdrop()
-
         Column(Modifier.fillMaxSize()) {
             SettingsHeader(onDismiss)
 
