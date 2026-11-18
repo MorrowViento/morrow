@@ -1,9 +1,27 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-19。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前状态：**4.2.0 / 73 代码完成，构建核验已过，发布进行中**。两批一起发：上一批（完整重复规则 / 农历循环 / 多点提醒 / 持续事件 + 节日皮肤修复）+ 本批（**时间块视图 / 多维标记 / 日期计算器 / 归档**）。已升版 `versionCode 73` / `versionName 4.2.0`；release APK 已出（5,313,701 B / `d1c02522…097d`），aapt2 73/4.2.0、证书 `8894605E…8D02` 同 68、`runtime.txt` 116,447 B 未变、`verifyRuntimeNoticeCompleteness` 退出 0、全量 **436 项 / 53 XML / 0 失败**、lint 0 errors / 15 warnings。远端最新仍是 4.1.3 / 72（tag `v4.1.3` 指向 `f5553f7`、Release `449719768`、资产 `morrow-72-4.1.3-release.apk` 5,231,781 B / `10258ec2…f39c`）。4.1.3 四件事与上一版 4.1.2 / 71（`601b3beb…73a6`、Release `449651404`）均为历史证据。**续接先读「#25」（两批实现）与「#24」（发布实录）。** 剩余：人工逐组件源码层版权审阅与真机验收（含 72→新版保数据升级）。
+> 当前状态：**4.3.0 / 74 代码完成，构建核验已过，发布进行中**。本批是 4.2.0 的修复打磨版：修「有时长事件点列表闪退」、归档按钮统一、日历年视图缩小、顶栏高度统一、多天事件滚轮对齐、图标重绘。已升版 `versionCode 74` / `versionName 4.3.0`；release APK 已出（5,313,569 B / `376dba9c…7455b`），aapt2 74/4.3.0、证书 `8894605E…8D02` 同 68、`runtime.txt` 116,447 B / `d1508af0…1449` 未变、`verifyRuntimeNoticeCompleteness` 退出 0、全量 **443 项 / 54 XML / 0 失败**、lint 0 errors / 15 warnings。上一版 4.2.0 / 73（tag `v4.2.0` 指向 `dd5e1ba`、Release `450282686`、资产 `morrow-73-4.2.0-release.apk` 5,313,701 B / `d1c02522…097d`）保留未动。**续接先读「#26」（本批）与「#24」（发布实录）。** 剩余：人工逐组件源码层版权审阅与真机验收（含 73→新版保数据升级）。
 
-## #25 两批：重复规则 / 农历循环 / 多点提醒 / 持续事件 + 时间块 / 标记 / 计算器 / 归档（代码完成，发布中）
+## #26 修复打磨 + 多天事件结束时刻 + 图标重绘（4.3.0 / 74，发布中）
+
+**用户指令**：修「添加有时长的事件后点击列表闪退」、归档按钮与旁边三钮协调、日历年视图板块缩小、首页排序/三个点按钮与其他界面顶栏高度统一、多天事件滚轮与开始时间保持一致、重绘非渐变线条分明的图标，然后发布一个 release。
+
+**「有时长事件点列表闪退」的处理**：本机无 adb 设备、无真实崩溃堆栈可抓，走「数据链路排查 + 组合渲染回归」两条腿。`durationMinutes` 从 `CountdownEvent` → `EventMapper` → `EventEntity` → Room → `EventPresentation.toCard` → `EventCardModel.durationLabel` 逐段核对均安全——`durationLabelOf` 只用 `% 60` 与 `/ 60`（常量除数，无除零）、详情页 `InfoRow("时长", card.durationLabel?.let { it })` 有 null 兜底、时间块视图 `TimelineLayout` 的 `blockMinutes` 也 `coerceAtMost(MINUTES_PER_DAY)` 无溢出。新增 `EventDetailScreenTest`（Robolectric + Compose 真实组合）钉住「有时长事件打开详情不崩、时长行存在」；全量 443 项通过。**未能从真机日志确证根因，列为待真机确认**（见 TODO 验收清单）。
+
+**归档按钮统一**：详情页底部的「归档/恢复」原来是 34dp `GlassTextButton`，比旁边置顶/主操作/删除三钮矮一截。改成 56dp 圆钮 `DetailArchiveIcon`（`GlassCirclePanel` + Canvas 手绘抽屉：未归档画「盒子+向下箭头」、已归档画「盒子+向上箭头」），带 contentDescription 与 `prominent`，与置顶/删除同尺寸同材质。
+
+**日历年视图缩小**：`MonthCard`（年视图 12 个月板块）内边距 vertical 12→10dp、月份标题 15→14sp、格子高度 `24dp*fontScale`→`18dp*fontScale`、星期标签 9→8sp、日期 10→9.5sp、摘要 10→9.5sp，整体往「预览」观感压，一屏多露几行摘要。
+
+**顶栏按钮高度统一**：`GlassSegmentedControl` 默认高度 32→34dp，与 `PageChrome.ChipHeight`/`CircleButtonSize`（34dp）、首页排序胶囊、日历「今天」按钮对齐。首页排序胶囊与「⋯」按钮本已是 34dp，主要落差在分段控件的 32dp。
+
+**多天事件滚轮对齐**：结束日滚轮此前硬编码 `isAllDay=true`，导致「上面（开始日）能选时分、下面（结束日）只能选日期」的不一致。现在结束日滚轮 `isAllDay = form.isAllDay`、`time = form.endTime ?: form.time`、`onTimeChange` 写回 `withEndTime`。为此新增 `CountdownEvent.endTime`（结束日具体时刻，`LocalTime?`）：Room schema **4→5**（`MIGRATION_4_5` 只加 `end_time INTEGER` 可空列）、`EventEntity.endTime`（分钟数 0..1439）、`EventMapper`（LocalTime↔分钟）、`BackupDocument`/`UndoCodec`（ISO 时间串，可选、旧备份可读）。表单归一化：`endTime` 只在「多天 + 非全天」时有意义——全天清空、回到单日清空。
+
+**图标重绘**：`ic_launcher_background.xml` 去线性渐变改纯色夜空蓝紫 `#2E2A55`；`ic_launcher_foreground.xml` 实心日轮 `#FFC961` + 八道等宽描边放射光芒 + 清晰地平线 `#F6EFDF` + 三道渐淡倒影（纯色描边、无渐变）；`ic_launcher_monochrome.xml` 同几何纯白（供 Android 13 主题图标取 alpha 通道）。构图控制在中心 66dp 安全圆内。
+
+**验证**：全量 `:app:testDebugUnitTest --rerun` + `lintRelease` + `assembleRelease` + `verifyRuntimeNoticeCompleteness` → **BUILD SUCCESSFUL**；**443 项 / 54 XML / 0 failures·errors·skipped**（4.2.0 的 436 + 详情页时长渲染回归 2 + `endTime` 往返/归一化 5）；lint **0 errors / 15 warnings**（同基线）；`verifyRuntimeNoticeCompleteness` 退出 0、`runtime.txt` 116,447 B / `d1508af0…1449` 未变（字体不随包）。APK 核验见下节发布实录。
+
+## #25 两批：重复规则 / 农历循环 / 多点提醒 / 持续事件 + 时间块 / 标记 / 计算器 / 归档（2026-11-19 已发布）
 
 **用户指令**：第一句「首先节假日皮肤没有效果，先做完整重复规则，农历生日农历循环，多点提醒，持续事件」；第二句「现在做时间轴时间块，多维标记，日期计算器。归档和现在的已完成有什么区别，有区别的话就做，做完后和上一版一起 release」。
 

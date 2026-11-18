@@ -1,10 +1,22 @@
 # TODO — 朝夕 · 当前待办
 
-> 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)（「#25」本批实现说明与「#24」4.1.3 发布实录），再读本文件；历史实现见 CHANGELOG。
-> **当前状态：4.2.0 / 73 代码完成，构建核验与发布进行中**（两批一起发：上一批「完整重复规则 / 农历循环 / 多点提醒 / 持续事件 + 节日皮肤修复」+ 本批「时间块视图 / 多维标记 / 日期计算器 / 归档」）。已升版 `versionCode 73` / `versionName 4.2.0`。
-> 上一版 4.1.3 / 72（tag `v4.1.3` / Release `449719768` / `10258ec2…f39c`）保留未动。
+> 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)（「#26」本批实现说明与「#24」发布实录），再读本文件；历史实现见 CHANGELOG。
+> **当前状态：4.3.0 / 74 代码完成，构建核验已过，发布进行中**。本批是 4.2.0 的修复打磨版：修「有时长事件点列表闪退」、归档按钮统一、日历年视图缩小、顶栏高度统一、多天事件滚轮对齐、图标重绘。已升版 `versionCode 74` / `versionName 4.3.0`。
+> 上一版 4.2.0 / 73（tag `v4.2.0` / Release `450282686` / `d1c02522…097d`）保留未动。
 
-## 4.2.0 / 73：重复与时间跨度 + 时间块 / 标记 / 计算器 / 归档（代码完成，发布中）
+## 4.3.0 / 74：修复打磨 + 多天事件结束时刻 + 图标重绘（代码完成，发布中）
+
+- [x] **修「添加有时长的事件后点列表闪退」**：`durationMinutes` 全链路（领域模型→Room→备份/撤销→详情渲染）核对安全，`durationLabelOf` 无除零、详情页有 null 兜底、时间块 `blockMinutes` 有 `coerceAtMost`；新增 `EventDetailScreenTest` 组合回归钉住「有时长事件打开详情不崩」。**真机日志未复现，待真机确认**。
+- [x] **归档按钮统一**：详情页「归档/恢复」从 34dp 文字按钮改成 56dp 圆钮 `DetailArchiveIcon`（抽屉 + 上/下箭头），与置顶/删除同尺寸同材质。
+- [x] **日历年视图缩小**：`MonthCard` 内边距/格子高度（24→18dp）/字号整体下压，突出「预览」。
+- [x] **顶栏按钮高度统一**：`GlassSegmentedControl` 默认高度 32→34dp，与首页排序胶囊、日历「今天」、各页圆钮对齐。
+- [x] **多天事件滚轮对齐**：结束日滚轮 `isAllDay=form.isAllDay`、`time=form.endTime?:form.time`，上面能选时分下面也能选、上面全天下面全天；新增 `CountdownEvent.endTime`，Room schema **4→5**、备份/撤销同步，只对「多天+非全天」有意义。
+- [x] **图标重绘**：`ic_launcher_foreground/background/monochrome` 去渐变改纯色几何（日轮+八道光芒+地平线+倒影），线条分明。
+- [x] **验证**：**443 项单测 / 54 份 XML / 0 failures·errors·skipped**；lint release **0 errors / 15 warnings**；`assembleRelease` 成功；`verifyRuntimeNoticeCompleteness` 退出 0、`runtime.txt` 116,447 B 未变。APK 核验：5,313,569 B / `376dba9c…7455b`、aapt2 74/4.3.0、证书 `8894605E…8D02` 同 68、8 份许可资产与源一致、图像条目 0、Apple 素材 0 匹配。
+- [ ] **发布（进行中）**：`versionCode 73→74`、`versionName 4.2.0→4.3.0`，原签名 release + 全量回归 + APK 核验 + 上传，按 4.1.x/4.2.0 同一套流程。
+- [ ] **真机验收**：有时长事件点列表不再闪退；归档圆钮与三钮观感一致；年视图板块预览观感；顶栏各按钮高度齐平；多天事件结束日滚轮与开始日一致；新图标在启动器/圆形/方圆遮罩下的观感；以及 **73→新版原位保数据升级**（含 schema 4→5 迁移）。
+
+## 4.2.0 / 73：重复与时间跨度 + 时间块 / 标记 / 计算器 / 归档（2026-11-19 已发布）
 
 - [x] **修「节日皮肤没有效果」**：根因是当天不是农历节日、柔光又只有 0.22/0.16 且只有顶上一团。浓度提到 0.34/0.26 + 底部第二团；设置页新增「预览」当场换背景（`cycleFestivalPreview` / `clearFestivalPreview`，不落盘，离开设置页结束）；说明行按「预览中 / 已关闭 / 今天是节日 / 下一个节日+日期」四种状态。
 - [x] **完整重复规则**：NONE/DAILY/WEEKLY/MONTHLY/YEARLY + `repeatInterval`(1..99) + `repeatWeekdays`(ISO 1..7 多选) + `repeatUntil`（含当天，无次数上限）。`RepeatRule` 四档惰性序列重写，月档夹月末且不漂移；新增 `EventPrimaryAction.NEXT_OCCURRENCE`。
