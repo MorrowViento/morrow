@@ -12,7 +12,7 @@
 - #18：小部件复用应用丝缎/私有图片（cover 裁剪），后台预乘 alpha 三次可分离盒滤波；共享 frost/veil/强调色规格，外背景连续圆角 26dp。工作图长边 384、输出不超过 262,144 像素，最多 16 个宿主 SizeF 变体均分总预算，LRU 8 MiB；挂起渲染锁不阻塞主线程查缓存，不回收借出的源图/缓存图，不污染首页 placeholder。列表行用原生 26dp 圆角色纱/边缘（不是逐行实时采样或连续圆角 shader），不分配整幅行位图。
 - #18 验证：新增 15 项回归（9 像素/尺寸/缓存、2 原生列表快照、2 保存刷新、1 应用主题、1 Compose 实际预览/2×字体）；聚焦 45 项通过后补齐最后 2 项，最终全量 366 项实际通过。预览按测量尺寸后台生成，切主题不混旧位图，列表保留同次刷新外观快照；frost/减透明提交成功后真实刷新。未验启动器/设备帧率，不承诺模糊桌面壁纸。
 - 当前阶段：#19 代码与文档部分已交付，**全量回归已完成（379 项 / lint 0 errors·15 warnings / 原签名 release 成功）**，只剩人工版权归属审阅，详见下方专门章节；之后才 #20 全量验证与 4.1.1 / 70 原签名构建、#21 推送发布。保持 schema/包名/密钥/生产依赖/CI 不变。
-- HEAD 基线 `f9da8d8`（4.1.2 发布代码与文档），`v4.1.2` 已发布；远端 latest 已回读为 `v4.1.2`，`update/manifest.json` 与其一致。MANUAL-TEST 原有本地修改不编辑、不代勾、不提交。
+- HEAD 基线 `d3f3e93`（4.1.2 发布代码 + 回填的清单与文档），`v4.1.2` 已发布并指向 `f9da8d8`；远端 latest 与 `update/manifest.json` 均已回读为 `v4.1.2` 且语义一致。MANUAL-TEST 原有本地修改不编辑、不代勾、不提交。
 - 暂停动画时钟的测试须显式 `Snapshot.sendApplyNotifications()`：否则 Robolectric 全局快照尚未通知重组、语义树仍为旧页；不能把这种测试调度失败当生产动画问题。当前未关闭 Native 或删断言。
 
 ## 任务目标与边界
@@ -181,8 +181,8 @@
 - 推送：`git push origin main` → `cfd745a..f9da8d8`，`pre-push` 钩子报告「127.0.0.1:10809 已在监听，无需唤醒」；`git ls-remote` 回读 `refs/heads/main = f9da8d8`。
 - 发布前核验：`/releases/latest` = `v4.1.1`；`/releases/tags/v4.1.2` 与 `/git/refs/tags/v4.1.2` 均 **404**，标签未被占用。
 - 发布路径（沿用 #21 的 draft 优先）：建草稿（id `449651404`、`tag_name=v4.1.2`、`target_commitish=main`、标题「朝夕 4.1.2」）→ 上传 `morrow-71-4.1.2-release.apk`（HTTP 201，`size=5,199,013`，`digest=sha256:601b3beb…73a6`，asset id `762396303`）→ **把已上传资产重新下载**（5,199,013 B）本地算摘要与 `cmp` **逐字节一致** → `PATCH draft=false` 转正式（HTTP 200，`published_at` `2026-11-18T07:32:07Z`）。
-- 发布后回读：`/releases/latest` = `v4.1.2` /「朝夕 4.1.2」/ `prerelease=false` / 资产 5,199,013 B / `sha256:601b3beb…73a6` / `.../releases/download/v4.1.2/morrow-71-4.1.2-release.apk`；`git ls-remote --tags origin v4.1.2` = `f9da8d8`，与 `refs/heads/main` 同一提交。
-- `update/manifest.json` 用 `/releases/latest` 的真实字段整体重写（tag / name / body / published_at / prerelease / assets 的 name+url+size+digest），4,334 B，未手抄任何摘要。
+- 发布后回读：`/releases/latest` = `v4.1.2` /「朝夕 4.1.2」/ `prerelease=false` / 资产 5,199,013 B / `sha256:601b3beb…73a6` / `.../releases/download/v4.1.2/morrow-71-4.1.2-release.apk`；`git ls-remote --tags origin v4.1.2` = `f9da8d8`，即发布时刻的 main。
+- `update/manifest.json` 用 `/releases/latest` 的真实字段整体重写（tag / name / body / published_at / prerelease / assets 的 name+url+size+digest），4,334 B，未手抄任何摘要；单独提交 `d3f3e93` 并推送，`raw.githubusercontent.com` 回读 200 且与本地**语义完全一致**。**因此 main 现为 `d3f3e93`，而 tag `v4.1.2` 仍指向 `f9da8d8`**（与 4.1.1 的 `fbc1a89` / `4a31259` 同例：清单回填必然是 tag 之后的提交）。
 - 网络：`api.github.com` 与 `uploads.github.com` 经仓库级 `http.proxy=http://127.0.0.1:10809` 全程 200/201，**本批未再出现 59466 的 502**。
 - 命名决策沿用用户 4.1.1 时的指定：tag 与标题**不带 code**，资产名保留 code；仍走手工 API，未改 `scripts/release.sh`。
 - 未做：未改 CI/密钥/包名/schema/生产依赖，未覆盖旧 tag 或旧 Release，未纳入 MANUAL-TEST，未安装或卸载设备。

@@ -4,7 +4,7 @@
 
 ## 当前发布基线与前提
 
-- 最新正式版 **`v4.1.2`**（Release「朝夕 4.1.2」，id `449651404`，`published_at` 2026-11-18T07:32:07Z），资产 `morrow-71-4.1.2-release.apk`，**5,199,013 B**，SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`；本地 `update/manifest.json` 已按 `/releases/latest` 真实数据回填，标签指向 `f9da8d8`（= main）。
+- 最新正式版 **`v4.1.2`**（Release「朝夕 4.1.2」，id `449651404`，`published_at` 2026-11-18T07:32:07Z），资产 `morrow-71-4.1.2-release.apk`，**5,199,013 B**，SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`；本地 `update/manifest.json` 已按 `/releases/latest` 真实数据回填并推送，标签指向 `f9da8d8`（发布时刻 main；清单回填提交 `d3f3e93` 在其之后，属正常）。
   - 上一版 `v4.1.1`（`449587411`，70 包 5,196,689 B / `7F92400A…D963`）与 `v4.0.0-68`（5,028,400 B / `2dcc4921…bb8f`）均保持不动，未被覆盖。
   - 4.1.1 起 tag 与标题按用户指定不带 code（`v4.1.2` /「朝夕 4.1.2」），与 `v4.0.0-68` 的旧命名不同；资产名仍必须是 `morrow-<code>-<name>-release.apk`，客户端从资产名取 code。全程手工 API 发布（未改 `scripts/release.sh`，其默认仍生成 `v<name>-<code>`）；发布路径为 draft → 上传 → 回下载比对 → 转正式。
 - 发布前已确认：380 项单测通过、lint 0 errors / 15 warnings、R8 + 资源裁剪实际执行、证书 SHA-256 与正式 68 一致（`8894605E…8D02`）、**8 份**许可资产与源一致（新增 `protobuf-bsd-3.txt` 静态归属）、图像条目 0 且资源表无 Apple 素材、`verifyRuntimeNoticeCompleteness` 退出 0。真机与 68→71 保数据升级仍待用户验收。
