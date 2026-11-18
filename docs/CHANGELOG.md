@@ -10,6 +10,7 @@
 - 回归：379 项单测（47 份 XML，0 failures/errors/skipped）、lint 0 errors / 15 warnings（无新增）、`assembleDebug` 成功。**真机观感仍未验**（浅色/深色、图片背景档、大字体）。
 - 版本未变（仍 4.1.1 / 70）：已发布的 70 包早于本提交，二者不再逐字节对应；下次发行须另起 `4.1.2 / 71`，不得用 70 号重发。
 - 顺带：GitHub 侧网络改为仓库级 `http.proxy=http://127.0.0.1:10809` + `pre-push` 钩子唤醒本机 Xray（见 HANDOFF「本机 GitHub 网络」）。
+- **逐组件许可审阅（`docs/LICENSE-AUDIT.md`）**：按 109 个坐标重开归档独立复核 → 107 Apache-2.0 / 1 BSD-3 / 1 MIT+MCU，8 组正文载体，35 个坐标靠静态 `apache-2.0.txt` 补 §4(a)，§4(d) 仅 Glasmio 六模块需转发 NOTICE。发现两处问题：protobuf 的 BSD-3 正文**缺版权行**（未修，需生成器支持追加静态归属）；`androidx.core:core:1.18.0` 在清单中**重复出现两次**，已加 `distinctBy` 修掉，`runtime.txt` 111,134 → 110,947 B（`4773AF4B…48A4`，109 条无重复），`RuntimeNoticesAssetTest` 增唯一性断言。回归 379 项 / lint 0 errors·15 warnings / `assembleDebug` 与完整性门槛均通过。
 
 ## [2026-11-18] 4.1.1 (70)：正式发布（日历动画、小部件重构、开源许可）
 

@@ -156,6 +156,14 @@
 - 验证：`testDebugUnitTest --rerun + lintDebug + assembleDebug` → `BUILD SUCCESSFUL in 3m22s`，**379 项 / 47 XML / 0 failures·errors·skipped**，lint **0 errors / 15 warnings（无新增）**。**没有真机/截图证据**：浅色深色、图片背景档、大字体下的观感仍待设备确认。因为只改界面层、不涉及许可与打包，未重跑 `assembleRelease`——**已发布的 70 包早于本提交，不再与源码逐字节对应**。
 - 版本处置：源码仍是 4.1.1 / 70，但**不得用 70 号重发**（同 code 不同字节，已装用户收不到）。下次发行另起 **4.1.2 / 71**，按 #20/#21 的同一套核验走。
 
+### 逐组件许可审阅（2026-11-18，`docs/LICENSE-AUDIT.md`）
+- 做法：不采信生成器自述，按 109 个坐标回 `~/.gradle/caches/modules-2/files-2.1` 重开归档，独立重算每个正文的 SHA-256、重建「坐标 → 正文组」映射（109/109 定位成功）。
+- 结论：**107 Apache-2.0 / 1 BSD-3-Clause / 1 MIT+MCU 混合**；正文载体 8 组（三份 Apache 均含 `END OF TERMS AND CONDITIONS` 与第 9 条，非摘要版）；35 个坐标归档内无任何许可文本，由静态 `apache-2.0.txt` 承担 §4(a)；§4(d) 仅 Glasmio 六模块的 `THIRD_PARTY_NOTICES.md` 需转发，已随包，其余 103 个归档内无 NOTICE。
+- **两处发现**：
+  1. **protobuf BSD-3 缺版权行**——`datastore-preferences-external-protobuf:1.3.0` 的 `LICENSE.txt`（1,434 B）从「Redistribution and use…」开始，无 `Copyright`/`Google`；BSD-3 第 1 条要求保留版权声明，原样转发不足以免责。**未修**，处置方案见 LICENSE-AUDIT §4.1，需生成器支持追加静态归属，随 4.1.2 / 71 走。
+  2. **清单重复记录**——`androidx.core:core:1.18.0` 在解析结果里出现两次，`runtime.txt` 因此多打一条相同记录、artifact 计数虚高 1。已在 `app/build.gradle.kts` 加 `distinctBy(坐标, 文件, classifier)`，`runtime.txt` 111,134 → **110,947 B / SHA-256 `4773AF4B…48A4`**，坐标 109 条且无重复。
+- 仍不覆盖：源码文件头逐文件版权、R8 后类级残留、ying 派生边界逐文件判定、Apple 素材授权本身。`verifyRuntimeNoticeCompleteness` 退出 0 只证明「该有文本的坐标都有文本」，不等于归属审阅完成。
+
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。
 - `domain/time/LunarCalendar.kt`：自实现农历/压缩年表，未见明确外部版权；无证据表明复制了不许可来源，也未完成全部来源审核。
@@ -225,4 +233,4 @@ $env:JAVA_HOME = (Resolve-Path '../.toolchain/jdk/jdk-21.0.13+9').Path
 源码前缀 app/src/main/java/com/morrowviento/morrow/：类型/周期 domain/model、domain/time；迁移 data/db；表单/详情 ui/event；搜索 ui/search/SearchOverlay.kt；年历 ui/calendar；裁剪 data/backdrop/BackdropImage.kt 与 ui/settings/SettingsScreen.kt/SettingsViewModel.kt；提醒 reminder、data/reminder；部件 widget；更新 service/update、ui/update；许可构建逻辑 app/build.gradle.kts 的 generateRuntimeNotices；许可资源 app/src/main/assets/licenses/。
 上级 .ref 仅 ying Dart 摘录，不是完整 Flutter 仓库；旧 Glasmio 摘录不是当前 API 基准。
 
-[TODO](TODO.md) 当前待办；[MANUAL-TEST](MANUAL-TEST.md) 用户验收；[CHANGELOG](CHANGELOG.md) 历史；[SIGNING](SIGNING.md)/[RELEASE](RELEASE.md) 签名/发布。后续只更新短快照、对应待办与新增历史，区分代码完成、本地验证、真机通过、远端发布。#19 的实时进展/阻塞/续接顺序集中在 HANDOFF 的「#19 运行时许可与 README」章节，TODO 的 #19 子项同步勾选。
+[TODO](TODO.md) 当前待办；[MANUAL-TEST](MANUAL-TEST.md) 用户验收；[CHANGELOG](CHANGELOG.md) 历史；[LICENSE-AUDIT](LICENSE-AUDIT.md) 逐坐标许可与版权归属审阅；[SIGNING](SIGNING.md)/[RELEASE](RELEASE.md) 签名/发布。后续只更新短快照、对应待办与新增历史，区分代码完成、本地验证、真机通过、远端发布。#19 的实时进展/阻塞/续接顺序集中在 HANDOFF 的「#19 运行时许可与 README」章节，TODO 的 #19 子项同步勾选。

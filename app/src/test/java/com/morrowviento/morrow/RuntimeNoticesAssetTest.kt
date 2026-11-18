@@ -31,7 +31,12 @@ class RuntimeNoticesAssetTest {
     @Test
     fun runtimeManifestUsesActualCoordinatesAndExplicitCoverageStatus() {
         val runtime = text(asset("runtime.txt"))
-        assertEquals(110, Regex("(?m)^[a-z][^\\r\\n]+ — ").findAll(runtime).count())
+        // 坐标行必须一坐标一条：`androidx.core:core:1.18.0` 曾在解析结果里出现两次，
+        // 清单跟着打了两条一模一样的记录，只数总数看不出问题，必须同时查唯一性。
+        val coordinates = Regex("(?m)^([a-z][^\\r\\n]+) — ").findAll(runtime)
+            .map { it.groupValues[1] }.toList()
+        assertEquals(109, coordinates.size)
+        assertEquals(coordinates.size, coordinates.distinct().size)
         val protobuf = runtime.lineSequence().first {
             it.startsWith("androidx.datastore:datastore-preferences-external-protobuf:1.3.0 — ")
         }

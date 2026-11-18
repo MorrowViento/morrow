@@ -597,6 +597,9 @@ val generateRuntimeNotices = tasks.register("generateRuntimeNotices") {
         val artifacts = releaseRuntime.get().resolvedConfiguration.resolvedArtifacts.sortedWith(
             compareBy({ it.moduleVersion.id.toString() }, { it.file.name }, { it.classifier.orEmpty() },
                 { it.extension }, { RuntimeNoticeCollector.sha256(it.file.readBytes()) }))
+            // 同一坐标 / 同一文件偶尔会在解析结果里出现两次（`androidx.core:core:1.18.0` 实测如此）。
+            // 不去重的话清单会连着打印两条完全相同的记录，artifact 计数也就比坐标数虚高一个。
+            .distinctBy { listOf(it.moduleVersion.id.toString(), it.file.name, it.classifier.orEmpty()) }
         val collector = RuntimeNoticeCollector()
         val rootBytes = rootLicense.asFile.readBytes()
         collector.add(rootBytes, "朝夕根 LICENSE — MIT；APK 副本 assets/licenses/morrow.txt")
