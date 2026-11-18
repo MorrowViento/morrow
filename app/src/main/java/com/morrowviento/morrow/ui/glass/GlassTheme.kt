@@ -21,6 +21,7 @@ import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
 import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.data.settings.AccentPalette
+import com.morrowviento.morrow.data.settings.AppFont
 import com.morrowviento.morrow.data.settings.BackdropSettings
 import com.morrowviento.morrow.data.settings.GLASS_FROST_DEFAULT
 import io.github.neoruaa.glasmio.core.GlassAppearance
@@ -160,6 +161,10 @@ fun GlassTheme(
     reduceMotion: Boolean = false,
     frost: Float = GLASS_FROST_DEFAULT,
     accent: AccentPalette = AccentColor.DEFAULT.palette,
+    /**
+     * 用户选的应用字体。系统默认时不做任何包装，不额外增加一层 resolver。
+     */
+    font: AppFont = AppFont.SYSTEM,
     content: @Composable () -> Unit,
 ) {
     // 浅色 / 深色两套值：同一个色相在深底上要提亮一档才够清楚
@@ -195,8 +200,10 @@ fun GlassTheme(
             // 主题色同理，而且理由更硬：`GlassSurface` 的 `prominent` 底色走的是
             // `navigationSurfaceColor` 与色彩配方，配方的 `remember` 键里同样没有 accent。
             // 不重建的话，换色后只有文字与小图标变，玻璃按钮要按一下才跟上。
-            key(darkTheme, accent) {
-                content()
+            // 字体同理：换字体要把整棵子树重建一遍，否则缓存的文本测量结果
+            // 还会按旧字体的行高排版，出现「字变了但行距没变」的错位。
+            key(darkTheme, accent, font) {
+                AppFontTheme(font) { content() }
             }
         }
     }

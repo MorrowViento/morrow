@@ -3,6 +3,7 @@ package com.morrowviento.morrow.ui.settings
 import com.morrowviento.morrow.data.backup.BackupDocument
 import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.backup.ImportReport
+import com.morrowviento.morrow.data.settings.AppFont
 import com.morrowviento.morrow.data.settings.AppSettings
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.ui.update.UpdateUiState
@@ -47,6 +48,10 @@ data class SettingsUiState(
     val pendingBackdrop: PendingBackdrop? = null,
     val confirmClearAll: Boolean = false,
     val showLicenses: Boolean = false,
+    /** 字体选择面板是否打开。 */
+    val showFontPicker: Boolean = false,
+    /** 已导入的字体，供字体面板列出；默认字体不在这里，单独一行表示。 */
+    val fonts: List<AppFont> = emptyList(),
     /** 一次性提示，展示后由 [SettingsActions.consumeMessage] 清掉。 */
     val message: String? = null,
     /** M7：应用内更新检查 / 下载 / 安装的进度。 */
@@ -75,6 +80,8 @@ data class SettingsActions(
     /** 切换玻璃厚度档位（写该档位的连续值）。 */
     val setGlassFrostLevel: (GlassFrostLevel) -> Unit,
     val setReduceMotion: (Boolean) -> Unit,
+    /** 节日皮肤开关（节日当天的背景柔光与标题祝语）。 */
+    val setFestivalSkin: (Boolean) -> Unit,
     val exportTo: (android.net.Uri) -> Unit,
     val loadImport: (android.net.Uri) -> Unit,
     val confirmImport: (ImportMode) -> Unit,
@@ -84,6 +91,15 @@ data class SettingsActions(
     val cancelClearAll: () -> Unit,
     val showLicenses: () -> Unit,
     val hideLicenses: () -> Unit,
+    /** 打开字体选择面板（顺带重扫一次已导入的字体）。 */
+    val showFonts: () -> Unit,
+    val hideFonts: () -> Unit,
+    /** 选中某款字体；传 [AppFont.SYSTEM] 即回到系统默认。 */
+    val selectFont: (AppFont) -> Unit,
+    /** 导入用户挑的字体文件；成功后直接切过去。 */
+    val importFont: (android.net.Uri) -> Unit,
+    /** 删除已导入的字体文件；删的正是当前字体时回落系统默认。 */
+    val deleteFont: (AppFont) -> Unit,
     val consumeMessage: () -> Unit,
     val openNotificationSettings: () -> Unit,
     val openExactAlarmSettings: () -> Unit,

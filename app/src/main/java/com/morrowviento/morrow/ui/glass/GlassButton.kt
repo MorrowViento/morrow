@@ -1,6 +1,6 @@
 package com.morrowviento.morrow.ui.glass
 
-import androidx.compose.material3.Text
+import com.morrowviento.morrow.ui.component.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle

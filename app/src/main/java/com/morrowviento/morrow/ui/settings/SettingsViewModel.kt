@@ -17,8 +17,10 @@ import com.morrowviento.morrow.data.backdrop.BackdropImage
 import com.morrowviento.morrow.data.reminder.ReminderPermissions
 import com.morrowviento.morrow.data.reminder.ReminderScheduler
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.data.settings.AppFont
 import com.morrowviento.morrow.data.settings.BackdropMode
 import com.morrowviento.morrow.data.settings.BackdropSettings
+import com.morrowviento.morrow.data.settings.FontStore
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.SettingsRepository
 import com.morrowviento.morrow.data.settings.ThemeMode
@@ -70,8 +72,19 @@ class SettingsViewModel(
         ),
     )
 
+    /**
+     * 选中的字体文件不在了（被系统清理、用户删了）就按系统默认展示。
+     *
+     * 只在展示层回落、不去改写偏好：文件可能只是暂时读不到（外置存储卸载），
+     * 悄悄把用户的选择清掉，等存储回来也恢复不了。
+     */
     val state: StateFlow<SettingsUiState> = combine(settings.appSettings, local) { stored, transient ->
-        transient.copy(settings = stored)
+        val font = if (stored.font.isCustom && !FontStore.exists(appContext, stored.font.fileName)) {
+            AppFont.SYSTEM
+        } else {
+            stored.font
+        }
+        transient.copy(settings = stored.copy(font = font))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
     init {
@@ -146,6 +159,8 @@ class SettingsViewModel(
     }
 
     fun setReduceMotion(enabled: Boolean) = persist { settings.setReduceMotion(enabled) }
+
+    fun setFestivalSkin(enabled: Boolean) = persist { settings.setFestivalSkin(enabled) }
 
     /**
      * 换配色：一处写入，`appSettings` 一变，整棵树（含底栏与所有浮层）跟着重建。
@@ -301,7 +316,13 @@ class SettingsViewModel(
             BackdropImage.clear(appContext)
             reconcile(before)
         }
-        local.update { it.copy(confirmClearAll = false, message = "已清除全部数据") }
+        // 导入的字体也属于「我的数据」：不清掉的话，清空后点开设置仍会列着几款字体文件，
+        // 而且这些文件占的正是用户想腾出来的空间
+        settings.setFont(AppFont.SYSTEM)
+        FontStore.dir(appContext).listFiles()?.forEach { it.delete() }
+        local.update {
+            it.copy(confirmClearAll = false, fonts = emptyList(), message = "已清除全部数据")
+        }
     }
 
     // ---- 杂项 ----
@@ -311,6 +332,62 @@ class SettingsViewModel(
     fun showLicenses() = local.update { it.copy(showLicenses = true) }
 
     fun hideLicenses() = local.update { it.copy(showLicenses = false) }
+
+    // ---------------------------------------------------------------- 字体
+
+    /**
+     * 打开字体面板，并重扫一次私有目录。
+     *
+     * 每次打开都重扫而不是依赖内存里的列表：字体目录可能被系统在低存储时清掉，
+     * 也可能在文件管理器里被直接删除，缓存下来的列表会列出打不开的字体。
+     */
+    fun showFonts() {
+        local.update { it.copy(showFontPicker = true, fonts = FontStore.installed(appContext)) }
+    }
+
+    fun hideFonts() = local.update { it.copy(showFontPicker = false) }
+
+    fun selectFont(font: AppFont) = persist {
+        settings.setFont(font)
+        local.update { it.copy(showFontPicker = false) }
+    }
+
+    /**
+     * 导入字体：复制进私有目录，成功后**直接切换过去**。
+     *
+     * 用户点「导入字体文件」的意图就是「我要用它」，导完还要再点一次选中的话，
+     * 中间那一步只会让人怀疑导入没成功。
+     */
+    fun importFont(uri: android.net.Uri) = runTask(failure = "导入字体失败") {
+        val font = FontStore.import(appContext, uri).getOrThrow()
+        settings.setFont(font)
+        local.update {
+            it.copy(
+                fonts = FontStore.installed(appContext),
+                showFontPicker = false,
+                message = "已切换到「${font.displayName}」",
+            )
+        }
+    }
+
+    /**
+     * 删除字体文件。删掉的正是当前字体时回落系统默认，否则界面会指向一个不存在的文件。
+     */
+    fun deleteFont(font: AppFont) = runTask(failure = "删除字体失败") {
+        val wasSelected = settings.snapshotSettings().font.fileName == font.fileName
+        FontStore.delete(appContext, font.fileName)
+        if (wasSelected) settings.setFont(AppFont.SYSTEM)
+        local.update {
+            it.copy(
+                fonts = FontStore.installed(appContext),
+                message = if (wasSelected) {
+                    "已删除「${font.displayName}」，字体回到系统默认"
+                } else {
+                    "已删除「${font.displayName}」"
+                },
+            )
+        }
+    }
 
     fun openNotificationSettings() = permissions.openNotificationSettings()
 

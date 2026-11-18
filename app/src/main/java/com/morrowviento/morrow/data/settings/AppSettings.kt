@@ -224,6 +224,19 @@ data class AppSettings(
     val reduceTransparency: Boolean = false,
     /** 减弱动效：关闭页面切换的淡入淡出与卡片位移，只保留即时切换。 */
     val reduceMotion: Boolean = false,
+    /**
+     * 应用字体（4.1.3 新增）。
+     *
+     * 只在应用内 Compose 界面生效：桌面小部件与通知由 RemoteViews 渲染，
+     * 它们用的是系统字体，换不了（要在小部件里用自定义字体只能渲染成位图，
+     * 代价是每套字号都要重画一张，不划算）。
+     */
+    val font: AppFont = AppFont.SYSTEM,
+    /**
+     * 节日皮肤（4.1.3 新增）：节日当天在背景上加一层很淡的节日色柔光、
+     * 标题下加一行祝语。不改配色、不换壁纸，关掉就完全回到普通外观。
+     */
+    val festivalSkin: Boolean = true,
 ) {
     /**
      * 实际生效的配色：手选的那套，或由背景图主色推导出来的那套。

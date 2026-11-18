@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -41,6 +40,8 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morrowviento.morrow.ui.component.PageChrome
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassMotion
 import com.morrowviento.morrow.ui.glass.LocalReduceMotion
@@ -277,7 +278,12 @@ private fun CalendarHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp),
+            .padding(
+                start = PageChrome.HeaderHorizontal,
+                end = PageChrome.HeaderHorizontal,
+                top = PageChrome.HeaderTop,
+                bottom = PageChrome.HeaderBottom,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         NavButton("‹", "上一${if (isMonthView) "月" else "年"}", enabled = canPrev) {
@@ -317,7 +323,7 @@ private fun CalendarHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .padding(horizontal = PageChrome.HeaderHorizontal, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -331,6 +337,8 @@ private fun CalendarHeader(
             text = "今天",
             enabled = !onTodayPeriod(state),
             onClick = actions.goToToday,
+            // 与同行的分段控件、头部圆钮同高（34dp 档），小号 28dp 在这一行会明显矮一截
+            compact = false,
         )
     }
 }
@@ -341,14 +349,14 @@ private fun NavButton(glyph: String, description: String? = null, enabled: Boole
     val primary = glassTextPrimary()
     GlassCirclePanel(
         modifier = Modifier
-            .size(34.dp)
+            .size(PageChrome.CircleButtonSize)
             .semantics { description?.let { contentDescription = it } },
         enabled = enabled,
         onClick = onClick,
     ) {
         Text(
             text = glyph,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = primary),
+            style = TextStyle(fontSize = PageChrome.CircleGlyphSize, fontWeight = FontWeight.Medium, color = primary),
         )
     }
 }

@@ -30,10 +30,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import com.morrowviento.morrow.ui.component.PageChrome
 import com.morrowviento.morrow.domain.model.RepeatType
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.domain.time.LunarCalendar
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassTile
 import com.morrowviento.morrow.ui.glass.glassAccent
@@ -231,7 +232,7 @@ internal fun SelectedDaySection(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(start = PageChrome.HeaderHorizontal, end = PageChrome.HeaderHorizontal, top = 2.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.selectedEntries, key = { it.id }) { entry ->
@@ -250,7 +251,7 @@ internal fun YearView(state: CalendarUiState, actions: CalendarActions) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(160.dp * fontScale),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = PageChrome.HeaderHorizontal, end = PageChrome.HeaderHorizontal, top = 6.dp, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -325,7 +326,7 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
 internal fun MonthListView(state: CalendarUiState, onOpenEvent: (String) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(start = PageChrome.HeaderHorizontal, end = PageChrome.HeaderHorizontal, top = 6.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (state.monthGroups.isEmpty()) {

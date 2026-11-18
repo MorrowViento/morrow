@@ -29,7 +29,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +42,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.ImageBitmap
 import com.kyant.capsule.ContinuousRoundedRectangle
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassOptics
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -128,6 +128,8 @@ abstract class BaseWidgetConfigActivity : ComponentActivity() {
                 frost = prefs.glassFrost,
                 // 取色档也要在这里生效：否则应用里是「从图取色」的紫，配置台还是海蓝
                 accent = prefs.resolvedAccent,
+                // 字体同理：配置台也是应用内界面，跟着用户选的字体走
+                font = prefs.font,
             ) {
                 CompositionLocalProvider(LocalBackdropSettings provides prefs.backdrop) {
                     GlassBackdropHost(

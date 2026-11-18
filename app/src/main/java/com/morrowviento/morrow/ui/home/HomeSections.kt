@@ -32,7 +32,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,9 +48,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morrowviento.morrow.ui.component.PageChrome
 import com.morrowviento.morrow.ui.component.SortGlyph
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.event.HomeUiState
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
+import com.morrowviento.morrow.ui.glass.LocalFestivalSkin
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.GlassMenu
 import com.morrowviento.morrow.ui.glass.GlassMotion
@@ -112,7 +114,12 @@ internal fun HomeHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 22.dp, end = 18.dp, top = 12.dp, bottom = 4.dp),
+            .padding(
+                start = PageChrome.HeaderHorizontal,
+                end = PageChrome.HeaderHorizontal,
+                top = PageChrome.HeaderTop,
+                bottom = PageChrome.HeaderBottom,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -121,6 +128,25 @@ internal fun HomeHeader(
                 maxLines = 1,
                 style = TextStyle(fontSize = titleSize.sp, fontWeight = FontWeight.Bold, color = primary),
             )
+            // 节日只在展开态出现：折叠后标题那一行已经很窄，再挤一句祝语会把
+            // 「朝夕」压成省略号
+            val festival = LocalFestivalSkin.current
+            AnimatedVisibility(visible = !collapsed && festival != null) {
+                if (festival != null) {
+                    Text(
+                        text = "${festival.name} · ${festival.greeting}",
+                        maxLines = 1,
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            // 用节日色本身而不是强调色：强调色可能被用户设成同一支蓝，
+                            // 那这行小字就失去了「今天是节日」的信号
+                            color = Color(festival.tint),
+                        ),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
             AnimatedVisibility(visible = !collapsed) {
                 Text(
                     text = "${state.totalCount} 个事件 · ${state.active.size} 进行中",
@@ -144,7 +170,7 @@ internal fun HomeHeader(
 internal fun SortChip(label: String, onClick: () -> Unit) {
     val primary = glassTextPrimary()
     GlassPanel(
-        modifier = Modifier.height(32.dp),
+        modifier = Modifier.height(PageChrome.ChipHeight),
         capsule = true,
         onClick = onClick,
     ) {
@@ -167,12 +193,12 @@ internal fun SortChip(label: String, onClick: () -> Unit) {
 @Composable
 internal fun MoreButton(onClick: () -> Unit) {
     GlassCirclePanel(
-        modifier = Modifier.size(32.dp),
+        modifier = Modifier.size(PageChrome.CircleButtonSize),
         onClick = onClick,
     ) {
         Text(
             text = "⋯",
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
+            style = TextStyle(fontSize = PageChrome.CircleGlyphSize, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
         )
     }
 }

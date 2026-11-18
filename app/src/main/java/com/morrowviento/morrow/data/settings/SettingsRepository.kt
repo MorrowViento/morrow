@@ -95,6 +95,27 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setReduceMotion(enabled: Boolean) =
         putBoolean(LegacySettingsKeys.REDUCE_MOTION, enabled)
 
+    suspend fun setFestivalSkin(enabled: Boolean) =
+        putBoolean(LegacySettingsKeys.FESTIVAL_SKIN, enabled)
+
+    /**
+     * 写应用字体：文件名与显示名一起写，**一次落盘**。
+     *
+     * 分两次写会出现「文件名已经是新字体、显示名还是旧的」这一帧，
+     * 设置行上就会闪一下「霞鹜文楷 → 系统默认」再跳回来。
+     */
+    suspend fun setFont(font: AppFont) {
+        store.edit { prefs ->
+            if (font.isCustom) {
+                prefs[stringPreferencesKey(LegacySettingsKeys.APP_FONT)] = font.fileName
+                prefs[stringPreferencesKey(LegacySettingsKeys.APP_FONT_NAME)] = font.displayName
+            } else {
+                prefs.remove(stringPreferencesKey(LegacySettingsKeys.APP_FONT))
+                prefs.remove(stringPreferencesKey(LegacySettingsKeys.APP_FONT_NAME))
+            }
+        }
+    }
+
     suspend fun setAccentColor(color: AccentColor) =
         putString(LegacySettingsKeys.ACCENT_COLOR, color.prefValue)
 
@@ -145,6 +166,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             }
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_TRANSPARENCY)] = frost >= 0.85f
             prefs[booleanPreferencesKey(LegacySettingsKeys.REDUCE_MOTION)] = value.reduceMotion
+            // 节日皮肤是纯布尔，跟着备份走；字体不写——字体文件不随备份，
+            // 写入文件名只会得到一个指向不存在文件的偏好
+            prefs[booleanPreferencesKey(LegacySettingsKeys.FESTIVAL_SKIN)] = value.festivalSkin
             prefs.writeBackdrop(value.backdrop)
         }
     }
@@ -320,6 +344,12 @@ private fun Preferences.toAppSettings(): AppSettings {
         glassFrost = frost,
         reduceTransparency = frost >= 0.85f,
         reduceMotion = booleanOrNull(LegacySettingsKeys.REDUCE_MOTION) ?: false,
+        font = AppFont(
+            fileName = stringOrNull(LegacySettingsKeys.APP_FONT).orEmpty(),
+            displayName = stringOrNull(LegacySettingsKeys.APP_FONT_NAME).orEmpty(),
+        ),
+        // 缺键按「开」：旧版本没有这一项，升级后遇上节日就能看到一点氛围
+        festivalSkin = booleanOrNull(LegacySettingsKeys.FESTIVAL_SKIN) ?: true,
     )
 }
 

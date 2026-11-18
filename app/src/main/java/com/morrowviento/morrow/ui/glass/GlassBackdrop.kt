@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
@@ -87,6 +89,9 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     val palette = LocalAccentPalette.current
     val blobs = remember(palette, dark) { palette.blobs(dark) }
 
+    // 节日色在组合期取一次：下面的 `drawWithCache` 不是 Composable 作用域
+    val festivalTint = LocalFestivalSkin.current?.let { Color(it.tint) }
+
     // 自定义图片：只在真的用图片档时才去读盘。解码与取色都在 IO 线程，
     // 完成后主线程只是换一个 ImageBitmap 引用。
     val context = LocalContext.current
@@ -146,6 +151,13 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                 // 照片上的那层纱：不是装饰，是**可读性**的兜底。亮色的照片会把
                 // 玻璃上的白字吞掉，压一层底色纱后对比度回到可用范围。
                 val veil = base.copy(alpha = if (dark) 0.30f else 0.16f)
+                // 节日柔光：只调透明度，不改色相。色值淡到 alpha=0 而不是转向
+                // Color.Transparent——非预乘插值会在边缘留一圈脏灰（与色斑同一处理）。
+                // 这里取的是上面在组合期读出来的色值：`drawWithCache` 的 scope 不是
+                // Composable，不能在里面读 CompositionLocal。
+                val festivalGlow = festivalTint?.let { tint ->
+                    tint.copy(alpha = if (dark) 0.22f else 0.16f)
+                }
                 onDrawBehind {
                     val photoBitmap = photo
                     val satin = wallpaper
@@ -183,6 +195,22 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                         // 丝缎：等首张位图就绪时先铺一块纯底色，避免透出系统黑
                         satin != null -> drawImage(satin, dstOffset = IntOffset.Zero, dstSize = dstSize)
                         else -> drawRect(base)
+                    }
+                    if (festivalGlow != null) {
+                        // 一团盖住上半屏的光：中心在屏幕上方偏中，半径取对角线量级，
+                        // 边缘完全淡出，不做边界感很强的圆形
+                        val center = Offset(size.width * 0.5f, size.height * 0.18f)
+                        val radius = (size.width * size.width + size.height * size.height)
+                            .let { kotlin.math.sqrt(it) } * 0.62f
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(festivalGlow, festivalGlow.copy(alpha = 0f)),
+                                center = center,
+                                radius = radius,
+                            ),
+                            radius = radius,
+                            center = center,
+                        )
                     }
                 }
             },

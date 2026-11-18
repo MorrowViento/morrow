@@ -16,7 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.data.category.CategoryItem
 import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.component.ChipRow
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.event.EventCardModel
 import com.morrowviento.morrow.ui.glass.GlassPanel
 import com.morrowviento.morrow.ui.glass.glassAccent

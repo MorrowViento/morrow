@@ -23,7 +23,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +32,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morrowviento.morrow.ui.component.PageChrome
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -113,7 +114,7 @@ fun EventDetailScreen(
                             com.morrowviento.morrow.ui.glass.GlassTextButton(
                                 text = card.primaryAction.label,
                                 onClick = onToggleCompleted,
-                                modifier = Modifier.weight(1f).height(56.dp),
+                                modifier = Modifier.weight(1f).height(PageChrome.ActionButtonSize),
                                 active = true,
                                 compact = false,
                             )
@@ -134,7 +135,12 @@ private fun DetailHeader(onDismiss: () -> Unit, onEdit: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 10.dp),
+            .padding(
+                start = PageChrome.HeaderHorizontal,
+                end = PageChrome.HeaderHorizontal,
+                top = PageChrome.HeaderTop,
+                bottom = PageChrome.HeaderBottom,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -188,7 +194,7 @@ private fun DetailActionIcon(pin: Boolean, pinned: Boolean = false, onClick: () 
     val color = if (pin) glassTextPrimary() else Color(0xFFE65B64)
     val description = if (pin) { if (pinned) "取消置顶" else "置顶" } else "删除"
     com.morrowviento.morrow.ui.glass.GlassCirclePanel(
-        modifier = Modifier.size(52.dp).semantics {
+        modifier = Modifier.size(PageChrome.ActionButtonSize).semantics {
             contentDescription = description
             if (pin) selected = pinned
         },

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -31,6 +30,8 @@ import com.morrowviento.morrow.data.backup.ImportMode
 import com.morrowviento.morrow.data.settings.BackdropMode
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
+import com.morrowviento.morrow.ui.component.PageChrome
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassAlert
 import com.morrowviento.morrow.ui.glass.GlassAlertButton
 import com.morrowviento.morrow.ui.glass.GlassAlertRole
@@ -49,16 +50,21 @@ internal fun SettingsHeader(onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
+            .padding(
+                start = PageChrome.HeaderHorizontal,
+                end = PageChrome.HeaderHorizontal,
+                top = PageChrome.HeaderTop,
+                bottom = PageChrome.HeaderBottom,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         GlassCirclePanel(
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(PageChrome.CircleButtonSize),
             onClick = onDismiss,
         ) {
             Text(
                 text = "‹",
-                style = TextStyle(fontSize = 20.sp, color = glassTextPrimary()),
+                style = TextStyle(fontSize = PageChrome.CircleGlyphSize, color = glassTextPrimary()),
             )
         }
         Spacer(Modifier.width(12.dp))

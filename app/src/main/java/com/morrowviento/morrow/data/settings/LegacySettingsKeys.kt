@@ -43,6 +43,25 @@ object LegacySettingsKeys {
     const val BACKDROP_AUTO_TINT = "backdrop_auto_tint"
     const val BACKDROP_TINT_SEED = "backdrop_tint_seed"
 
+    /**
+     * 应用字体（4.1.3 新增）。
+     *
+     * `app_font` 只存导入后的文件名（字体本体在 `filesDir/app_fonts/`），
+     * `app_font_name` 存导入时的原始文件名，只用于界面展示；都为空表示系统默认。
+     * 旧版（Flutter）有字体库，但存的是另一套结构，迁移器不搬——那些字体文件
+     * 在旧应用的私有目录里，跨包读不到，搬到名字反而会指向不存在的文件。
+     */
+    const val APP_FONT = "app_font"
+    const val APP_FONT_NAME = "app_font_name"
+
+    /**
+     * 节日皮肤开关（4.1.3 新增）。
+     *
+     * 缺失按「开」处理：这是纯装饰，默认给节日一点氛围比默认关掉更符合期待；
+     * 不喜欢的用户在设置里关一次即可写下明确的 false。
+     */
+    const val FESTIVAL_SKIN = "festival_skin"
+
     const val AUTO_CHECK_UPDATE = "auto_check_update"
     const val AVATAR_PATH = "avatar_path"
     const val ONBOARDING_COMPLETED = "onboarding_completed_v1"

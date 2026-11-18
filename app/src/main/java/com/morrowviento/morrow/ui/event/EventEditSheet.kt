@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +36,7 @@ import com.morrowviento.morrow.ui.component.ChipRow
 import com.morrowviento.morrow.ui.component.ChoiceChip
 import com.morrowviento.morrow.ui.component.GlassTextField
 import com.morrowviento.morrow.ui.component.SectionTitle
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.component.WheelDateTimePicker
 import com.morrowviento.morrow.ui.glass.GlassSheet
 import com.morrowviento.morrow.ui.glass.SheetHeader

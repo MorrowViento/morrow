@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -28,6 +27,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.morrowviento.morrow.data.backup.BackupFiles
 import com.morrowviento.morrow.data.settings.AccentPalette
 import com.morrowviento.morrow.data.settings.BackdropMode
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.LocalGlassDark
@@ -170,6 +170,16 @@ fun SettingsScreen(
                                 )
                             }
                             Divider()
+                            ActionRow(
+                                // 只有「系统默认 / 某款导入字体」两种状态，值就写在右边，
+                                // 不必再进面板才能知道现在用的哪一款
+                                title = "字体",
+                                summary = "系统默认，或导入自己的 TTF / OTF；只作用于应用内界面",
+                                value = state.settings.font.label,
+                                enabled = !state.busy,
+                                onClick = actions.showFonts,
+                            )
+                            Divider()
                             val backdrop = state.settings.backdrop
                             val resolved = state.settings.resolvedAccent
                             SettingBlock(
@@ -309,6 +319,23 @@ fun SettingsScreen(
                                     height = 34.dp,
                                 )
                             }
+                            Divider()
+                            SettingBlock(
+                                label = "节日皮肤",
+                                hint = if (state.settings.festivalSkin) {
+                                    "春节、中秋等节日当天，背景多一层节日色柔光，标题下多一行祝语"
+                                } else {
+                                    "关闭后节日与平日外观完全一致"
+                                },
+                            ) {
+                                GlassSegmentedControl(
+                                    items = AutoTintItems,
+                                    selected = state.settings.festivalSkin,
+                                    onSelected = actions.setFestivalSkin,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    height = 34.dp,
+                                )
+                            }
                         }
                     }
 
@@ -435,6 +462,18 @@ fun SettingsScreen(
 
         if (state.showLicenses) {
             LicensesSheet(onDismiss = actions.hideLicenses)
+        }
+
+        if (state.showFontPicker) {
+            FontSheet(
+                current = state.settings.font,
+                fonts = state.fonts,
+                busy = state.busy,
+                onSelect = actions.selectFont,
+                onImport = actions.importFont,
+                onDelete = actions.deleteFont,
+                onDismiss = actions.hideFonts,
+            )
         }
 
         state.message?.let { message ->

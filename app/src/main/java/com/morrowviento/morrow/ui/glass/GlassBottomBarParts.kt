@@ -6,6 +6,7 @@ package com.morrowviento.morrow.ui.glass
  * 与 [GlassBottomNavigation] 分开，是因为它们的输入全是 px 值与进度回调，
  * 不持有底栏的拖动/吸附状态——底栏本体只负责算几何、串状态。
  */
+import com.morrowviento.morrow.ui.component.Text
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment

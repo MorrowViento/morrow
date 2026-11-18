@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +40,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morrowviento.morrow.ui.component.PageChrome
 import com.morrowviento.morrow.data.backdrop.BackdropCrop
+import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassTextButton
 import com.morrowviento.morrow.ui.glass.glassColors
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
@@ -120,9 +121,9 @@ internal fun BackdropCropScreen(
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GlassTextButton("取消", onCancel, modifier = Modifier.weight(1f).height(48.dp), enabled = !busy, compact = false)
+            GlassTextButton("取消", onCancel, modifier = Modifier.weight(1f).height(PageChrome.ActionButtonSize), enabled = !busy, compact = false)
             GlassTextButton(if (busy) "保存中…" else "使用此背景", { onConfirm(bitmap, crop) },
-                modifier = Modifier.weight(1f).height(48.dp), active = true, enabled = !busy, compact = false)
+                modifier = Modifier.weight(1f).height(PageChrome.ActionButtonSize), active = true, enabled = !busy, compact = false)
         }
     }
 }
