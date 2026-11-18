@@ -1,6 +1,29 @@
 # TODO — 朝夕 · 当前待办
 
-> 更新：2026-11-16。续接先读 [HANDOFF](HANDOFF.md)，再读本文件；历史实现见 CHANGELOG。
+> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（尤其「#19 运行时许可与 README」章节，含发布阻塞与续接顺序），再读本文件；历史实现见 CHANGELOG。
+
+## 当前：4.1.1 视觉与开源发布（已批准）
+
+- [x] **#16 控件与背景**：ChoiceChip 容器/行盒垂直居中；首页/日历互斥活动内容采样槽，日历复用全窗口背景。4 项 Compose Native 布局 + 5 项手势聚焦回归通过；真机视觉未验。
+- [x] **#17 日历动画**：完整不可变快照、共享标题/日期过渡、模式淡入淡出/周期定向滑动、固定 viewport、稳定数字和边界交互；7 项动画/真实大字体日历及 7 项手势/周期身份测试通过。阶段全量 351 项（42 XML，0 failures/errors/skipped）、lint 0 errors / 15 warnings、debug 构建成功；真机帧率未验。
+- [x] **#18 小部件**：应用丝缎/私有图片同源、后台预乘 alpha 软件模糊；外背景连续圆角、原生轻量圆角行卡片；实际 SizeF 变体均分 262,144 总像素、384 工作图长边、8 MiB 结构化 LRU；后台测量尺寸预览、列表外观快照、保存成功后刷新。新增 15 项回归，最新全量 366 项（44 XML，0 failures/errors/skipped）、lint 0 errors / 15 warnings、debug 构建成功。启动器视觉/帧率仍未验；不实时采样桌面或滚动行。
+- [ ] **#19 README/许可（进行中，含发布阻塞）**：首页准确说明 ying 独立 Kotlin 重构和 Glasmio UI；自身 MIT 已选定，Glasmio 实际 Apache-2.0；审核并打包可阅读许可文本。详见 HANDOFF「#19 运行时许可与 README」章节。
+  - [x] 新增根 `LICENSE`（朝夕 MIT）、`app/src/main/assets/licenses/ying.txt`（ying 完整 MIT，Copyright (c) 2026 Gao Shuai）。
+  - [x] **初版实现（历史）**：`generateRuntimeNotices` 按实际releaseRuntimeClasspath收集110个artifact；修复AGP延迟provider/assets.directories.add。初版输出16,271行/928,540 B不是当前文件；当前生成物 111,134 B（含三份静态全文），已补源字节/正文缺口校验。
+  - [x] 核实上游：ying MIT；Glasmio 0.1.3 为 **Apache-2.0 非 MIT**、以 v0.1.3 标签为准；MaterialKolor 实际标签 **`4.1.1` 非 `v4.1.1`**、MIT `Copyright (c) 2025 Jordon de Hoog`、material-color-utilities 模块 Apache-2.0。
+  - [x] **当前审计包 Apple 素材不分发证据**：前一步强制 R8/资源裁剪构建取得原始证据；正文补齐与许可 UI 完成后再次核验最新 69 release 的 **145 个文件条目**，目标文件名/10项AAR图像原始SHA/PNG-WebP魔数/资源表均0匹配，无嵌套归档。最新 APK **5,196,693 B**，SHA-256 `320E5E90984762BEF2177C3A6AE7814BD268FF7B8EF15EA0B6553520024D1DF9`。七份许可资产与源字节一致；不是 Apple 图像授权或正式70包放行，完整新旧证据见HANDOFF。
+  - [ ] **正式发行前硬门槛**：#20 生成最终 4.1.1 / 70 待上传 APK 后，重复文件内容/资源表/图像摘要及格式核验并记录最终 SHA-256；任一目标图像进入包即不得发行，不以本次 69 审计包替代，不以 Apache 声明覆盖 Apple 原图。
+  - [x] 修 `generateRuntimeNotices`：精确坐标/版本允许集；protobuf **BSD-3-Clause** 与原文保留；只收 AAR classes.jar/平铺 libs/*.jar，排除 lint.jar/CopyrightKt.class；严格 UTF-8/控制字符与文本名；原字节去重保留全部来源。新增固定 v0.1.3 Glasmio NOTICES 源文件、根 MIT→morrow.txt。**26 项内存回归 + 5 项实际 assets 回归**通过（当轮为 24+4，补正文后扩为 26+5）；110 artifact/109坐标、81份归档原文→**8组/118来源**，runtime.txt **111,134 B**，强制复跑摘要相同。七份许可资产在最新69审计APK中与源字节一致；详见 HANDOFF。
+  - [x] **补齐正文与来源归属（2026-11-18 完成）**：新增三份静态全文——`apache-2.0.txt`（10,775 B，正文取自 androidx.core:core:1.18.0 AAR 的 `META-INF/androidx/core/core/LICENSE.txt`，该全文 SHA-256 `809fa1ed…9c0` 未改动）、`materialkolor.txt`（1,631 B，MIT `Copyright (c) 2025 Jordon de Hoog`，与上游 `4.1.1` Git blob `614400db…b984` 一致）、`material-color-utilities.txt`（11,195 B，Apache-2.0 + `Copyright 2021 Google LLC`，与上游 Git blob `3879bcb2…c555` 一致）。均带 `Source:`/`License:` 头；MaterialKolor 混合声明必须两份齐全，不接受只补一份。`expectedTextGaps` 收敛为**空集**（新增缺口会直接失败），清单为每个缺文本坐标打印静态正文文件名与 SHA-256 及 §4(a)/§4(d) 或 MIT 归属说明。**`:app:verifyRuntimeNoticeCompleteness` 已通过（退出 0、缺口 0）**；生成物 111,134 B / 8 个原字节组 / 118 个来源，强制复跑摘要一致。`apache-2.0.txt` 只是协议副本，不代替各组件源码层版权审阅。
+  - [x] **README 与设置页可读许可（2026-11-18 完成）**：README 重写，清除 WorkManager / 22 测试 / 仅年重复 / 旧 GlassPress / 旧里程碑 / 仓库外计划必读，补当前功能、构建与完整性门槛、Glasmio 封装约定、许可边界，保留包名区别段。设置页新增 `ui/settings/LicenseCatalog.kt`（7 份文档，指向已随包 assets），`LicensesSheet` 改为目录→全文：不使用 `fitContent`，靠 `GlassSheet` 的 `weight(1f)` 有界槽 + `LazyColumn` 分块（`licenseBlocks` 2,000 字符/块）+ IO 读 assets，返回键先回目录；静态 `LicenseEntries` 删除，**Glasmio 由误写 MIT 改为 Apache-2.0**。新增 `LicenseCatalogTest`（5 项）与 `LicensesSheetTest`（3 项 Compose 真实组合），连同 `RuntimeNoticesAssetTest` 共 **13 项聚焦测试通过**。新 69 审计 APK 5,196,693 B / SHA-256 `320E5E90984762BEF2177C3A6AE7814BD268FF7B8EF15EA0B6553520024D1DF9`，七份资产与源一致、十项 Apple 图像仍 0 匹配。真机长文本滚动/大字体/浅色主题未验。
+  - [x] **许可改动后的全量回归（2026-11-18 完成）**：`:app:testDebugUnitTest --rerun :app:lintDebug :app:assembleDebug :app:assembleRelease`，`BUILD SUCCESSFUL in 3m56s`（113 任务，17 executed）。先清空旧 XML 再跑，**379 项 / 47 份 XML / 0 failures·errors·skipped**（366 基线 + 13 新用例对账一致）；`lintDebug` **0 errors / 15 warnings**，同为版本提示/UseKtx/DataExtractionRules/UseTomlInstead，**无新增警告**；debug 80,986,212 B（`BEF60F9A…6B96`）、release 5,196,693 B（`320E5E90…4D1DF9`，与上一审计包逐字节相同）均成功，`aapt2` 元数据 69 / 4.1.0 / minSdk33 / targetSdk37，`apksigner` 证书 SHA-256 `8894605E…8D02` **与正式 68 一致**；`verifyRuntimeNoticeCompleteness` 再跑退出 0，7 份资产与源一致。未改源码/版本/依赖/CI/签名，MANUAL-TEST 未动。
+  - [x] **4.1.1 / 70 版本改动与构建（2026-11-18 完成）**：仅改 `app/build.gradle.kts` 的 `versionCode 69→70`、`versionName 4.1.0→4.1.1`（公开版本展示不附 code），未动依赖/schema/CI/签名/包名。`testDebugUnitTest --rerun :lintDebug :assembleDebug :assembleRelease :verifyRuntimeNoticeCompleteness` → **`BUILD SUCCESSFUL in 8m31s`（114 任务，53 executed）**；**379 项 / 47 XML / 0 failures·errors·skipped**；lint **0 errors / 15 warnings**；`aapt2`：`com.morrowviento.morrow` **70 / 4.1.1**、minSdk 33 / targetSdk 37；`apksigner` 证书 SHA-256 `8894605E…8D02` **与正式 68 完全一致**。最终 release **5,196,689 B / SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`**，145 条目、CRC 通过、7 份许可资产与源 MATCH（`runtime.txt` 111,134 B / `morrow.txt` 1,129 B 为生成物）、无嵌套归档、**图像条目 0 且资源表 `tapback|listening|adaptive_audio` 匹配 0**，dex 含 `LicenseDocument` 可确认非旧包。debug 80,500,165 B（`C048D03A…3284`）。本地交付副本 `../morrow-70-4.1.1-release.apk` 与源包逐字节一致；**未上传、未发行**。
+  - [ ] **下一单步：#21 推送与发行**（等待用户明确开工）。仓库仍 HEAD `63ecd6b`、全部改动未 stage/commit；需先普通提交（排除 MANUAL-TEST）、查远端 latest 与 `v4.1.1` 未占用、建 draft Release→上传 `morrow-70-4.1.1-release.apk`→核验资产摘要→正式发布→成功后回填真实 `update/manifest.json` 并推送，同时更新 CHANGELOG/RELEASE/SIGNING。**不得覆盖旧 tag/release、不改 CI/密钥。**
+  - [ ] 人工版权/NOTICE 归属审阅：`apache-2.0.txt` 是协议副本，逐组件源码层版权与 NOTICE 未逐一审阅；设置页展示不改变该结论。
+- [x] **#20 版本/验证（2026-11-18 完成）**：`:app:verifyRuntimeNoticeCompleteness` 在 4.1.1/70 构建中通过（退出 0、缺口 0）；版本改 4.1.1 / 70，公开版本展示不附 code；全量 379 项单测、lint 0 errors / 15 warnings、debug 与原签名 release（含 `lintVitalRelease`、R8、资源裁剪）成功；`aapt2` 元数据 70 / 4.1.1 / minSdk33 / targetSdk37，`apksigner` 证书与正式 68 一致；145 条目、7 份许可资产与源一致、Apple 素材 0 匹配、无嵌套归档，最终 SHA-256 `7F92400A…D963` 已绑定本地交付包 `morrow-70-4.1.1-release.apk`（5,196,689 B）。真机与升级保数据仍不在本项范围。
+- [ ] **#21 推送/发行**：用户已授权本批普通推送、新 tag `v4.1.1`、正式 Release「朝夕 4.1.1」、原签名资产 `morrow-70-4.1.1-release.apk`；draft 资产核验后正式发布，成功才同步真实 manifest。不覆盖旧 tag/release，不改 CI/密钥，不纳入 MANUAL-TEST。**尚未开始，等用户指令。**
+
+上一批结果与真机未验事项保留如下；**366 项旧基线已由 2026-11-18 的全量 379 项取代**（47 份 XML，0 failures/errors/skipped），lint 0 errors / 15 warnings。**4.1.1 / 70 已构建并核验（5,196,689 B，`7F92400A…D963`，证书同 68），但未提交、未推送、未上传、未发行。**正文缺口为 0、README 与设置页许可 UI 已完成、全量回归已完成；仍差人工逐组件版权归属审阅，不得据此宣称 #19 完成或放行正式包。下方“本批”均指历史 4.1.0 功能批次，当前授权/排期以顶部为准。
 
 ## 目标与当前完成度
 
@@ -62,14 +85,12 @@ Robolectric 已验证提交后 READY/系统确认提示/可关闭，不代表真
 
 完成条件：适用编号有设备/版本/结果。性能优化目前有代码与自动回归证据，无真机 FPS/耗电/启动测量结论；不代勾用户记录。
 
-### 4. 正式发布（未授权）
+### 4. 正式发布（当前已授权，但受 #19 阻塞约束）
 
-- [ ] 真机达到发布要求后，如代码有变更重跑全量单测/lint/debug/release，重核最终版本/签名/大小/摘要。
-- [ ] 核对本地/远端 main、标签和最新 code；69 未发布可用 69，已被使用再递增，不无条件加一或复用已发布 code。
-- [ ] 获授权后按 RELEASE 提交/同步待发代码、建正式 Release、传标准命名资产、回读并更新/推送真实 manifest。当前 feature-update APK 仅本地待验包，code-review 为上一批历史包。
-- [ ] 发布后回填 HANDOFF / TODO / CHANGELOG 的远端真实结果；MANUAL-TEST 提交仍须用户逐次授权，禁用 git add -A。
+执行顶部 #20–#21：4.1.1 / 70，签名/许可/全量验证后发布并披露真机未验项；发布核验成功后才同步真实清单。69 测试包及 code-review 保留为历史副本，不公开上传 debug 或冒用旧版本。
+**前置条件：先解决 #19 的 Glasmio Apple 素材再分发阻塞并证明最终 release APK 不分发，否则不得发行。**
 
-本轮已获代码修复/优化、本地构建、文档回填及本批代码/工程文档提交推送授权。**未获 MANUAL-TEST 提交、公开发布、改线上清单、安装/卸载、换密钥或改 CI 授权**；用户手工验收记录继续保留本地。
+用户已授权本批代码/工程文档提交推送、新版发行及成功后真实清单同步。**未获 MANUAL-TEST 提交、安装/卸载、换密钥或改 CI 授权**；用户手工验收记录继续保留本地。
 
 ### 5. 可选工程项
 

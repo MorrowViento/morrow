@@ -1,84 +1,110 @@
-# morrow
+# 朝夕（morrow）
 
-「朝夕」（Morrow）的 Kotlin 重构工程（Jetpack Compose + Glasmio 0.1.3）。
+Android 13+ 的倒计时 / 纪念日 / 待办应用，用 Kotlin + Jetpack Compose + [Glasmio](https://github.com/NEORUAA/Glasmio) 0.1.3 重写自
+[ying](https://github.com/jiuxina/ying)（原 Flutter 版）。
 
-重构总计划见上一级目录《ying-kotlin-refactor-plan.md》（文件名沿用旧称呼，未随本次更名调整）。本仓库遵循以下既定决策：
+这是一个**独立维护的 Kotlin 应用**，不是 Flutter 版的外壳或补丁：数据模型、界面、提醒与小部件都在本仓库实现，
+不并行维护 Flutter 主线。
 
-| 决策 | 结论 |
+## 功能
+
+| 模块 | 能力 |
 |---|---|
-| D1 最低系统 | Android 13（API 33），Glasmio 强制要求 |
-| D2 重构策略 | 不并行维护 Flutter 主线，全力专注重构 |
-| D3 Glasmio | 锁定 `io.github.neoruaa.glasmio:*:0.1.3`（Maven Central，2026-11-11 发布）；业务代码不得直接 import，仅经 `ui/glass/` 封装层调用 |
-| D4 图标 | 自绘自适应图标「晨昏日轮」（矢量前景 + 渐变底 + Android 13 单色版）；不使用 SF Symbols（Apple 字体许可） |
-| D5 技术栈 | Compose + ViewModel + Room + DataStore + WorkManager |
-| D6 构建链 | JDK 21 · Android SDK 37（platform android-37.0 / build-tools 37.0.0）· Gradle 9.6.0 |
+| 事件 | 纪念日与待办两类；置顶、分类、搜索；完成 / 恢复 / 进入下一周期 |
+| 重复 | 不重复、每月、每年；闰日按 2/28 回落，周期推进保留原日期锚点 |
+| 日历 | 月视图与年历，农历副标题与农历日期选择 |
+| 提醒 | AlarmManager + 通知，支持精确闹钟权限、开机与升级后重建 |
+| 小部件 | 列表 / 概览等外观配置，画布与宿主同源，午夜自动刷新 |
+| 备份 | 纯文本 JSON 导出 / 导入（覆盖或合并），可读入 ying 旧数据 |
+| 外观 | 玻璃厚度、深浅主题、强调色、从背景取色、丝缎或自定义背景、减弱动画 |
+| 更新 | 应用内检查 / 下载 / 安装，支持自建镜像前缀 |
 
-> D6 修订说明：原计划要求 NDK 27.1 + CMake 3.22.1，实际**不需要**。Glasmio 的 AAR 已内置
-> 四个 ABI 的预编译 `libglasmio_liquid_menu_sdf.so`，NDK 仅用于 Glasmio 自身构建该库；
-> 本工程无原生源码。去掉后 CI 单次构建约减少 3–5 分钟，并消除一个失败点。
+## 技术形态
+
+| 项 | 取值 |
+|---|---|
+| 最低系统 | Android 13（API 33），Glasmio 的运行时要求 |
+| 语言 / UI | Kotlin · Jetpack Compose（Compose BOM 2026.09.00）· Glasmio 0.1.3 |
+| 数据 | Room 2.8.5（导出 schema）+ DataStore Preferences 1.3.0 |
+| 构建 | JDK 21 · compileSdk / targetSdk 37（build-tools 37.0.0）· Gradle 9.6.0 · AGP 9（内置 Kotlin） |
+| 包名 | `com.morrowviento.morrow` |
+
+> 不需要 NDK / CMake：Glasmio 的 AAR 已内置四个 ABI 的预编译 `libglasmio_liquid_menu_sdf.so`，
+> 本工程没有原生源码。
 
 ## 构建
 
-- CI：GitHub Actions 自动出包（`.github/workflows/android-ci.yml`），执行
-  `assembleDebug + testDebugUnitTest + lintDebug`，产物为 debug APK
-- 本地：安装 JDK 21 与 Android SDK 后，在 `local.properties` 写入 `sdk.dir`，
-  然后 `gradle :app:assembleDebug`
-- Gradle wrapper 已随仓库提供；若本机无法访问 `services.gradle.org`，直接用本机安装的
-  Gradle 9.6.0 执行即可（wrapper 只影响本地开发，CI 使用 `gradle/actions/setup-gradle` 拉取）
-- 发布签名：`gradle :app:assembleRelease`，密钥参数走 `MORROW_KEYSTORE*` 环境变量或
-  `~/.gradle/gradle.properties` 的 `morrow.*`；生成与验证步骤见 [`docs/SIGNING.md`](docs/SIGNING.md)。
+- CI（`.github/workflows/android-ci.yml`）执行 `assembleDebug` + `testDebugUnitTest` + `lintDebug`，
+  产物为 debug APK。
+- 本地：安装 JDK 21 与 Android SDK 后，在 `local.properties` 写入 `sdk.dir`，然后
+  `gradle :app:assembleDebug`（仓库自带 wrapper；若无法访问 `services.gradle.org`，直接用本机
+  Gradle 9.6.0）。
+- 发布签名：`gradle :app:assembleRelease`。密钥通过 `MORROW_KEYSTORE*` 环境变量或
+  `~/.gradle/gradle.properties` 的 `morrow.*` 注入，步骤见 [`docs/SIGNING.md`](docs/SIGNING.md)。
   **仓库里不存放任何 keystore 或密码。**
+- 发布前必须通过许可完整性门槛：
 
-## Glasmio API 版本约定
+  ```bash
+  gradle :app:verifyRuntimeNoticeCompleteness
+  ```
 
-**所有 Glasmio 调用以 `v0.1.3` 标签源码为准，不是 main 分支。**
+  它会在随包许可正文缺失时失败；失败即不可发行，不能以「构建成功」替代。
+
+## Glasmio 封装约定
+
+**所有 Glasmio 调用以 `v0.1.3` 标签源码为准，不是 main 分支。** 业务代码不得直接 import
+`io.github.neoruaa.glasmio.*`，只经 `ui/glass/` 封装层调用；升级库时改动应收敛在该目录。
 
 | 项 | 我们依赖的形态 |
 |---|---|
-| `GlasmioBackdropHost` | `(modifier, sampledContent, overlayContent)`；纯色底由调用方自己画一个 `Box` |
+| `GlasmioBackdropHost` | `(modifier, sampledContent, overlayContent)`；纯色底由调用方自己画 `Box` |
 | `GlassSurface` | 默认取 `LocalGlassBackdrop`；0.1.3 起自带 `onClick` / `onLongClick` / `detailAction` 按压光学 |
-| `InteractiveHighlight` | 0.1.3 新增，玻璃按压的「液体光斑」；由 `ui/glass/GlassPress.kt` 统一封装 |
+| `InteractiveHighlight` | 0.1.3 的「液体光斑」，由 `ui/glass/` 统一封装 |
 | 渲染门槛 | 按压高光走 `RuntimeShader`，**API 36 以下库内直接跳过**，封装层另加淡白色兜底 |
 
-0.1.2 → 0.1.3 的升级只需改 `gradle/libs.versions.toml` 一处；`ui/glass/` 之外没有代码变动
-（`com.kyant.capsule.ContinuousRoundedRectangle` 与 `com.kyant.shapes.Capsule` 两个形状
-API 也稳定）。升级 Glasmio 时仍建议先比对 `vX.Y.Z` 标签源码。
+`com.kyant.capsule.ContinuousRoundedRectangle` 与 `com.kyant.shapes.Capsule` 同样只在封装层使用。
+升级版本时先比对 `vX.Y.Z` 标签源码，再改 `gradle/libs.versions.toml`。
 
-
-## 包结构约定
+## 包结构
 
 ```
 app/src/main/java/com/morrowviento/morrow/
-  ui/glass/    # Glasmio 封装层（唯一允许 import Glasmio 的目录）
-  ui/          # Compose 页面（M2+ 逐步填充）
-  data/        # Room + DataStore（M1）
-    db/        # Room 实体 / DAO / 映射
-    legacy/    # Flutter 旧数据迁移（解析 + 搬运）
-    settings/  # DataStore 设置读写
-  domain/      # 事件/日历/重复规则业务逻辑（M1）
-  service/     # 通知、更新、备份、字体、壁纸（M4/M6/M7）
-  widget/      # 桌面小部件（M5，迁移自 Flutter 版 android/ 目录）
+  ui/glass/     # Glasmio 封装层（唯一允许 import Glasmio 的目录）
+  ui/           # 页面：首页 / 日历 / 搜索 / 事件编辑 / 设置 / 更新 / 通用组件
+  data/         # Room、DataStore、备份、分类、提醒、小部件配置、旧数据迁移
+  domain/       # 事件模型与日历 / 重复 / 农历 / 提醒时刻计算
+  reminder/     # AlarmManager 调度、通知与开机重建
+  service/      # 应用内更新
+  widget/       # 桌面小部件（Provider / 配置 / 渲染）
+app/src/main/assets/licenses/   # 随包许可原文（见下）
 ```
 
-## M1 数据层（已完成）
+## 许可
 
-| 项 | 内容 |
+| 对象 | 许可 |
 |---|---|
-| 领域模型 | `CountdownEvent` / `EventReminder` / `CountDirection` / `RepeatType`，与 Flutter 版字段一一对应 |
-| 日历计算 | `CalendarMath`（LocalDate 差值，天然规避夏令时）、`RepeatRule`（每年重复，闰日回落 2/28） |
-| 持久化 | Room `events` 表（时间存本地时区毫秒，提醒列表存 JSON），schema 导出至 `app/schemas/` |
-| 设置 | DataStore `morrow_settings`，**键名沿用 Flutter 原始键名**，迁移后无需二次映射 |
-| 旧数据迁移 | 读 `FlutterSharedPreferences`（`flutter.` 前缀）→ 事件入 Room、其余键入 DataStore；幂等（`migration.legacy_v1_done`），单条损坏不阻断 |
-| 测试 | 22 项单元测试（日历/重复/提醒归一化/旧 JSON 解析/键值拆分/实体映射） |
+| 本仓库代码 | MIT，见 [`LICENSE`](LICENSE) |
+| ying（原 Flutter 版） | MIT，Copyright (c) 2026 Gao Shuai，全文见 `assets/licenses/ying.txt` |
+| Glasmio 0.1.3 | **Apache-2.0**（不是 MIT）；第三方声明与 Apple 素材排除项见 `assets/licenses/glasmio-third-party-notices.txt` |
+| AndroidX / Jetpack Compose / Room / DataStore | Apache-2.0 |
+| MaterialKolor 4.1.1 | MIT；内嵌 Material Color Utilities 部分为 Apache-2.0，两份正文分别随包 |
+| DataStore external protobuf 1.3.0 | BSD-3-Clause |
 
-迁移兼容点均对齐 Dart 侧 `fromJson` 兜底行为：`category` 缺省「生活」、未知枚举回落默认值、
-无 `reminders` 时读旧字段 `reminderMinutes`、`targetDate` 无时区时按本地时刻解释（带 `Z` 也能解析）。
+`app/build.gradle.kts` 的 `generateRuntimeNotices` 按**精确坐标与版本**审核 release 运行时依赖，
+把每个组件实际随包的 LICENSE / NOTICE 原文收集到 `assets/licenses/runtime.txt`，并逐条登记坐标、
+artifact 与来源。原文只按字节完全相同去重，不同来源不会合并；缺少正文的坐标必须补静态全文，
+否则构建失败。设置页「开源许可」可离线阅读这些全文。
+
+Glasmio 的 AAR 内含若干源自 Apple 系统资源的图像（Tapback 帧、音频与聆听图标）。它们**不受
+Apache-2.0 覆盖**，本项目通过资源裁剪与构建后核验确保不随包分发；应用也不使用 SF Symbols、
+Apple 字体或 Apple 壁纸。
 
 ## 包名说明
 
-`applicationId` = `com.morrowviento.morrow`（Kotlin 包同名）。**这是 2026-11-12 品牌重塑后的新标识，与 Flutter 版
-`com.jiuxina.ying` 不再是同一个应用**：旧「萤」无法覆盖升级到「朝夕」，需要先导出备份再卸载、装新包后导入。
+`applicationId` = `com.morrowviento.morrow`（Kotlin 包同名）。**这是 2026-11-12 品牌重塑后的新标识，
+与 Flutter 版 `com.jiuxina.ying` 不是同一个应用**：旧「萤」无法覆盖升级到「朝夕」，需要先导出备份、
+卸载旧版、安装新版后导入。
 
-代价换来的是命名彻底干净（代码、资源、数据文件里不再出现旧前缀）。签名密钥与升级注意事项见
-[`docs/SIGNING.md`](docs/SIGNING.md)；如果以后需要恢复「老用户无缝覆盖升级」，唯一做法是把 `applicationId`
-改回旧值并沿用旧签名密钥，这不是改个字符串就能完成的事。
+换来的是命名彻底干净（代码、资源、数据文件里不再出现旧前缀）。签名密钥与升级注意事项见
+[`docs/SIGNING.md`](docs/SIGNING.md)。若要恢复「老用户无缝覆盖升级」，唯一做法是把 `applicationId`
+改回旧值并沿用旧签名密钥——这不是改一个字符串就能完成的事。
