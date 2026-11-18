@@ -1,7 +1,7 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前状态：**4.1.2 / 71 已构建、核验并发布**（tag `v4.1.2` 指向 `f9da8d8`、Release「朝夕 4.1.2」id `449651404`、2026-11-18T07:32:07Z 正式、资产 `morrow-71-4.1.2-release.apk` **5,199,013 B / SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`**，`/releases/latest` 与 manifest 均已回读一致）。本版两件事：① **五个超大 UI 文件按职责拆分**（SettingsScreen 1,345→461 行等，无行为变更）；② **补上 protobuf 的 BSD-3 版权归属**（新增静态 `protobuf-bsd-3.txt`，生成器 `attributionFiles()` 无条件追加，`runtime.txt` 116,447 B）。回归 **380 项单测 / 47 XML / 0 失败错误跳过**、lint 0 errors / 15 warnings、8 份许可资产与源一致、Apple 素材 0 匹配、证书同 68。上一版 4.1.1 / 70（`7F92400A…D963`）保留未动，详见下方 #20/#21 实录与本批 #22。**当前只剩人工逐组件源码层版权审阅与真机验收（含 68→71 保数据升级）。** 下方 338/366/379 项、69 包与 feature-update 包均为历史证据。**续接先读「4.1.2 / 71：结构重构与 protobuf 归属」与「#22」两节。**
+> 当前状态：**4.1.3 / 72 已构建、核验通过**（资产 `morrow-72-4.1.3-release.apk` **5,231,781 B / SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`**；发布结果见「#24」）。本版四件事：① **修设置页透出日历**（上一版把让位写成 `if/else`，设置页打开时掉进 else 把日历画在底下）；② **各页头部与按钮尺寸统一**（新增 `ui/component/PageChrome.kt`）；③ **字体设置**（M6 遗留项，本地导入 + 就地预览，`AppText` 包装层让 148 处样式零改动生效）；④ **节日皮肤**（八个农历节日柔光 + 首页祝语，设置页可关）。回归 **394 项单测 / 49 XML / 0 失败错误跳过**、lint release 0 errors / 15 warnings、8 份许可资产与源一致、`runtime.txt` 116,447 B 未变（字体不随包）、证书同 68。上一版 4.1.2 / 71（`601b3beb…73a6`、Release `449651404`）保留未动。**剩余：人工逐组件源码层版权审阅与真机验收（含 68→72 保数据升级）。** 下方 338/366/379/380 项、69 包与 feature-update 包均为历史证据。**续接先读「#23」「#24」与「4.1.3 / 72：字体设置与节日皮肤」三节。**
 
 ## 当前批次与授权
 
@@ -187,6 +187,25 @@
 - 命名决策沿用用户 4.1.1 时的指定：tag 与标题**不带 code**，资产名保留 code；仍走手工 API，未改 `scripts/release.sh`。
 - 未做：未改 CI/密钥/包名/schema/生产依赖，未覆盖旧 tag 或旧 Release，未纳入 MANUAL-TEST，未安装或卸载设备。
 
+### #23 设置页透底修复、按钮统一、字体设置与节日皮肤（2026-11-18）
+- **透底 BUG 的根因**：4.1.2 里为了让设置页不透出首页，写成了 `if (!calendarActive && !showSettings) 首页 else 日历`。设置页打开时 `calendarActive=false / showSettings=true` → 条件为假 → **掉进 else 渲染日历**，正好画在设置页底下，半透明底色一透就看见。改成三路互斥：`when { showSettings -> 不画; calendarActive -> 日历; else -> 首页 }`（`HomeScreen.kt` 内，注释写明了这个坑）。
+- **按钮统一**：新增 `ui/component/PageChrome.kt` 作为跨页尺寸的单一来源（`CircleButtonSize 34dp`、`CircleGlyphSize 17sp`、`HeaderHorizontal 16dp`、`HeaderTop 12dp`、`HeaderBottom 4dp`、`ChipHeight 34dp`、`ActionButtonSize 56dp`）。首页「⋯」32→34、设置返回 32→34 且 `‹` 20→17sp、日历导航/关闭字形 15→17sp；三页头部内边距 22/18、12/16、14/14 全部改 16/12/4；日历列表与视图切换行 14→16dp；详情页 52dp 圆钮与 56dp 主按钮统一 56dp；裁剪页底部 48→56dp；日历「今天」28→34dp（`compact=false`）。
+- **字体设置**：数据层 `data/settings/AppFont.kt`（`AppFont` + `FontStore` + `RECOMMENDED_FONTS`）。导入走 SAF，32 MB 上限，按 sfnt 魔数（`0x00010000` / `OTTO` / `true` / `ttcf`）校验，文件名 `font-<hash8>-<显示名>.<ext>`；`installed()` 列目录、`delete()` 只取最后一段防越权、`exists()` 供展示层回落。UI `ui/settings/FontSheet.kt`：每行**用自己的字体渲染名字**（就地预览 + 顺带证明文件能加载），点击即切换并关闭，删除当前字体自动回落系统默认；4 款 OFL 字体只给项目主页链接。
+- **全局字体为什么不用 resolver**：`FontFamily.Resolver` 是 **sealed interface**，跨模块实现直接编译失败（已实测）。改用 `ui/component/AppText.kt` 提供与 material3 同签名的 `Text`，只对 `style.fontFamily == null` 的文本注入当前字体；24 个文件把 `import androidx.compose.material3.Text` 换成 `ui.component.Text`，调用点零改动。`AppFontTheme` 同时覆盖 `LocalTextStyle`，让 Glasmio 内部读默认样式的控件也跟随，并把字体加进 `GlassTheme` 的 `key(...)`（换字体重建子树，否则缓存的文本测量会按旧行高排版）。
+- **节日皮肤**：`ui/glass/FestivalSkin.kt`（`FestivalSkin` + `festivalSkinOf(LocalDate)` + `LocalFestivalSkin`）。八个节日（春节/元宵/端午/七夕/中秋/重阳/腊八/除夕）各有祝语与一支主色；**中元有意不给皮肤**。柔光画在 `GlassBackdrop` 的 `onDrawBehind` 末尾（径向渐变，深色 0.22 / 浅色 0.16，色值淡到同色 alpha=0），因此也会进入玻璃采样——玻璃后面那层才是节日色。首页标题下加一行「节日 · 祝语」，折叠态隐藏。
+- **数据与备份**：`LegacySettingsKeys` 新增 `APP_FONT` / `APP_FONT_NAME` / `FESTIVAL_SKIN`；`AppSettings` 增 `font` 与 `festivalSkin`（缺键按开）。`applySettings` **写节日皮肤但不写字体**（字体文件不随备份，写入只会得到指向不存在文件的偏好）；「清除全部数据」会一并 `setFont(SYSTEM)` 并清空 `filesDir/app_fonts/`。
+- **验证（当时，debug 层）**：`testDebugUnitTest --rerun + lintDebug + assembleDebug` → `BUILD SUCCESSFUL in 3m51s`；**394 项 / 49 XML / 0 failures·errors·skipped**（380 + 11 `FontStoreTest` + 3 `FestivalSkinTest`）；lint **0 errors / 15 warnings**（同基线；`Uri.parse` 按 KTX 提示换成 `toUri`，避免新增第 16 条）；debug 包 80,856,944 B / `4348269A…CE89`。release 与发布见 #24。
+- 测试里踩到的两个坑：`Uri.lastPathSegment` 在 Windows 风格路径上没有 `/` 可切，会把整条路径当文件名（改用 `File(uri.path).name`）；Robolectric 下 `file://` 的 `contentResolver.openInputStream` 不稳，`file` scheme 直接走 `File.inputStream()`。
+
+### #24 4.1.3 / 72 构建、核验与发布实录（2026-11-18）
+- **版本**：只改 `app/build.gradle.kts` 的 `versionCode 71→72` / `versionName 4.1.2→4.1.3`（公开展示不附 code）；依赖、AGP、Kotlin、schema、包名、CI、签名配置、proguard 均未动。
+- **构建**：`testDebugUnitTest --rerun + lintRelease + assembleRelease` → `BUILD SUCCESSFUL in 8m 7s`（90 任务 / 47 执行）。
+- **测试**：**394 项 / 49 份 XML / 0 failures·errors·skipped**。注意本工程只有一个单测变体 `testDebugUnitTest`（不存在 `testReleaseUnitTest`），跑 release 前的回归要指定它。
+- **lint**：`lintRelease` 与 `lintDebug` 均 **0 errors / 15 warnings**（同一组，无新增）。
+- **许可门槛**：`verifyRuntimeNoticeCompleteness` 退出 0，许可收集器 28 项内存回归通过；`runtime.txt` **116,447 B / `d1508af0daca478bccd9d29b62991dc5847f5adb3246a5692be7881d8f6d1449`**、9 组、109 个坐标条目，**与 4.1.2 完全相同**——字体不随包、未引入第三方正文，protobuf 的 `静态归属 1 项` + `归属正文 protobuf-bsd-3.txt SHA-256 835c9e42…5320` 仍在。8 份许可资产中 6 份源文件（`apache-2.0` / `glasmio-third-party-notices` / `material-color-utilities` / `materialkolor` / `protobuf-bsd-3` / `ying`）与 APK 内**逐字节 MATCH**。
+- **产物**：`morrow-72-4.1.3-release.apk` **5,231,781 B**，SHA-256 `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`，146 条目；`aapt2 dump badging` = `versionCode 72` / `versionName 4.1.3` / minSdk 33 / targetSdk 37；`apksigner verify --print-certs` 证书 SHA-256 `8894605e2b84aec593d95e9dfb8c315d18cd48d99fac1e29f69caa4b78b18d02`（`CN=Chaoxi`），与 68/70/71 一致 → 可原位升级；图像条目 0、无嵌套归档；`aapt2 dump resources` 1,341 行、`apple|sf-symbol|San Francisco|Tapback|Cupertino` **0 匹配**；副本 `../morrow-72-4.1.3-release.apk` 与构建产物 `cmp` 一致。
+- **提交**：`e47ed3e` `feat(ui): 字体设置与节日皮肤，修设置页透底并统一头部尺寸`（41 文件；因 `HomeSections`/`CalendarScreen`/`SettingsScreen` 同时承载按钮统一与字体 import 替换，无法在不交互暂存的前提下拆开），随后文档提交。`docs/MANUAL-TEST.md` 全程显式排除，摘要复核仍为 `93FBCB61…8A4A`。
+
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。
 - `domain/time/LunarCalendar.kt`：自实现农历/压缩年表，未见明确外部版权；无证据表明复制了不许可来源，也未完成全部来源审核。
@@ -207,8 +226,8 @@
 ### 本阶段环境与受保护文件
 - `docs/MANUAL-TEST.md` 既有本地修改 SHA-256 回读 = `93FBCB61575E9B06AFED6BF0971BFC7818E6274FD5C2F41F712B29E3042C8A4A`（未变）。不编辑、不代勾、不提交；本批 diff 检查用 `git diff --check -- . ':!docs/MANUAL-TEST.md'`。
 - 本批已有大量修改/新增文件，不能再说 MANUAL-TEST 是唯一工作区改动（详见 git status）。
-- 源码 **4.1.2 / 71**；4.1.1 / 70 的 tag、Release 与 manifest 均保留未动，新版另起 tag `v4.1.2`。
-- 4.1.2 已运行全量 **380 项**单测、`lintDebug`、`assembleDebug`、原签名 `assembleRelease`（含 `lintVitalRelease`）与 `verifyRuntimeNoticeCompleteness`，并复核证书同 68、**8 份**许可资产与源一致、Apple 素材 0 匹配、最终 SHA-256 已绑定。379 是 4.1.1 的基线，别与 380 混用。
+- 源码 **4.1.3 / 72**；4.1.1 / 70 与 4.1.2 / 71 的 tag、Release 与 manifest 均保留未动，新版另起 tag `v4.1.3`。
+- 4.1.3 已运行全量 **394 项**单测、`lintRelease`、原签名 `assembleRelease`（含 `lintVitalRelease`）、`verifyRuntimeNoticeCompleteness`，并复核证书同 68、**8 份**许可资产与源一致、图像与 Apple 素材 0 匹配、最终 SHA-256 已绑定。380 是 4.1.2 的基线、379 是 4.1.1 的基线，别混用。
 - 未安装/卸载设备；未做真机视觉/FPS/启动器/升级保数据验收。
 
 ## 下一步：用户测试与反馈修复

@@ -1,6 +1,16 @@
 # TODO — 朝夕 · 当前待办
 
-> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「4.1.2 / 71：结构重构与 protobuf 归属」与「#22」发布实录），再读本文件；历史实现见 CHANGELOG。**4.1.2 / 71 已于 2026-11-18 发布**（tag `v4.1.2` / Release `449651404` / `601b3beb…73a6`，结构重构 + protobuf 许可归属），工程动作结束，剩余人工版权审阅与真机验收。
+> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「#24」4.1.3 构建发布实录与「#23」实现说明），再读本文件；历史实现见 CHANGELOG。**4.1.3 / 72 已构建、核验并发布**（资产 `morrow-72-4.1.3-release.apk` / `10258ec2…f39c`：字体设置 + 节日皮肤 + 设置页透底修复 + 按钮尺寸统一）。上一版 4.1.2 / 71（tag `v4.1.2` / Release `449651404` / `601b3beb…73a6`）保留未动。
+
+## 4.1.3 / 72：M6 剩余项与界面修正（2026-11-18 已发布）
+
+- [x] **修设置页透出日历**：根因是 `if (!calendarActive && !showSettings) 首页 else 日历`——设置页打开时条件为假掉进 else，把日历画在设置页底下。改成 `when { showSettings -> 不画; calendarActive -> 日历; else -> 首页 }`。
+- [x] **按钮尺寸与位置统一**：新增 `ui/component/PageChrome.kt`（圆钮 34dp / 字形 17sp / 头部 16·12·4 / 胶囊 34dp / 主操作 56dp）。首页「⋯」与设置返回 32→34，三页头部内边距统一，日历列表 14→16dp，详情页 52/56 统一 56dp，裁剪页 48→56dp，日历「今天」28→34dp。
+- [x] **字体设置**：导入 TTF/OTF/TTC（SAF、32 MB 上限、sfnt 魔数校验）、就地预览、删除、恢复默认；4 款 OFL 字体的下载入口不内置。`FontFamily.Resolver` 是 sealed 接口实现不了，改用同签名 `Text` 包装 + 24 个文件替换 import。
+- [x] **节日皮肤**：八个农历节日加背景柔光与标题祝语，中元不给皮肤；设置页可关。
+- [x] **版本 4.1.3 / 72 与全量验证**：`testDebugUnitTest --rerun + lintRelease + assembleRelease` → `BUILD SUCCESSFUL in 8m 7s`（90 任务 / 47 执行）；**394 项 / 49 XML / 0 failures·errors·skipped**；lint **0 errors / 15 warnings**（同基线）；`verifyRuntimeNoticeCompleteness` 退出 0；`runtime.txt` 116,447 B / `d1508af0…1449` 与上一版相同（字体不随包）。
+- [x] **APK 核验**：**5,231,781 B / `10258ec201690dcff580a405ff7d2e476c0a664d048e0f90734f6d9efcc9f39c`**，146 条目；`aapt2` **72 / 4.1.3** / minSdk 33 / targetSdk 37；证书 `8894605E…8D02` 同 68/70/71；8 份许可资产（6 源文件 MATCH）；图像条目 0、无嵌套归档、资源表 1,341 行 Apple 关键词 0 匹配；副本 `../morrow-72-4.1.3-release.apk` 逐字节一致。
+- [ ] **真机验收（未验）**：字体切换后的行高与截断、大字体下的列表、节日柔光在浅色主题的浓淡、设置页透底是否彻底、各页头部观感是否一致，以及 **68→72 原位升级保数据**。
 
 ## 4.1.2 / 71：结构重构 + protobuf 许可归属（2026-11-18 已发布）
 
