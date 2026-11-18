@@ -126,6 +126,7 @@ class EventViewModel(
         val today: LocalDate,
         val active: List<EventCardModel>,
         val completed: List<EventCardModel>,
+        val archived: List<EventCardModel>,
     )
 
     private var snapshot: CardsSnapshot? = null
@@ -148,14 +149,16 @@ class EventViewModel(
             // 两份列表都没变时连快照对象也不新建（一秒一个对象的垃圾也省了）。
             val active = EventPresentation.refreshClock(cached.active, today, now)
             val completed = EventPresentation.refreshClock(cached.completed, today, now)
+            // 归档列表不参与秒级刷新：归档箱里不显示倒计时，原样复用即可
             if (active === cached.active && completed === cached.completed) {
                 cached
             } else {
-                CardsSnapshot(list, mode, today, active, completed)
+                CardsSnapshot(list, mode, today, active, completed, cached.archived)
             }
         } else {
-            val (active, completed) = EventPresentation.partition(list, mode, today, now)
-            CardsSnapshot(list, mode, today, active, completed)
+            // 一次分区同时拿到三段：归档的事件本来就不该进「进行中 / 已完成」
+            val parts = EventPresentation.partition(list, mode, today, now)
+            CardsSnapshot(list, mode, today, parts.active, parts.completed, parts.archived)
         }
         snapshot = cards
 
@@ -166,6 +169,7 @@ class EventViewModel(
         HomeUiState(
             active = cards.active,
             completed = cards.completed,
+            archived = cards.archived,
             completedExpanded = expanded,
             sortMode = mode,
             isLoading = false,
@@ -209,7 +213,9 @@ class EventViewModel(
         calendarNav,
         dayTick,
     ) { result, nav, today ->
-        CalendarPresentation.strip(result.getOrThrow(), nav, today)
+        // 归档的事件不画在日历上：归档是「从日常视线里拿走」，日历属于日常视线。
+        // 归档箱里仍能看到它们（那边读的是首页状态里的 archived 段）。
+        CalendarPresentation.strip(result.getOrThrow().filter { !it.isArchived }, nav, today)
     }
         .catch { emit(CalendarStrip.shell(CalendarUiState(isLoading = false, error = it.message ?: "读取事件失败"))) }
         .flowOn(Dispatchers.Default)
@@ -251,6 +257,15 @@ class EventViewModel(
     fun calendarGoToToday() {
         val today = LocalDate.now()
         calendarNav.update { it.copy(month = CalendarNav.clamp(YearMonth.from(today)), selected = today) }
+    }
+
+    /** 时间块视图翻日：选区即当前显示日，翻到哪天就看哪天。 */
+    fun shiftCalendarDay(delta: Long) {
+        calendarNav.update { nav ->
+            val base = nav.selected ?: LocalDate.now()
+            val day = CalendarNav.clampDay(base.plusDays(delta))
+            nav.copy(selected = day, month = YearMonth.from(day))
+        }
     }
 
     fun setSortMode(mode: SortMode) {
@@ -340,12 +355,59 @@ class EventViewModel(
 
     fun clearCompleted() {
         mutate {
-            val done = events.loadAll().filter { it.isCompleted }
+            // 排除已归档：归档箱有自己的「清空」，不该被这里顺手删掉
+            val done = events.loadAll().filter { it.isCompleted && !it.isArchived }
             if (done.isEmpty()) return@mutate
             undo.clear()
             events.deleteMany(done.map { it.id })
             pushUndo(UndoKind.CLEAR_COMPLETED, "已清理 ${done.size} 个已完成事件", done)
             withContext(Dispatchers.IO) { done.forEach { cancelNotification(it.id); reminders.cancel(it.id) } }
+        }
+    }
+
+    // ---- 归档（M2f）：与「完成」分开的一条状态线 ----
+
+    /**
+     * 归档 / 取消归档。
+     *
+     * 归档只把 [CountdownEvent.archivedAt] 写上，**不动** `isCompleted`：
+     * 用户放弃一件做过一半的事，不该被记成「完成」；把一件已完成的事收进抽屉，
+     * 也不该丢掉它那一次「完成」的记录。两件事互不覆盖。
+     */
+    fun setArchived(id: String, archived: Boolean) {
+        mutate {
+            val event = events.findById(id) ?: return@mutate
+            if (event.isArchived == archived) return@mutate
+            val updated = event.copy(
+                archivedAt = if (archived) LocalDateTime.now() else null,
+            )
+            undo.clear()
+            events.save(updated)
+            pushUndo(
+                kind = UndoKind.TOGGLE_ARCHIVED,
+                message = if (archived) "已归档「${event.title}」" else "已恢复到列表「${event.title}」",
+                snapshot = listOf(event),
+            )
+            withContext(Dispatchers.IO) {
+                cancelNotification(id)
+                reminders.cancel(id)
+                // 归档期间不排提醒；恢复时按最新状态重新收敛一遍
+                if (!archived) reminders.sync(updated)
+            }
+        }
+    }
+
+    /** 清空归档箱：真的删除，进撤销队列。 */
+    fun clearArchived() {
+        mutate {
+            val archived = events.loadAll().filter { it.isArchived }
+            if (archived.isEmpty()) return@mutate
+            undo.clear()
+            events.deleteMany(archived.map { it.id })
+            pushUndo(UndoKind.CLEAR_ARCHIVED, "已清空归档箱（${archived.size} 个事件）", archived)
+            withContext(Dispatchers.IO) {
+                archived.forEach { cancelNotification(it.id); reminders.cancel(it.id) }
+            }
         }
     }
 

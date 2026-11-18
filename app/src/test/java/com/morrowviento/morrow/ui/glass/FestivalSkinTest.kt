@@ -57,4 +57,39 @@ class FestivalSkinTest {
         assertEquals(0xFF, (skin.tint ushr 24) and 0xFF)
         assertTrue(skin.greeting.isNotBlank())
     }
+
+    @Test
+    fun `预览能从任意一天找到下一个节日，且当天就是节日时返回当天`() {
+        // 2026-11-18 不是节日（农历十月初十）
+        val today = LocalDate.of(2026, 11, 18)
+        assertNull(festivalSkinOf(today))
+
+        val next = upcomingFestivalSkin(today)
+        assertNotNull("非节日也必须能找到下一个节日供预览", next)
+        val (date, skin) = next!!
+        assertTrue("下一个节日应在一年之内", date.isAfter(today) && date.isBefore(today.plusDays(401)))
+        assertEquals(skin, festivalSkinOf(date))
+
+        // 节日当天点预览：看到的就是今天这一款
+        val springFestival = yearDays.first { LunarCalendar.festival(it) == "春节" }
+        assertEquals(springFestival, upcomingFestivalSkin(springFestival)!!.date)
+    }
+
+    @Test
+    fun `预览逐个轮换能覆盖全部八款，且不会卡在同一个节日`() {
+        var cursor = LocalDate.of(2026, 1, 1)
+        val seen = LinkedHashSet<String>()
+        repeat(8) {
+            val next = upcomingFestivalSkin(cursor) ?: return@repeat
+            seen += next.skin.name
+            // 下一次从这一天的次日往后找，模拟设置页「换一个」
+            cursor = next.date.plusDays(1)
+        }
+        assertEquals(FESTIVAL_SKIN_NAMES, seen)
+    }
+
+    private companion object {
+        /** 八款有皮肤的节日（中元有意留空）。 */
+        val FESTIVAL_SKIN_NAMES = setOf("春节", "元宵", "端午", "七夕", "中秋", "重阳", "腊八", "除夕")
+    }
 }

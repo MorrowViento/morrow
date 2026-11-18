@@ -36,8 +36,22 @@ data class EventFormState(
     val direction: CountDirection = CountDirection.AUTO,
     val reminders: List<EventReminder> = emptyList(),
     val repeatType: RepeatType = RepeatType.NONE,
+    /** 每隔几个周期（每天 / 每 2 周 / 每 3 个月 / 每 2 年）。 */
+    val repeatInterval: Int = 1,
+    /** 每周重复选中的星期（ISO 1=周一 … 7=周日）。 */
+    val repeatWeekdays: Set<Int> = emptySet(),
+    /** 年循环按农历（生日、忌日）。 */
+    val repeatOnLunar: Boolean = false,
+    /** 重复结束日期；null 表示永不结束。 */
+    val repeatUntil: LocalDate? = null,
+    /** 持续事件结束日期（含当天）；null 或等于开始日即单日。 */
+    val endDate: LocalDate? = null,
     val kind: com.morrowviento.morrow.domain.model.EventKind = com.morrowviento.morrow.domain.model.EventKind.TODO,
     val createdAt: LocalDateTime = LocalDateTime.now(),
+    /** 多维标记（标签）的编辑态；保存时统一走 `EventTags.normalize`。 */
+    val tags: List<String> = emptyList(),
+    /** 预计时长（分钟），0 = 未指定。 */
+    val durationMinutes: Int = 0,
 ) {
     /** 落库用的目标时刻。 */
     val target: LocalDateTime
@@ -49,7 +63,18 @@ data class EventFormState(
     /** 校验通过才返回事件，否则 null（调用方负责提示错误）。 */
     fun toEvent(existing: CountdownEvent? = null): CountdownEvent? {
         if (!validate().isValid) return null
-        val sameAnchor = existing != null && existing.targetDate == target && existing.repeatType == repeatType
+        // 锚点没变就不重算月日：用户只改了标题时，农历生日不能被「按今天的公历」重写一遍
+        val sameAnchor = existing != null &&
+            existing.targetDate == target &&
+            existing.repeatType == repeatType &&
+            existing.repeatInterval == repeatInterval &&
+            existing.repeatWeekdays == repeatWeekdays &&
+            existing.repeatOnLunar == repeatOnLunar
+        val lunarAnchor = if (repeatType == RepeatType.YEARLY && repeatOnLunar) {
+            com.morrowviento.morrow.domain.time.LunarCalendar.fromSolar(date)
+        } else {
+            null
+        }
         return CountdownEvent(
             id = id ?: UUID.randomUUID().toString(),
             title = title.trim(),
@@ -61,13 +86,34 @@ data class EventFormState(
             reminders = EventReminder.normalize(reminders),
             isAllDay = isAllDay,
             repeatType = repeatType,
-            repeatMonth = if (sameAnchor) existing.repeatMonth else if (repeatType == RepeatType.YEARLY) date.monthValue else null,
-            repeatDay = if (sameAnchor) existing.repeatDay else if (repeatType != RepeatType.NONE) date.dayOfMonth else null,
+            repeatMonth = when {
+                sameAnchor -> existing.repeatMonth
+                repeatType == RepeatType.YEARLY ->
+                    if (repeatOnLunar) lunarAnchor?.month ?: date.monthValue else date.monthValue
+                else -> null
+            },
+            repeatDay = when {
+                sameAnchor -> existing.repeatDay
+                repeatType == RepeatType.YEARLY && repeatOnLunar ->
+                    lunarAnchor?.day ?: date.dayOfMonth
+                repeatType != RepeatType.NONE -> date.dayOfMonth
+                else -> null
+            },
+            repeatInterval = repeatInterval.coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL),
+            repeatWeekdays = if (repeatType == RepeatType.WEEKLY) repeatWeekdays.filter { it in 1..7 }.toSortedSet() else emptySet(),
+            repeatOnLunar = repeatType == RepeatType.YEARLY && repeatOnLunar,
+            repeatUntil = if (repeatType == RepeatType.NONE) null else repeatUntil,
+            // 结束日不早于开始日；等于开始日即单日，归一成 null，避免「持续 1 天」这种冗余状态
+            endDate = endDate?.takeIf { it > date },
             createdAt = existing?.createdAt ?: createdAt,
             kind = kind,
             isCompleted = kind == com.morrowviento.morrow.domain.model.EventKind.TODO && existing?.isCompleted == true,
             isPinned = existing?.isPinned ?: false,
             lastHandledOccurrence = if (sameAnchor) existing.lastHandledOccurrence else null,
+            tags = com.morrowviento.morrow.domain.model.EventTags.normalize(tags),
+            // 编辑不该顺手把事件从归档箱里捞出来：归档状态只由「归档 / 恢复」动作改变
+            archivedAt = existing?.archivedAt,
+            durationMinutes = if (isAllDay) 0 else durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
         )
     }
 
@@ -77,8 +123,39 @@ data class EventFormState(
     /** 改月份/年份时把日夹到该月最大天数（1 月 31 日 → 2 月 28/29 日）。 */
     fun withDate(value: LocalDate): EventFormState {
         val safeDay = value.dayOfMonth.coerceAtMost(YearMonth.from(value).lengthOfMonth())
-        return copy(date = value.withDayOfMonth(safeDay))
+        val next = value.withDayOfMonth(safeDay)
+        // 开始日挪到结束日之后时，结束日自动作废（否则会出现负跨度）
+        return copy(date = next, endDate = endDate?.takeIf { it > next })
     }
+
+    /** 切换重复档位。切到「不重复」时清掉结束条件，避免隐藏状态跟着事件一起落库。 */
+    fun withRepeatType(type: RepeatType): EventFormState = copy(
+        repeatType = type,
+        repeatUntil = if (type == RepeatType.NONE) null else repeatUntil,
+        repeatOnLunar = if (type == RepeatType.YEARLY) repeatOnLunar else false,
+        repeatWeekdays = if (type == RepeatType.WEEKLY) repeatWeekdays else emptySet(),
+    )
+
+    /** 每周重复：点一下选中/取消某个星期；取消到空表示「跟开始日同一天」。 */
+    fun toggleWeekday(iso: Int): EventFormState {
+        if (iso !in 1..7) return this
+        val next = if (iso in repeatWeekdays) repeatWeekdays - iso else repeatWeekdays + iso
+        return copy(repeatWeekdays = next.toSortedSet())
+    }
+
+    /** 间隔加减，夹在 1..[CountdownEvent.MAX_REPEAT_INTERVAL]。 */
+    fun shiftInterval(delta: Int): EventFormState = copy(
+        repeatInterval = (repeatInterval + delta).coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL),
+    )
+
+    fun withRepeatUntil(value: LocalDate?): EventFormState = copy(repeatUntil = value)
+
+    fun withLunarYearly(enabled: Boolean): EventFormState = copy(repeatOnLunar = enabled)
+
+    /** 持续事件的结束日；传 null 表示单日。早于开始日的值直接忽略。 */
+    fun withEndDate(value: LocalDate?): EventFormState = copy(
+        endDate = value?.takeIf { it > date },
+    )
 
     /**
      * 跟随分类改名 / 删除迁移：把选中的分类沿 [aliases] 解到最终名称（支持 A→B→C 链式改名）。
@@ -118,6 +195,25 @@ data class EventFormState(
             addReminder(minutesBefore)
         }
 
+    /** 加一个标签；已存在（忽略大小写）或已满时原样返回，由调用方决定要不要提示。 */
+    fun addTag(raw: String): EventFormState {
+        val cleaned = com.morrowviento.morrow.domain.model.EventTags.clean(raw)
+        if (cleaned.isEmpty()) return this
+        if (tags.any { it.equals(cleaned, ignoreCase = true) }) return this
+        if (tags.size >= com.morrowviento.morrow.domain.model.EventTags.MAX_COUNT) return this
+        return copy(tags = tags + cleaned)
+    }
+
+    fun removeTag(tag: String): EventFormState = copy(tags = tags.filterNot { it == tag })
+
+    fun toggleTag(tag: String): EventFormState =
+        if (tags.any { it == tag }) removeTag(tag) else addTag(tag)
+
+    /** 时长选择：点同一个值取消（回到「不指定」）。 */
+    fun withDuration(minutes: Int): EventFormState = copy(
+        durationMinutes = if (durationMinutes == minutes) 0 else minutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+    )
+
     companion object {
         /** 提醒快捷选项（分钟）。 */
         val REMINDER_PRESETS = listOf(0, 10, 30, 60, 180, 720, 1440, 2880, 10080)
@@ -134,8 +230,15 @@ data class EventFormState(
             direction = event.direction,
             reminders = event.reminders,
             repeatType = event.repeatType,
+            repeatInterval = event.repeatInterval,
+            repeatWeekdays = event.repeatWeekdays,
+            repeatOnLunar = event.repeatOnLunar,
+            repeatUntil = event.repeatUntil,
+            endDate = event.endDate,
             kind = event.kind,
             createdAt = event.createdAt,
+            tags = event.tags,
+            durationMinutes = event.durationMinutes,
         )
 
         /**

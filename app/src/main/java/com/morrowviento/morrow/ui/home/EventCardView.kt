@@ -120,6 +120,16 @@ fun EventCardView(
                         style = TextStyle(fontSize = 12.sp, color = primary.fade(0.75f)),
                     )
                 }
+                // 多维标记：`#报销 #出差`。放最下面一行，不抢标题和日期的位置
+                if (card.tagLine.isNotBlank()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = card.tagLine,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(fontSize = 11.sp, color = secondary),
+                    )
+                }
             }
             Spacer(Modifier.width(14.dp))
             CountdownBadge(card, dim)
@@ -166,21 +176,42 @@ private fun CountdownBadge(card: EventCardModel, dim: Float) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            if (isToday) {
-                Text(
-                    text = "今天",
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = primary),
-                )
-            } else {
-                Text(
-                    text = "${card.days}",
-                    style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = primary),
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = if (card.isCountingUp) "已过" else "天",
-                    style = TextStyle(fontSize = 10.sp, color = secondary),
-                )
+            when {
+                // 持续事件进行中：徽章读的是「离结束还有几天」。
+                // 若沿用「已经过了几天」，一场 9/1–9/5 的出差在 9/3 会显示「已过 2」，
+                // 用户会以为这件事已经结束了。
+                card.isInProgress -> {
+                    Text(
+                        text = if (card.daysLeftInSpan == 0) "今天" else "${card.daysLeftInSpan}",
+                        style = TextStyle(
+                            fontSize = if (card.daysLeftInSpan == 0) 15.sp else 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = primary,
+                        ),
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        text = if (card.daysLeftInSpan == 0) "结束" else "剩",
+                        style = TextStyle(fontSize = 10.sp, color = secondary),
+                    )
+                }
+                isToday -> {
+                    Text(
+                        text = "今天",
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = primary),
+                    )
+                }
+                else -> {
+                    Text(
+                        text = "${card.days}",
+                        style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = primary),
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        text = if (card.isCountingUp) "已过" else "天",
+                        style = TextStyle(fontSize = 10.sp, color = secondary),
+                    )
+                }
             }
         }
     }

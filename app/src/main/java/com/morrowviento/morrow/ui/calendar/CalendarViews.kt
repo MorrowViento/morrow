@@ -434,7 +434,9 @@ private fun entryMeta(entry: CalendarEntry): String {
     val parts = mutableListOf(entry.category)
     lunar?.let { parts += "农历$it" }
     if (entry.isAllDay) parts += "全天"
-    if (entry.repeatType != RepeatType.NONE) parts += entry.repeatType.label
+    // repeatLabel 已经是「每周」「每年·农历」这种完整短语，不再拼 RepeatType.label
+    if (entry.repeatType != RepeatType.NONE && entry.repeatLabel.isNotBlank()) parts += entry.repeatLabel
+    entry.spanLabel?.let { parts += it }
     return parts.joinToString(" · ")
 }
 

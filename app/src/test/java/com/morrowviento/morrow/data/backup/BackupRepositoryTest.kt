@@ -99,7 +99,12 @@ class BackupRepositoryTest {
             db.version = 1
         }
         fun open() = Room.databaseBuilder(RuntimeEnvironment.getApplication(), MorrowDatabase::class.java, path.absolutePath)
-            .addMigrations(MorrowDatabase.MIGRATION_1_2).allowMainThreadQueries().build()
+            .addMigrations(
+                MorrowDatabase.MIGRATION_1_2,
+                MorrowDatabase.MIGRATION_2_3,
+                MorrowDatabase.MIGRATION_3_4,
+            )
+            .allowMainThreadQueries().build()
         val updated = original.copy(isCompleted = false,
             kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
             repeatType = com.morrowviento.morrow.domain.model.RepeatType.MONTHLY, repeatMonth = null,
@@ -108,7 +113,8 @@ class BackupRepositoryTest {
         try {
             val repository = EventRepository(migrated.eventDao())
             assertEquals(original, repository.findById(original.id))
-            assertEquals(2, migrated.openHelper.writableDatabase.version)
+            // 4.2.0 第二批：升级到 schema 4（标签 / 归档 / 时长），1→4 一步到位也要能过
+            assertEquals(4, migrated.openHelper.writableDatabase.version)
             repository.save(updated)
         } finally { migrated.close() }
         val reopened = open()

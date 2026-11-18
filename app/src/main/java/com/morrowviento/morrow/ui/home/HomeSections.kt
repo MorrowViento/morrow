@@ -103,6 +103,9 @@ internal fun HomeHeader(
     sortLabel: String,
     onCycleSort: () -> Unit,
     moreAction: @Composable () -> Unit,
+    /** 当前是否在设置页点了「预览节日」——祝语前面加标记，点一下结束。 */
+    festivalPreviewing: Boolean = false,
+    onEndFestivalPreview: () -> Unit = {},
 ) {
     val collapsed by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 40 }
@@ -134,7 +137,13 @@ internal fun HomeHeader(
             AnimatedVisibility(visible = !collapsed && festival != null) {
                 if (festival != null) {
                     Text(
-                        text = "${festival.name} · ${festival.greeting}",
+                        // 预览时加「预览」前缀并允许点击结束：否则用户会以为今天真是节日，
+                        // 而且没有别的出口能退出预览
+                        text = if (festivalPreviewing) {
+                            "预览 · ${festival.greeting}"
+                        } else {
+                            "${festival.name} · ${festival.greeting}"
+                        },
                         maxLines = 1,
                         style = TextStyle(
                             fontSize = 12.sp,
@@ -143,7 +152,15 @@ internal fun HomeHeader(
                             // 那这行小字就失去了「今天是节日」的信号
                             color = Color(festival.tint),
                         ),
-                        modifier = Modifier.padding(top = 2.dp),
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .then(
+                                if (festivalPreviewing) {
+                                    Modifier.clickable(onClick = onEndFestivalPreview)
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     )
                 }
             }

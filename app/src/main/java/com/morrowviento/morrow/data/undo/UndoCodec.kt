@@ -82,6 +82,21 @@ object UndoCodec {
         addProperty("repeatType", event.repeatType.name.lowercase())
         event.repeatMonth?.let { addProperty("repeatMonth", it) }
         event.repeatDay?.let { addProperty("repeatDay", it) }
+        if (event.repeatInterval != 1) addProperty("repeatInterval", event.repeatInterval)
+        if (event.repeatWeekdays.isNotEmpty()) {
+            add(
+                "repeatWeekdays",
+                JsonArray().apply { event.repeatWeekdays.sorted().forEach { add(it) } },
+            )
+        }
+        if (event.repeatOnLunar) addProperty("repeatOnLunar", true)
+        event.repeatUntil?.let { addProperty("repeatUntil", it.toString()) }
+        event.endDate?.let { addProperty("endDate", it.toString()) }
+        if (event.tags.isNotEmpty()) {
+            add("tags", JsonArray().apply { event.tags.forEach { add(it) } })
+        }
+        event.archivedAt?.let { addProperty("archivedAt", it.toString()) }
+        if (event.durationMinutes > 0) addProperty("durationMinutes", event.durationMinutes)
         addProperty("createdAt", event.createdAt.toString())
         add(
             "reminders",
@@ -104,6 +119,8 @@ object UndoCodec {
             ?: throw IllegalArgumentException("targetDate 缺失或格式错误")
         val createdAt = parseDateTime(obj.string("createdAt")) ?: target
         val repeatType = when (obj.string("repeatType")) {
+            "daily" -> RepeatType.DAILY
+            "weekly" -> RepeatType.WEEKLY
             "monthly" -> RepeatType.MONTHLY
             "yearly" -> RepeatType.YEARLY
             else -> RepeatType.NONE
@@ -151,9 +168,31 @@ object UndoCodec {
             } else {
                 null
             },
+            repeatInterval = (obj.int("repeatInterval") ?: 1)
+                .coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL),
+            repeatWeekdays = obj.get("repeatWeekdays")
+                ?.takeIf { it.isJsonArray }
+                ?.asJsonArray
+                ?.mapNotNull { element -> runCatching { element.asInt }.getOrNull() }
+                ?.filter { it in 1..7 }
+                ?.toSortedSet()
+                .orEmpty(),
+            repeatOnLunar = obj.bool("repeatOnLunar") ?: false,
+            repeatUntil = obj.string("repeatUntil")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            endDate = obj.string("endDate")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
             createdAt = createdAt,
             kind = if (obj.string("kind") == "anniversary") EventKind.ANNIVERSARY else EventKind.TODO,
             lastHandledOccurrence = obj.string("lastHandledOccurrence")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            // 撤销必须逐字段等价：这里不做 normalize，只把越界值夹回去
+            tags = obj.get("tags")
+                ?.takeIf { it.isJsonArray }
+                ?.asJsonArray
+                ?.mapNotNull { element -> runCatching { element.asString }.getOrNull() }
+                ?.take(com.morrowviento.morrow.domain.model.EventTags.MAX_COUNT)
+                .orEmpty(),
+            archivedAt = parseDateTime(obj.string("archivedAt")),
+            durationMinutes = (obj.int("durationMinutes") ?: 0)
+                .coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
         )
     }
 

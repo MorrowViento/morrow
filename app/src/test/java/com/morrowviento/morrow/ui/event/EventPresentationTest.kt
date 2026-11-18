@@ -43,10 +43,8 @@ class EventPresentationTest {
         repeatDay = repeatDay,
     )
 
-    private fun idsOf(events: List<CountdownEvent>, mode: SortMode): List<String> {
-        val (active, _) = EventPresentation.partition(events, mode, today, now)
-        return active.map { it.id }
-    }
+    private fun idsOf(events: List<CountdownEvent>, mode: SortMode): List<String> =
+        EventPresentation.partition(events, mode, today, now).active.map { it.id }
 
     @Test
     fun distanceSort_putsTodayFirstThenFutureThenRecentPast() {
@@ -113,7 +111,7 @@ class EventPresentationTest {
             event("upcoming", "圣诞", LocalDateTime.of(2026, 12, 25, 9, 0)),
         )
 
-        val (active, _) = EventPresentation.partition(events, SortMode.DISTANCE, today, now)
+        val active = EventPresentation.partition(events, SortMode.DISTANCE, today, now).active
         val anniversary = active.first { it.id == "passed-anniversary" }
         assertEquals(LocalDate.of(2027, 1, 1), anniversary.target.toLocalDate())
         assertEquals(51, anniversary.dayDelta)
@@ -127,9 +125,31 @@ class EventPresentationTest {
             event("b", "已完成", LocalDateTime.of(2026, 12, 2, 9, 0), isCompleted = true),
         )
 
-        val (active, completed) = EventPresentation.partition(events, SortMode.DISTANCE, today, now)
-        assertEquals(listOf("a"), active.map { it.id })
-        assertEquals(listOf("b"), completed.map { it.id })
+        val partition = EventPresentation.partition(events, SortMode.DISTANCE, today, now)
+        assertEquals(listOf("a"), partition.active.map { it.id })
+        assertEquals(listOf("b"), partition.completed.map { it.id })
+        // 归档的一批不在前两段里：它是第三条状态线
+        assertEquals(emptyList<String>(), partition.archived.map { it.id })
+    }
+
+    @Test
+    fun archivedEvents_stayOutOfBothActiveAndCompleted() {
+        val archivedAt = LocalDateTime.of(2026, 11, 11, 10, 0)
+        val events = listOf(
+            event("a", "进行中", LocalDateTime.of(2026, 12, 1, 9, 0)),
+            event("b", "完成并归档", LocalDateTime.of(2026, 12, 2, 9, 0), isCompleted = true)
+                .copy(archivedAt = archivedAt),
+            event("c", "放弃", LocalDateTime.of(2026, 12, 3, 9, 0)),
+        ).let { list -> list.map { if (it.id == "c") it.copy(archivedAt = archivedAt) else it } }
+
+        val partition = EventPresentation.partition(events, SortMode.DISTANCE, today, now)
+
+        // 归档既不算进行中也算不上「已完成」的成绩：它只出现在归档段
+        assertEquals(listOf("a"), partition.active.map { it.id })
+        assertEquals(emptyList<String>(), partition.completed.map { it.id })
+        assertEquals(listOf("b", "c"), partition.archived.map { it.id }.sorted())
+        assertEquals(true, partition.archived.first { it.id == "b" }.isCompleted)
+        assertEquals("今天 10:00", partition.archived.first { it.id == "c" }.archivedLabel)
     }
 
     @Test

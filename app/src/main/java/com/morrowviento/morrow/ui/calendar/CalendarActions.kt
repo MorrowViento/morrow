@@ -17,4 +17,6 @@ data class CalendarActions(
     /** 年视图点某个月：切回月视图并定位到该月。 */
     val openMonth: (YearMonth) -> Unit,
     val goToToday: () -> Unit,
+    /** 时间块视图按天翻。其他视图不用它。 */
+    val shiftDay: (Long) -> Unit = {},
 )

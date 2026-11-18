@@ -48,9 +48,17 @@ object EventMapper {
         repeatType = event.repeatType.name,
         repeatMonth = event.repeatMonth,
         repeatDay = event.repeatDay,
+        repeatInterval = event.repeatInterval,
+        repeatWeekdays = event.repeatWeekdays.sorted().joinToString(","),
+        repeatOnLunar = event.repeatOnLunar,
+        repeatUntil = event.repeatUntil?.toEpochDay(),
+        endDate = event.endDate?.toEpochDay(),
         createdAt = event.createdAt.atZone(zone).toInstant().toEpochMilli(),
         kind = event.kind.name,
         lastHandledOccurrence = event.lastHandledOccurrence?.toEpochDay(),
+        tags = com.morrowviento.morrow.domain.model.EventTags.encode(event.tags),
+        archivedAt = event.archivedAt?.atZone(zone)?.toInstant()?.toEpochMilli(),
+        durationMinutes = event.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
     )
 
     fun toDomain(
@@ -71,13 +79,28 @@ object EventMapper {
         repeatType = enumOrDefault(entity.repeatType, RepeatType.NONE),
         repeatMonth = entity.repeatMonth,
         repeatDay = entity.repeatDay,
+        repeatInterval = entity.repeatInterval.coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL),
+        repeatWeekdays = decodeWeekdays(entity.repeatWeekdays),
+        repeatOnLunar = entity.repeatOnLunar,
+        repeatUntil = entity.repeatUntil?.let { runCatching { LocalDate.ofEpochDay(it) }.getOrNull() },
+        endDate = entity.endDate?.let { runCatching { LocalDate.ofEpochDay(it) }.getOrNull() },
         createdAt = toLocalDateTime(entity.createdAt, zone),
         kind = enumOrDefault(entity.kind, EventKind.TODO),
         lastHandledOccurrence = entity.lastHandledOccurrence?.let { runCatching { LocalDate.ofEpochDay(it) }.getOrNull() },
+        tags = com.morrowviento.morrow.domain.model.EventTags.decode(entity.tags),
+        archivedAt = entity.archivedAt?.let { toLocalDateTime(it, zone) },
+        durationMinutes = entity.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
     )
 
     fun toLocalDateTime(millis: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDateTime =
         LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), zone)
+
+    /** 星期列：逗号分隔的 1..7，非法项直接丢弃（手改库 / 坏备份不该让整天挂掉）。 */
+    fun decodeWeekdays(raw: String): Set<Int> =
+        raw.split(',')
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..7 }
+            .toSortedSet()
 
     fun encodeReminders(reminders: List<EventReminder>): String =
         gson.toJson(

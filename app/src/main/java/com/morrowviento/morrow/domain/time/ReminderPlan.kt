@@ -50,6 +50,9 @@ object ReminderPlan {
     ): List<ScheduledReminder> {
         // 已完成的事件不应再打扰用户；取消已完成事件上的提醒由调用方 sync 处理
         if (event.isCompleted) return emptyList()
+        // 归档同理：归档的意思就是「这件事先不要出现在我眼前」，
+        // 提醒还照响的话归档就成了纯粹的自欺欺人。恢复归档后由调用方重新 sync。
+        if (event.isArchived) return emptyList()
 
         val reminders = event.reminders.filter { it.enabled && it.minutesBefore >= 0 }
         if (reminders.isEmpty()) return emptyList()

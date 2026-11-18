@@ -53,6 +53,8 @@ fun EventDetailScreen(
     onToggleCompleted: () -> Unit,
     onTogglePinned: () -> Unit,
     onDelete: () -> Unit,
+    /** 归档 / 取消归档。归档把事件移出首页与日历，但保留数据；与「完成」不是一回事。 */
+    onArchive: () -> Unit = {},
 ) {
     // 与新建/编辑面板同一套 UIKit 弹层：下拉关闭、滚动到顶继续上拉展开
     GlassSheet(title = "事件详情", onDismiss = onDismiss) { dismiss ->
@@ -84,11 +86,15 @@ fun EventDetailScreen(
 
                     Spacer(Modifier.height(18.dp))
                     InfoRow("目标", formatTarget(card))
+                    card.spanLabel?.let { InfoRow("持续", it) }
+                    card.durationLabel?.let { InfoRow("时长", it) }
                     InfoRow("分类", card.category)
+                    if (card.tagLine.isNotBlank()) InfoRow("标签", card.tagLine)
                     InfoRow("类型", card.kind.label)
-                    InfoRow("重复", card.repeatType.label)
+                    InfoRow("重复", card.repeatLabel)
                     InfoRow("创建", card.createdAt.format(CREATED_AT_FORMAT))
                     if (card.isCompleted) InfoRow("状态", "已完成")
+                    card.archivedLabel?.let { InfoRow("归档", it) }
 
                     if (card.note.isNotBlank()) {
                         Spacer(Modifier.height(16.dp))
@@ -121,6 +127,13 @@ fun EventDetailScreen(
                         } else {
                             Spacer(Modifier.weight(1f))
                         }
+                        // 归档与删除相邻但语义完全不同：归档保留数据、可原样恢复，
+                        // 删除进 6 秒撤销窗口后即消失。用文字按钮区分开，不给两者同一个图标。
+                        com.morrowviento.morrow.ui.glass.GlassTextButton(
+                            text = if (card.isArchived) "恢复" else "归档",
+                            onClick = onArchive,
+                            compact = false,
+                        )
                         DetailActionIcon(pin = false, onClick = onDelete)
                     }
                 }
@@ -243,6 +256,11 @@ private fun formatTarget(card: EventCardModel): String =
     }
 
 private fun countdownHeadline(card: EventCardModel): String = when {
+    card.isInProgress -> if (card.daysLeftInSpan == 0) {
+        "今天是最后一天"
+    } else {
+        "进行中 · 还有 ${card.daysLeftInSpan} 天"
+    }
     card.dayDelta == 0 -> "就是今天"
     card.dayDelta > 0 -> "还有 ${card.dayDelta} 天"
     else -> "已过去 ${-card.dayDelta} 天"

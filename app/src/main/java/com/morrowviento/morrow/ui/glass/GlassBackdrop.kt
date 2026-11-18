@@ -155,8 +155,13 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                 // Color.Transparent——非预乘插值会在边缘留一圈脏灰（与色斑同一处理）。
                 // 这里取的是上面在组合期读出来的色值：`drawWithCache` 的 scope 不是
                 // Composable，不能在里面读 CompositionLocal。
+                //
+                // 浓淡经过一次实机反馈修正：4.1.3 用 0.22/0.16，叠在丝缎的四团色斑上
+                // 几乎看不出来（丝缎本身就是低饱和大色块，一层同明度的红被吃掉）。
+                // 现在提到 0.34/0.26，并且加第二团底部柔光——只有顶上一团时，整页
+                // 读起来仍像「原来那张图」，两团上下呼应才有「今天不一样」的观感。
                 val festivalGlow = festivalTint?.let { tint ->
-                    tint.copy(alpha = if (dark) 0.22f else 0.16f)
+                    tint.copy(alpha = if (dark) 0.34f else 0.26f)
                 }
                 onDrawBehind {
                     val photoBitmap = photo
@@ -197,19 +202,36 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
                         else -> drawRect(base)
                     }
                     if (festivalGlow != null) {
-                        // 一团盖住上半屏的光：中心在屏幕上方偏中，半径取对角线量级，
-                        // 边缘完全淡出，不做边界感很强的圆形
-                        val center = Offset(size.width * 0.5f, size.height * 0.18f)
-                        val radius = (size.width * size.width + size.height * size.height)
-                            .let { kotlin.math.sqrt(it) } * 0.62f
+                        // 上团：中心在屏幕上方偏中，半径取对角线量级，边缘完全淡出，
+                        // 不做边界感很强的圆形
+                        val topCenter = Offset(size.width * 0.5f, size.height * 0.18f)
+                        val diagonal = (size.width * size.width + size.height * size.height)
+                            .let { kotlin.math.sqrt(it) }
+                        val topRadius = diagonal * 0.62f
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(festivalGlow, festivalGlow.copy(alpha = 0f)),
-                                center = center,
-                                radius = radius,
+                                center = topCenter,
+                                radius = topRadius,
                             ),
-                            radius = radius,
-                            center = center,
+                            radius = topRadius,
+                            center = topCenter,
+                        )
+                        // 下团：底色更薄（六成），避免整页发闷。它压住底栏那一带，
+                        // 让玻璃底栏采到一点节日色，而不是只有上半屏变了
+                        val bottomCenter = Offset(size.width * 0.5f, size.height * 1.02f)
+                        val bottomRadius = diagonal * 0.55f
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    festivalGlow.copy(alpha = festivalGlow.alpha * 0.6f),
+                                    festivalGlow.copy(alpha = 0f),
+                                ),
+                                center = bottomCenter,
+                                radius = bottomRadius,
+                            ),
+                            radius = bottomRadius,
+                            center = bottomCenter,
                         )
                     }
                 }

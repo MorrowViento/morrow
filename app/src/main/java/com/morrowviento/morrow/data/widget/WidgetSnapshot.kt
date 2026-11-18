@@ -29,6 +29,8 @@ data class WidgetRow(
     val isAllDay: Boolean,
     val isPinned: Boolean,
     val repeatType: com.morrowviento.morrow.domain.model.RepeatType,
+    /** 重复的人话描述（与首页卡片同一套文案）。 */
+    val repeatLabel: String = "",
     /** 0..100；-1 表示不该画进度（重复事件或创建时间晚于目标）。 */
     val progressPercent: Int,
 ) {
@@ -56,11 +58,9 @@ data class WidgetRow(
         if (showCategory && category.isNotBlank()) parts += category
         if (showDate) {
             val date = "%d月%d日".format(target.monthValue, target.dayOfMonth)
-            parts += when (repeatType) {
-                com.morrowviento.morrow.domain.model.RepeatType.YEARLY -> "每年 $date"
-                com.morrowviento.morrow.domain.model.RepeatType.MONTHLY -> "每月 $date"
-                else -> date
-            }
+            // 重复描述统一走 RepeatText：4.1.x 这里只认每月/每年，加了日/周两档之后
+            // 小部件会显示成裸日期，和首页对不上
+            parts += if (repeatLabel.isNotBlank() && repeatLabel != "不重复") "$repeatLabel $date" else date
             parts += if (isAllDay) "全天" else "%02d:%02d".format(target.hour, target.minute)
         }
         return parts.joinToString(" · ")
@@ -111,7 +111,8 @@ object WidgetSnapshotBuilder {
         now: LocalDateTime,
         limit: Int,
     ): WidgetSnapshot {
-        val active = events.filter { !it.isCompleted }
+        // 归档的事件与已完成一样不该出现在小部件上：小部件是「抬眼就看见」的地方
+        val active = events.filter { !it.isCompleted && !it.isArchived }
         val rows = active.map { toRow(it, today, now) }
             .sortedWith(ROW_ORDER)
             .take(limit.coerceAtLeast(1))
@@ -137,6 +138,7 @@ object WidgetSnapshotBuilder {
             isAllDay = event.isAllDay,
             isPinned = event.isPinned,
             repeatType = event.repeatType,
+            repeatLabel = com.morrowviento.morrow.domain.time.RepeatText.of(event),
             progressPercent = progressPercent(event, target, now),
         )
     }

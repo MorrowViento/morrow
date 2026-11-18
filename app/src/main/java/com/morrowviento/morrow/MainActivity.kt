@@ -141,6 +141,9 @@ class MainActivity : ComponentActivity() {
                     clearAll = viewModel::clearAll,
                     undo = viewModel::undoLast,
                     loadForm = viewModel::formFor,
+                    archive = { viewModel.setArchived(it, true) },
+                    unarchive = { viewModel.setArchived(it, false) },
+                    clearArchived = viewModel::clearArchived,
                 )
             }
             val calendarActions = remember(viewModel) {
@@ -151,6 +154,7 @@ class MainActivity : ComponentActivity() {
                     selectDay = viewModel::selectCalendarDay,
                     openMonth = viewModel::openCalendarMonth,
                     goToToday = viewModel::calendarGoToToday,
+                    shiftDay = viewModel::shiftCalendarDay,
                 )
             }
             val reminderActions = remember(reminderViewModel) {
@@ -178,6 +182,8 @@ class MainActivity : ComponentActivity() {
                     setGlassFrostLevel = settingsViewModel::setGlassFrostLevel,
                     setReduceMotion = settingsViewModel::setReduceMotion,
                     setFestivalSkin = settingsViewModel::setFestivalSkin,
+                    cycleFestivalPreview = settingsViewModel::cycleFestivalPreview,
+                    clearFestivalPreview = settingsViewModel::clearFestivalPreview,
                     exportTo = settingsViewModel::exportTo,
                     loadImport = settingsViewModel::loadImport,
                     confirmImport = settingsViewModel::confirmImport,
@@ -220,6 +226,7 @@ class MainActivity : ComponentActivity() {
                 openDetailRequest = openDetail,
                 onDetailRequestConsumed = { pendingDetailId.value = null },
                 closeOverlaysRequest = notificationEntry,
+                onEndFestivalPreview = settingsViewModel::clearFestivalPreview,
             )
         }
         StartupTrace.mark("main", "setContent returned")

@@ -88,6 +88,32 @@ object LunarCalendar {
         return LunarDate(year = year, month = month, day = rest + 1, isLeapMonth = isLeap)
     }
 
+    /**
+     * 农历 → 公历（平月，不含闰月）。
+     *
+     * [day] 超过该月天数时取月末：农历生日「腊月三十」碰上只有廿九天的年份，
+     * 过的是廿九——这条规则与民间习惯一致，也是 `LunarDate` 里
+     * `dayLabel` 不可能总是「三十」的原因。闰月不参与，闰四月的生日按四月过。
+     *
+     * 超范围（年表 1900–2100 之外、月份非法）返回 null，调用方跳过该年。
+     */
+    fun toSolar(lunarYear: Int, month: Int, day: Int): LocalDate? {
+        if (lunarYear < MIN_YEAR || lunarYear > MAX_YEAR) return null
+        if (month !in 1..12 || day < 1) return null
+        val starts = YEAR_STARTS
+        val index = lunarYear - MIN_YEAR
+        if (index < 0 || index >= starts.size - 1) return null
+        var offset = starts[index]
+        val leap = leapMonth(lunarYear)
+        // 累加到目标月之前；闰月紧跟在同序号月之后，所以碰上就多减一个月长
+        for (m in 1 until month) {
+            offset += monthDays(lunarYear, m)
+            if (leap == m) offset += leapDays(lunarYear)
+        }
+        offset += day.coerceAtMost(monthDays(lunarYear, month)) - 1
+        return BASE.plusDays(offset.toLong())
+    }
+
     /** 日历格子副标题：节日优先，其次初一显示月名，其余显示日名。 */
     fun cellLabel(date: LocalDate): String? {
         val lunar = fromSolar(date) ?: return null

@@ -163,6 +163,26 @@ class SettingsViewModel(
     fun setFestivalSkin(enabled: Boolean) = persist { settings.setFestivalSkin(enabled) }
 
     /**
+     * 轮换节日皮肤预览。不落盘：退出设置页就结束。
+     *
+     * 从「今天」往后找，所以第一次点到的就是即将到来的那个节日（比随机挑一个更贴近
+     * 用户下周真会看到的样子）；继续点按日期往后轮，可以把八款都看一遍。
+     * 走到最后一个之后再点回到「无预览」。
+     */
+    fun cycleFestivalPreview() {
+        local.update { state ->
+            val from = state.festivalPreview?.date?.plusDays(1) ?: java.time.LocalDate.now()
+            val next = com.morrowviento.morrow.ui.glass.upcomingFestivalSkin(from)
+            state.copy(festivalPreview = next)
+        }
+    }
+
+    /** 离开设置页时收起预览：首页不该因为我们看一眼效果就变成节日的模样。 */
+    fun clearFestivalPreview() {
+        local.update { if (it.festivalPreview == null) it else it.copy(festivalPreview = null) }
+    }
+
+    /**
      * 换配色：一处写入，`appSettings` 一变，整棵树（含底栏与所有浮层）跟着重建。
      *
      * 桌面上的小部件**不会**因为我们改了 DataStore 就自己重绘——它只认

@@ -99,7 +99,8 @@ class BackupCodecTest {
             lastHandledOccurrence = java.time.LocalDate.of(2027, 3, 8))
         val raw = BackupCodec.encode(document(listOf(original)))
         val parsed = BackupCodec.decode(raw) as BackupParse.Ok
-        assertEquals(2, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
+        // 4.2.0 起格式版本是 3（新增重复间隔 / 星期 / 农历 / 结束日 / 持续区间）
+        assertEquals(4, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
         assertEquals(original, BackupMapper.toDomain(parsed.document.events.single()))
         val legacy = BackupCodec.decode("""{"format":"morrow-backup","version":1,
             "events":[{"id":"old","targetDate":"2027-05-01T08:00","isCompleted":true,"isPinned":true,"repeatType":"YEARLY"}]}""") as BackupParse.Ok
@@ -273,7 +274,7 @@ class BackupCodecTest {
         val raw = """
             {"format":"morrow-backup","version":1,
              "events":[{"id":"e","targetDate":"2027-05-01T08:00",
-               "direction":"SIDEWAYS","repeatType":"WEEKLY"}]}
+               "direction":"SIDEWAYS","repeatType":"FORTNIGHTLY"}]}
         """.trimIndent()
         val ok = BackupCodec.decode(raw) as BackupParse.Ok
         val restored = BackupMapper.toDomain(ok.document.events.single())!!

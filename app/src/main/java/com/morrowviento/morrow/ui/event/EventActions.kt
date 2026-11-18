@@ -15,4 +15,10 @@ data class EventActions(
     val undo: () -> Unit,
     /** 详情页点「编辑」时按 id 取回完整事件并转成表单状态。 */
     val loadForm: suspend (String) -> EventFormState?,
+    /** 归档：移出首页/日历/提醒，但保留数据与完成状态。 */
+    val archive: (String) -> Unit = {},
+    /** 从归档箱恢复到正常列表。 */
+    val unarchive: (String) -> Unit = {},
+    /** 清空归档箱（真删除，进撤销队列）。 */
+    val clearArchived: () -> Unit = {},
 )

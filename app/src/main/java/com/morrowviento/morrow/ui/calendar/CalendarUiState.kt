@@ -8,11 +8,13 @@ import com.morrowviento.morrow.domain.time.LunarCalendar
 import java.time.LocalDate
 import java.time.YearMonth
 
-/** 日历三种视图。[label] 用于分段控件的按钮文字。 */
+/** 日历四个视图。[label] 用于分段控件的按钮文字。 */
 enum class CalendarView(val label: String) {
     MONTH("月"),
     YEAR("年"),
     LIST("列表"),
+    /** 时间块：一天 24 小时的纵向轴，事件按时刻落成块（重叠自动分列）。 */
+    TIMELINE("时间块"),
 }
 
 /**
@@ -41,6 +43,13 @@ data class CalendarNav(
             month < MIN_MONTH -> MIN_MONTH
             month > MAX_MONTH -> MAX_MONTH
             else -> month
+        }
+
+        /** 时间块视图翻日也要夹在农历年表内，否则会滚到没有农历副标题的区域。 */
+        fun clampDay(date: LocalDate): LocalDate = when {
+            date < MIN_MONTH.atDay(1) -> MIN_MONTH.atDay(1)
+            date > MAX_MONTH.atEndOfMonth() -> MAX_MONTH.atEndOfMonth()
+            else -> date
         }
     }
 }
@@ -75,6 +84,10 @@ data class CalendarEntry(
     val isCompleted: Boolean,
     val isAllDay: Boolean,
     val repeatType: RepeatType,
+    /** 重复的人话描述（「每周」「每年·农历」「每 2 周 周一、周三」）。 */
+    val repeatLabel: String = "",
+    /** 持续事件的跨度（「共 5 天」），单日事件为 null。 */
+    val spanLabel: String? = null,
 )
 
 /** 年视图的一个月。 */
@@ -108,6 +121,8 @@ data class CalendarUiState(
     val monthEventCount: Int = 0,
     val monthSummaries: List<MonthSummary> = emptyList(),
     val monthGroups: List<MonthGroup> = emptyList(),
+    /** 时间块视图的当天布局；其他视图为 null。 */
+    val timeline: TimelineDay? = null,
     val yearEventCount: Int = 0,
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -147,17 +162,22 @@ class CalendarStrip private constructor(
 
     private fun neighbor(delta: Long): CalendarUiState? {
         if ((delta < 0 && !canPrev) || (delta > 0 && !canNext)) return null
-        val target = if (nav.view == CalendarView.MONTH) {
-            nav.month.plusMonths(delta)
-        } else {
-            nav.month.plusYears(delta)
+        val target = when (nav.view) {
+            CalendarView.MONTH -> nav.copy(
+                month = CalendarNav.clamp(nav.month.plusMonths(delta)),
+                selected = null,
+            )
+            // 时间块按天翻：选区就是当前显示的那一天，翻页后落在新的一天
+            CalendarView.TIMELINE -> {
+                val day = CalendarNav.clampDay((nav.selected ?: today).plusDays(delta))
+                nav.copy(month = YearMonth.from(day), selected = day)
+            }
+            else -> nav.copy(
+                month = CalendarNav.clamp(nav.month.plusYears(delta)),
+                selected = null,
+            )
         }
-        // 翻页会清空选区（见 EventViewModel.shiftCalendarMonth），相邻页保持一致
-        return CalendarPresentation.build(
-            events,
-            nav.copy(month = CalendarNav.clamp(target), selected = null),
-            today,
-        )
+        return CalendarPresentation.build(events, target, today)
     }
 
     /** 只在当前页上比较：邻页是惰性的，不该为了判等把两页都算出来。 */
@@ -180,8 +200,8 @@ class CalendarStrip private constructor(
             events = events,
             nav = nav,
             today = today,
-            canPrev = neighborExists(nav, -1),
-            canNext = neighborExists(nav, 1),
+            canPrev = neighborExists(nav, -1, today),
+            canNext = neighborExists(nav, 1, today),
         )
 
         /** 只包一层「还没有数据 / 读取出错」的壳：不建 42 格，也不建邻页。 */
@@ -194,15 +214,17 @@ class CalendarStrip private constructor(
             canNext = false,
         )
 
-        /** 边界判定与 [CalendarPresentation.build] 无关，只看月份有没有被夹住。 */
-        private fun neighborExists(nav: CalendarNav, delta: Long): Boolean {
-            val target = if (nav.view == CalendarView.MONTH) {
-                nav.month.plusMonths(delta)
-            } else {
-                nav.month.plusYears(delta)
+        /** 边界判定与 [CalendarPresentation.build] 无关，只看周期有没有被夹住。 */
+        private fun neighborExists(nav: CalendarNav, delta: Long, today: LocalDate): Boolean =
+            when (nav.view) {
+                CalendarView.MONTH ->
+                    CalendarNav.clamp(nav.month.plusMonths(delta)) != nav.month
+                CalendarView.TIMELINE -> {
+                    val current = nav.selected ?: today
+                    CalendarNav.clampDay(current.plusDays(delta)) != current
+                }
+                else -> CalendarNav.clamp(nav.month.plusYears(delta)) != nav.month
             }
-            return CalendarNav.clamp(target) != nav.month
-        }
     }
 }
 
@@ -224,10 +246,33 @@ object CalendarPresentation {
         ).firstOrNull()
 
     /** 某月的日期 → 事件列表（同一天多个事件按未完成优先、标题排序）。 */
-    fun marksOf(events: List<CountdownEvent>, month: YearMonth): Map<LocalDate, List<CountdownEvent>> {
+    fun marksOf(events: List<CountdownEvent>, month: YearMonth): Map<LocalDate, List<CountdownEvent>> =
+        collect(events, month) { event, start, end ->
+            com.morrowviento.morrow.domain.time.RepeatRule.occurrencesBetween(event, start, end)
+        }
+
+    /**
+     * 同 [marksOf]，但持续事件会铺满整个区间。
+     *
+     * 月视图的 42 格与「选中某天」用它：9/1–9/5 的出差，9/3 那格也该亮，
+     * 点进去也能看到这条事件。年视图/列表仍按**起点**计一次，否则一个月的出差
+     * 会在年摘要里刷出 30 行同一件事。
+     */
+    fun coveringOf(events: List<CountdownEvent>, month: YearMonth): Map<LocalDate, List<CountdownEvent>> =
+        collect(events, month) { event, start, end ->
+            com.morrowviento.morrow.domain.time.RepeatRule.coverageBetween(event, start, end)
+        }
+
+    private inline fun collect(
+        events: List<CountdownEvent>,
+        month: YearMonth,
+        dates: (CountdownEvent, LocalDate, LocalDate) -> List<LocalDate>,
+    ): Map<LocalDate, List<CountdownEvent>> {
+        val start = month.atDay(1)
+        val end = month.atEndOfMonth()
         val out = LinkedHashMap<LocalDate, MutableList<CountdownEvent>>()
         events.forEach { event ->
-            com.morrowviento.morrow.domain.time.RepeatRule.occurrencesBetween(event, month.atDay(1), month.atEndOfMonth()).forEach { date ->
+            dates(event, start, end).forEach { date ->
                 out.getOrPut(date) { mutableListOf() }.add(event)
             }
         }
@@ -240,7 +285,33 @@ object CalendarPresentation {
             CalendarView.MONTH -> buildMonth(events, nav, today)
             CalendarView.YEAR -> buildYear(events, nav, today)
             CalendarView.LIST -> buildList(events, nav, today)
+            CalendarView.TIMELINE -> buildTimeline(events, nav, today)
         }
+
+    /**
+     * 时间块视图：只算「那一天」。
+     *
+     * 不预先算前后两天——时间块是逐日看的，翻页时算下一页即可，
+     * 与月视图「一次只算一页 42 格」同一个取舍。
+     */
+    private fun buildTimeline(
+        events: List<CountdownEvent>,
+        nav: CalendarNav,
+        today: LocalDate,
+    ): CalendarUiState {
+        val date = CalendarNav.clampDay(nav.selected ?: today)
+        val timeline = TimelineLayout.build(events, date)
+        return CalendarUiState(
+            view = nav.view,
+            month = YearMonth.from(date),
+            today = today,
+            selected = date,
+            timeline = timeline,
+            // 头部副标题复用这个字段：当天有几件事（全天条 + 定时块）
+            monthEventCount = timeline.allDay.size + timeline.blocks.size,
+            isLoading = false,
+        )
+    }
 
     /**
      * 当前页（+ 惰性相邻页）。
@@ -261,7 +332,7 @@ object CalendarPresentation {
         // 42 格最多横跨 3 个月，按月算一次再按日期取，避免逐格重复扫描全部事件
         val months = (dates.map { YearMonth.from(it) } + listOfNotNull(selected?.let(YearMonth::from)))
             .distinct()
-        val marks = months.associateWith { marksOf(events, it) }
+        val marks = months.associateWith { coveringOf(events, it) }
 
         val cells = dates.map { date ->
             val thisMonth = YearMonth.from(date)
@@ -371,6 +442,8 @@ object CalendarPresentation {
         isCompleted = event.isCompleted,
         isAllDay = event.isAllDay,
         repeatType = event.repeatType,
+        repeatLabel = com.morrowviento.morrow.domain.time.RepeatText.short(event),
+        spanLabel = com.morrowviento.morrow.domain.time.RepeatText.span(event),
     )
 
     /** 同一天内：未完成在前，其次按标题，保证每秒刷新也不会跳序。 */

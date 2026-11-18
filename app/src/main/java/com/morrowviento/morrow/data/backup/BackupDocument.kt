@@ -56,9 +56,25 @@ data class BackupEvent(
     val repeatType: String,
     val repeatMonth: Int?,
     val repeatDay: Int?,
+    /** 重复间隔（4.2.0）。缺省 1，旧备份读成「每周期一次」。 */
+    val repeatInterval: Int = 1,
+    /** 每周重复的星期（ISO 1..7）。旧备份没有这一项。 */
+    val repeatWeekdays: List<Int> = emptyList(),
+    /** 年循环按农历。旧备份没有这一项。 */
+    val repeatOnLunar: Boolean = false,
+    /** 重复结束日期（ISO 本地日期）。 */
+    val repeatUntil: String? = null,
+    /** 持续事件的结束日期（ISO 本地日期）。 */
+    val endDate: String? = null,
     val createdAt: String,
     val kind: String = EventKind.TODO.name,
     val lastHandledOccurrence: String? = null,
+    /** 多维标记（4.2.0 第二批）。旧备份没有这一项 → 空列表。 */
+    val tags: List<String> = emptyList(),
+    /** 归档时刻（ISO 本地时刻）；缺省未归档。归档 ≠ 完成，见 CountdownEvent。 */
+    val archivedAt: String? = null,
+    /** 预计时长（分钟），0 = 未指定。只影响时间块高度。 */
+    val durationMinutes: Int = 0,
 )
 
 data class BackupReminder(
@@ -114,7 +130,7 @@ object BackupCodec {
     const val FORMAT = "morrow-backup"
 
     /** 当前写入的版本。读到更高的版本说明备份来自更新的 App，拒绝而不是猜测。 */
-    const val CURRENT_VERSION = 2
+    const val CURRENT_VERSION = 4
 
     // ---------------------------------------------------------------- 编码
 
@@ -169,6 +185,20 @@ object BackupCodec {
         addProperty("repeatType", event.repeatType)
         event.repeatMonth?.let { addProperty("repeatMonth", it) }
         event.repeatDay?.let { addProperty("repeatDay", it) }
+        // 新增可选项：只在非默认时写，旧版本读到也不会被空字段困扰
+        if (event.repeatInterval != 1) addProperty("repeatInterval", event.repeatInterval)
+        if (event.repeatWeekdays.isNotEmpty()) {
+            add("repeatWeekdays", JsonArray().apply { event.repeatWeekdays.forEach { add(it) } })
+        }
+        if (event.repeatOnLunar) addProperty("repeatOnLunar", true)
+        event.repeatUntil?.let { addProperty("repeatUntil", it) }
+        event.endDate?.let { addProperty("endDate", it) }
+        // 标签用数组而不是逗号串：备份是给人看的，数组比 "a,b,c" 更不容易被手改坏
+        if (event.tags.isNotEmpty()) {
+            add("tags", JsonArray().apply { event.tags.forEach { add(it) } })
+        }
+        event.archivedAt?.let { addProperty("archivedAt", it) }
+        if (event.durationMinutes > 0) addProperty("durationMinutes", event.durationMinutes)
         addProperty("createdAt", event.createdAt)
         add(
             "reminders",
@@ -292,9 +322,33 @@ object BackupCodec {
             repeatType = obj.stringOrNull("repeatType") ?: RepeatType.NONE.name,
             repeatMonth = obj.intOrNull("repeatMonth"),
             repeatDay = obj.intOrNull("repeatDay"),
+            repeatInterval = (obj.intOrNull("repeatInterval") ?: 1)
+                .coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL),
+            repeatWeekdays = obj.arrayOrNull("repeatWeekdays")
+                ?.mapNotNull { element ->
+                    element.takeIf { it.isJsonPrimitive }
+                        ?.let { runCatching { it.asJsonPrimitive.asInt }.getOrNull() }
+                }
+                ?.filter { it in 1..7 }
+                ?.distinct()
+                ?.sorted()
+                .orEmpty(),
+            repeatOnLunar = obj.boolOrNull("repeatOnLunar") ?: false,
+            repeatUntil = obj.stringOrNull("repeatUntil")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
+            endDate = obj.stringOrNull("endDate")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
             createdAt = createdAtRaw,
             kind = obj.stringOrNull("kind") ?: EventKind.TODO.name,
             lastHandledOccurrence = obj.stringOrNull("lastHandledOccurrence")?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess },
+            // 标签在这里也过一遍 normalize：手改过的备份可能塞进 20 个标签或带逗号的名字
+            tags = com.morrowviento.morrow.domain.model.EventTags.normalize(
+                obj.arrayOrNull("tags")?.mapNotNull { element ->
+                    element.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asJsonPrimitive.asString }.getOrNull() }
+                }.orEmpty(),
+            ),
+            // 归档时刻只接受能解析的值：坏掉就当未归档，而不是整条事件作废
+            archivedAt = obj.stringOrNull("archivedAt")?.takeIf { parseTime(it) != null },
+            durationMinutes = (obj.intOrNull("durationMinutes") ?: 0)
+                .coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
         )
     }
 
@@ -434,9 +488,17 @@ object BackupMapper {
         repeatType = event.repeatType.name,
         repeatMonth = event.repeatMonth,
         repeatDay = event.repeatDay,
+        repeatInterval = event.repeatInterval,
+        repeatWeekdays = event.repeatWeekdays.sorted(),
+        repeatOnLunar = event.repeatOnLunar,
+        repeatUntil = event.repeatUntil?.toString(),
+        endDate = event.endDate?.toString(),
         createdAt = event.createdAt.toString(),
         kind = event.kind.name,
         lastHandledOccurrence = event.lastHandledOccurrence?.toString(),
+        tags = event.tags,
+        archivedAt = event.archivedAt?.toString(),
+        durationMinutes = event.durationMinutes,
     )
 
     fun toDomain(backup: BackupEvent): CountdownEvent? {
@@ -462,9 +524,17 @@ object BackupMapper {
             repeatType = enumOrDefault(backup.repeatType, RepeatType.NONE),
             repeatMonth = backup.repeatMonth,
             repeatDay = backup.repeatDay,
+            repeatInterval = backup.repeatInterval.coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL),
+            repeatWeekdays = backup.repeatWeekdays.filter { it in 1..7 }.toSortedSet(),
+            repeatOnLunar = backup.repeatOnLunar,
+            repeatUntil = backup.repeatUntil?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            endDate = backup.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
             createdAt = created,
             kind = enumOrDefault(backup.kind, EventKind.TODO),
             lastHandledOccurrence = backup.lastHandledOccurrence?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            tags = com.morrowviento.morrow.domain.model.EventTags.normalize(backup.tags),
+            archivedAt = backup.archivedAt?.let { BackupCodec.parseTime(it) },
+            durationMinutes = backup.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
         )
     }
 

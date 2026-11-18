@@ -31,6 +31,25 @@ data class FestivalSkin(
 fun festivalSkinOf(date: LocalDate): FestivalSkin? =
     LunarCalendar.festival(date)?.let { FESTIVAL_SKINS[it] }
 
+/** 设置页「预览」用的临时状态：哪一天的皮肤，以及皮肤本身。 */
+data class FestivalPreview(val date: LocalDate, val skin: FestivalSkin)
+
+/**
+ * 从 [from]（含当天）往后第一个有皮肤的节日，最多找 [maxDays] 天。
+ *
+ * 一年只有八九天会生效，用户点进设置页时几乎必然不是节日——没有这个函数，
+ * 那一项就只能写一句「节日当天才有」，用户既看不到也验不了，只会当成坏功能。
+ * 扫一年最多 365 次农历换算（纯位运算 + 二分），点一次按钮的代价，可以接受。
+ */
+fun upcomingFestivalSkin(from: LocalDate, maxDays: Int = 400): FestivalPreview? {
+    var date = from
+    repeat(maxDays) {
+        festivalSkinOf(date)?.let { return FestivalPreview(date, it) }
+        date = date.plusDays(1)
+    }
+    return null
+}
+
 /**
  * 由外层在组合期提供，[GlassBackdrop] 与首页标题都读它。
  *

@@ -47,7 +47,26 @@ data class EventCardModel(
     val meta: String,
     val kind: com.morrowviento.morrow.domain.model.EventKind = com.morrowviento.morrow.domain.model.EventKind.TODO,
     val primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.COMPLETE,
+    /** 持续事件进行中（此时徽章显示「还剩几天」而不是「已经过了几天」）。 */
+    val isInProgress: Boolean = false,
+    /** 进行中的持续事件距结束还有几天（今天结束为 0）。 */
+    val daysLeftInSpan: Int = 0,
+    /** 重复规则的完整描述：「每 2 周 周一、周三，到 2027 年 1 月 1 日」。 */
+    val repeatLabel: String = "不重复",
+    /** 持续事件的跨度文案，单日事件为 null。 */
+    val spanLabel: String? = null,
+    /** 多维标记的原始值（搜索要高亮/精确比较时用）。 */
+    val tags: List<String> = emptyList(),
+    /** 多维标记的展示行：「#报销 #出差」；没有标签为空串。 */
+    val tagLine: String = "",
+    /** 归档时刻；非 null 即已归档（归档 ≠ 完成，见 CountdownEvent.archivedAt）。 */
+    val archivedAt: LocalDateTime? = null,
+    /** 归档箱里显示的时间文案；未归档为 null。 */
+    val archivedLabel: String? = null,
+    /** 预计时长文案（「1 小时」）；未指定为 null。 */
+    val durationLabel: String? = null,
 ) {
+    val isArchived: Boolean get() = archivedAt != null
     val days: Int get() = abs(dayDelta)
 }
 
@@ -63,6 +82,11 @@ data class UndoUiState(
 data class HomeUiState(
     val active: List<EventCardModel> = emptyList(),
     val completed: List<EventCardModel> = emptyList(),
+    /**
+     * 已归档的事件：首页不显示、日历不显示、提醒与小部件都不排，
+     * 只在归档箱里出现。它与 [completed] 是两件事，因此单独一段。
+     */
+    val archived: List<EventCardModel> = emptyList(),
     val completedExpanded: Boolean = false,
     val sortMode: SortMode = SortMode.DISTANCE,
     val isLoading: Boolean = true,
@@ -70,8 +94,18 @@ data class HomeUiState(
     val undo: UndoUiState? = null,
 ) {
     val isEmpty: Boolean get() = active.isEmpty() && completed.isEmpty()
+    /** 归档箱不参与「总数」：它是收起来的东西，不是待处理的东西。 */
     val totalCount: Int get() = active.size + completed.size
+    val archivedCount: Int get() = archived.size
 }
+
+/** 一次分区的结果。用命名结构而不是 Pair：加归档后三元组再解构很容易错位。 */
+@Immutable
+data class EventPartition(
+    val active: List<EventCardModel> = emptyList(),
+    val completed: List<EventCardModel> = emptyList(),
+    val archived: List<EventCardModel> = emptyList(),
+)
 
 /**
  * 纯函数展示逻辑（无 Android 依赖，可纯 JVM 单测）。
@@ -86,17 +120,32 @@ object EventPresentation {
         mode: SortMode,
         today: LocalDate,
         now: LocalDateTime,
-    ): Pair<List<EventCardModel>, List<EventCardModel>> {
-        val (doneEvents, activeEvents) = events.partition { it.isCompleted }
+    ): EventPartition {
+        // 先剥归档：归档的事件既不算「进行中」也不算「已完成」，
+        // 它只是被收进抽屉。剩下的一批再按完成与否分两段。
+        val (archivedEvents, visible) = events.partition { it.isArchived }
+        val (doneEvents, activeEvents) = visible.partition { it.isCompleted }
         val comparator = comparator(mode)
-        return activeEvents.map { toCard(it, today, now) }.sortedWith(comparator) to
-            doneEvents.map { toCard(it, today, now) }.sortedWith(comparator)
+        return EventPartition(
+            active = activeEvents.map { toCard(it, today, now) }.sortedWith(comparator),
+            completed = doneEvents.map { toCard(it, today, now) }.sortedWith(comparator),
+            // 归档箱按归档时刻倒序：最近收起来的在最上面（用时刻而不是文案排序）
+            archived = archivedEvents
+                .map { toCard(it, today, now) }
+                .sortedWith(compareByDescending<EventCardModel> { it.archivedAt }.thenBy { it.title }),
+        )
     }
 
     fun toCard(event: CountdownEvent, today: LocalDate, now: LocalDateTime): EventCardModel {
-        val target = RepeatRule.upcomingTarget(event, today)
+        // 持续事件进行中：目标取「这一次的开始日」，不是下一次。
+        // 否则 9/1–9/5 的出差在 9/3 会把卡片画成「还有 362 天」（下一次），像换了件事。
+        val coveringStart = if (event.isMultiDay) RepeatRule.coveringStart(event, today) else null
+        val target = coveringStart?.atTime(event.targetDate.toLocalTime())
+            ?: RepeatRule.upcomingTarget(event, today)
         val dayDelta = com.morrowviento.morrow.domain.time.CalendarMath.daysUntil(target.toLocalDate(), today)
         val progress = if ((event.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE)) 0f else progressOf(event.createdAt, target, now)
+        // 进行中：按「这次到哪天结束」算剩余天数，卡片不再说「已经过了 N 天」
+        val coveringEnd = if (event.isMultiDay) RepeatRule.coveringEnd(event, today) else null
         return EventCardModel(
             id = event.id,
             title = event.title,
@@ -105,8 +154,10 @@ object EventPresentation {
             target = target,
             createdAt = event.createdAt,
             dayDelta = dayDelta,
-            isCountingUp = event.direction == CountDirection.COUNTUP ||
-                (event.direction == CountDirection.AUTO && dayDelta < 0),
+            isCountingUp = coveringEnd == null && (
+                event.direction == CountDirection.COUNTUP ||
+                    (event.direction == CountDirection.AUTO && dayDelta < 0)
+                ),
             isPinned = event.isPinned,
             isAllDay = event.isAllDay,
             isCompleted = event.isCompleted,
@@ -115,8 +166,50 @@ object EventPresentation {
             primaryAction = event.primaryAction,
             progress = progress,
             remainingToday = remainingTodayOf(target, event.isAllDay, today, now),
-            meta = metaLine(event.category, target, event.repeatType, event.isAllDay),
+            meta = metaLine(
+                category = event.category,
+                target = target,
+                repeat = com.morrowviento.morrow.domain.time.RepeatText.short(event),
+                span = com.morrowviento.morrow.domain.time.RepeatText.span(event),
+                isAllDay = event.isAllDay,
+            ),
+            isInProgress = coveringEnd != null,
+            daysLeftInSpan = coveringEnd?.let {
+                com.morrowviento.morrow.domain.time.CalendarMath.daysUntil(it, today)
+            } ?: 0,
+            repeatLabel = com.morrowviento.morrow.domain.time.RepeatText.of(event),
+            spanLabel = com.morrowviento.morrow.domain.time.RepeatText.span(event),
+            tags = event.tags,
+            tagLine = com.morrowviento.morrow.domain.model.EventTags.display(event.tags),
+            archivedAt = event.archivedAt,
+            archivedLabel = event.archivedAt?.let { archivedLabelOf(it, today) },
+            durationLabel = durationLabelOf(event),
         )
+    }
+
+    /**
+     * 时长文案。只给「非全天且指定了时长」的事件：
+     * 全天事件的时长永远是被「持续」表达，写一个「24 小时」只会添乱。
+     */
+    fun durationLabelOf(event: CountdownEvent): String? {
+        if (event.isAllDay || event.durationMinutes <= 0) return null
+        val minutes = event.durationMinutes
+        return when {
+            minutes % 60 == 0 -> "${minutes / 60} 小时"
+            minutes < 60 -> "$minutes 分钟"
+            else -> "${minutes / 60} 小时 ${minutes % 60} 分"
+        }
+    }
+
+    /** 归档时间：同一天只写时刻，今年写月日，跨年带年份。 */
+    private fun archivedLabelOf(at: LocalDateTime, today: LocalDate): String {
+        val date = at.toLocalDate()
+        val clock = "%02d:%02d".format(at.hour, at.minute)
+        return when {
+            date == today -> "今天 $clock"
+            date.year == today.year -> "${date.monthValue}月${date.dayOfMonth}日"
+            else -> "${date.year}年${date.monthValue}月${date.dayOfMonth}日"
+        }
     }
 
     /** 同一天内只复制进度或秒数确实改变的卡片，排序和其它实例保持不变。 */
@@ -185,26 +278,31 @@ object EventPresentation {
         }
     }
 
-    /** 元信息行：分类 · 日期（重复事件带「每年」）· 全天/具体时刻。 */
+    /** 元信息行：分类 · 重复 · 日期（持续事件带跨度）· 全天/具体时刻。 */
     private fun metaLine(
         category: String,
         target: LocalDateTime,
-        repeatType: com.morrowviento.morrow.domain.model.RepeatType,
+        repeat: String,
+        span: String?,
         isAllDay: Boolean,
-    ): String = buildString(24) {
+    ): String = buildString(32) {
         if (category.isNotBlank()) {
             append(category)
             append(" · ")
         }
-        when (repeatType) {
-            com.morrowviento.morrow.domain.model.RepeatType.YEARLY -> append("每年 ")
-            com.morrowviento.morrow.domain.model.RepeatType.MONTHLY -> append("每月 ")
-            else -> Unit
+        // RepeatText 的「不重复」不占地方：绝大多数事件都是单次，写出来只是噪音
+        if (repeat != "不重复") {
+            append(repeat)
+            append(' ')
         }
         appendPadded(target.monthValue, 1)
         append("月")
         appendPadded(target.dayOfMonth, 1)
         append("日")
+        span?.let {
+            append(" · ")
+            append(it)
+        }
         if (isAllDay) {
             append(" · 全天")
         } else {

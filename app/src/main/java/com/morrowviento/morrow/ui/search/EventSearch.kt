@@ -34,7 +34,7 @@ data class SearchResult(
  * 搜索与分类筛选（纯函数，无 Android 依赖，可纯 JVM 单测）。
  *
  * 匹配规则刻意保持**字面包含**：
- * - 标题 / 备注 / 分类名三处任一命中即可，忽略大小写（对中文无影响，对英文与数字有用）；
+ * - 标题 / 备注 / 分类名 / 标签（多维标记）任一命中即可，忽略大小写（对中文无影响，对英文与数字有用）；
  * - 查询串先 `trim`，空串视为「不过滤」，因此清空输入框就回到全部；
  * - 不做分词、不做模糊匹配：倒数日的标题通常很短，分词只会带来「搜‘生日’却搜不到
  *   ‘生日聚会’」这类反直觉结果。
@@ -44,9 +44,12 @@ object EventSearch {
     fun matchesQuery(card: EventCardModel, query: String): Boolean {
         val needle = query.trim()
         if (needle.isEmpty()) return true
+        // 标签单独比一遍：用户可能输入「#报销」或「报销」，两种都该命中
+        val plain = needle.removePrefix("#")
         return card.title.contains(needle, ignoreCase = true) ||
             card.note.contains(needle, ignoreCase = true) ||
-            card.category.contains(needle, ignoreCase = true)
+            card.category.contains(needle, ignoreCase = true) ||
+            card.tags.any { it.contains(plain, ignoreCase = true) }
     }
 
     fun matchesFilter(card: EventCardModel, filter: CategoryFilter): Boolean = when (filter) {

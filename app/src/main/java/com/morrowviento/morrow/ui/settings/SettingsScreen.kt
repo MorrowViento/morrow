@@ -6,10 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,9 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -31,8 +35,11 @@ import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassOverscrollHost
 import com.morrowviento.morrow.ui.glass.GlassSegmentedControl
 import com.morrowviento.morrow.ui.glass.LocalGlassDark
+import com.morrowviento.morrow.ui.glass.festivalSkinOf
+import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import com.morrowviento.morrow.ui.glass.glassTextTertiary
+import com.morrowviento.morrow.ui.glass.upcomingFestivalSkin
 import com.morrowviento.morrow.ui.update.UpdateActions
 import com.morrowviento.morrow.ui.update.UpdateSheet
 import com.morrowviento.morrow.widget.WidgetEntries
@@ -65,6 +72,8 @@ fun SettingsScreen(
     backgroundAspectRatio: Float,
 ) {
     val context = LocalContext.current
+    // 节日预览**不在这里清除**：用户点「预览」就是想看节日当天的样子，
+    // 退出设置页立刻消失等于白看。首页标题下会显示「预览 · 祝语」，点一下结束。
     BackHandler { if (!state.busy) { actions.cancelBackdrop(); onDismiss() } }
 
     // 通知 / 精确闹钟是在系统设置页改的，本进程收不到回调；回到前台时重读一次
@@ -320,21 +329,63 @@ fun SettingsScreen(
                                 )
                             }
                             Divider()
+                            // 节日皮肤：一年只有八九天生效，所以这行必须回答「现在为什么没效果」。
+                            // 文案按 预览中 / 已关闭 / 今天是节日 / 今天不是节日 四种情况说清楚，
+                            // 并给出下一个节日的日期；右侧「预览」当场把背景换成那个节日的柔光，
+                            // 用户不必等到节日当天才知道这个开关到底做了什么。
+                            val preview = state.festivalPreview
+                            val today = remember { java.time.LocalDate.now() }
+                            val todaySkin = remember(today) { festivalSkinOf(today) }
+                            val nextFestival = remember(today) { upcomingFestivalSkin(today) }
                             SettingBlock(
                                 label = "节日皮肤",
-                                hint = if (state.settings.festivalSkin) {
-                                    "春节、中秋等节日当天，背景多一层节日色柔光，标题下多一行祝语"
-                                } else {
-                                    "关闭后节日与平日外观完全一致"
+                                hint = when {
+                                    preview != null ->
+                                        "正在预览「${preview.skin.name}」（${preview.date.monthValue} 月 " +
+                                            "${preview.date.dayOfMonth} 日）：背景柔光与标题祝语都是节日当天的样子。" +
+                                            "回到首页后会标注「预览」，点那行祝语即结束"
+                                    !state.settings.festivalSkin -> "关闭后节日与平日外观完全一致"
+                                    todaySkin != null ->
+                                        "今天是「${todaySkin.name}」，背景已加一层节日色柔光，标题下多了祝语"
+                                    nextFestival != null ->
+                                        "只在节日当天生效 · 下一个是「${nextFestival.skin.name}」" +
+                                            "（${nextFestival.date.monthValue} 月 ${nextFestival.date.dayOfMonth} 日），" +
+                                            "可以先点右侧看一眼"
+                                    else -> "春节、中秋等八个农历节日当天，背景多一层柔光，标题下多一行祝语"
                                 },
                             ) {
-                                GlassSegmentedControl(
-                                    items = AutoTintItems,
-                                    selected = state.settings.festivalSkin,
-                                    onSelected = actions.setFestivalSkin,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    height = 34.dp,
-                                )
+                                Column {
+                                    GlassSegmentedControl(
+                                        items = AutoTintItems,
+                                        selected = state.settings.festivalSkin,
+                                        onSelected = actions.setFestivalSkin,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        height = 34.dp,
+                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = "预览效果",
+                                            style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        Text(
+                                            text = if (preview != null) "换一个" else "预览",
+                                            modifier = Modifier
+                                                .clickable(onClick = actions.cycleFestivalPreview)
+                                                .padding(horizontal = 2.dp, vertical = 4.dp),
+                                            style = TextStyle(
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = glassTextPrimary(),
+                                            ),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

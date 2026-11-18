@@ -110,6 +110,8 @@ fun HomeScreen(
      * 收到新值时把所有浮层收掉，让人落回首页（要看的详情由 [openDetailRequest] 另开）。
      */
     closeOverlaysRequest: Long = 0L,
+    /** 结束设置页里的节日预览（首页标题下那行「预览 · 祝语」点了会调它）。 */
+    onEndFestivalPreview: () -> Unit = {},
 ) {
     var backdropSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val listState = rememberLazyListState()
@@ -122,6 +124,16 @@ fun HomeScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var showReminders by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showArchive by remember { mutableStateOf(false) }
+    var showCalculator by remember { mutableStateOf(false) }
+
+    // 标签建议：全库已用过的标签，去重后给编辑面板「点一下就有」。
+    // 包含归档段——归档事件上的标签同样是可复用的词汇。
+    val tagSuggestions = remember(state.active, state.completed, state.archived) {
+        buildList {
+            (state.active + state.completed + state.archived).forEach { addAll(it.tags) }
+        }.distinctBy { it.lowercase() }.take(24)
+    }
 
     // 搜索复用首页卡片；分别保存两种列表的滚动位置，过滤不改动普通首页位置。
     val searchListState = rememberLazyListState()
@@ -177,6 +189,8 @@ fun HomeScreen(
         showReminders = false
         showSettings = false
         showSearch = false
+        showArchive = false
+        showCalculator = false
     }
 
     // 日历盖在首页之上，返回键应先关日历而不是退出应用
@@ -205,9 +219,11 @@ fun HomeScreen(
     ) {
         // 节日皮肤：按今天算一次，跨零点由 calendar 的日切换带上新值。
         // 关掉开关就等于没有节日，背景与标题都不动（见 `LocalFestivalSkin`）。
+        // 设置页的「预览」优先：它是显式点出来的，即使开关关着也应当能看见效果。
         val today = calendar.current.today
-        val festivalSkin = remember(today, appSettings.festivalSkin) {
-            if (appSettings.festivalSkin) festivalSkinOf(today) else null
+        val festivalPreview = settings.festivalPreview
+        val festivalSkin = remember(today, appSettings.festivalSkin, festivalPreview) {
+            festivalPreview?.skin ?: if (appSettings.festivalSkin) festivalSkinOf(today) else null
         }
         CompositionLocalProvider(
             LocalBackdropSettings provides appSettings.backdrop,
@@ -251,13 +267,15 @@ fun HomeScreen(
                                 listState = shownListState,
                                 sortLabel = state.sortMode.label(),
                                 onCycleSort = { onSortChange(nextSort(state.sortMode)) },
+                                festivalPreviewing = festivalPreview != null,
+                                onEndFestivalPreview = onEndFestivalPreview,
                                 moreAction = {
                                     // 「⋯」既是按钮也是菜单的锚点：GlassMenu 从它身上液态展开，
                                     // 关闭时缩回按钮，不再是「遮罩 + 底部面板」那套动作表。
                                     GlassMenu(
                                         expanded = showMoreMenu,
                                         onExpandedChange = { showMoreMenu = it },
-                                        itemCount = 5,
+                                        itemCount = 7,
                                         anchor = { onClick -> MoreButton(onClick) },
                                     ) { backdrop, close ->
                                         GlassMenuItem(
@@ -269,6 +287,16 @@ fun HomeScreen(
                                             backdrop = backdrop,
                                             title = "提醒",
                                             onClick = { close(); showReminders = true },
+                                        )
+                                        GlassMenuItem(
+                                            backdrop = backdrop,
+                                            title = "日期计算器",
+                                            onClick = { close(); showCalculator = true },
+                                        )
+                                        GlassMenuItem(
+                                            backdrop = backdrop,
+                                            title = "归档箱（${state.archivedCount}）",
+                                            onClick = { close(); showArchive = true },
                                         )
                                         GlassMenuItem(
                                             backdrop = backdrop,
@@ -419,6 +447,10 @@ fun HomeScreen(
                             },
                             onToggleCompleted = { eventActions.toggleCompleted(card.id) },
                             onTogglePinned = { eventActions.togglePinned(card.id) },
+                            onArchive = {
+                                detailId = null
+                                if (card.isArchived) eventActions.unarchive(card.id) else eventActions.archive(card.id)
+                            },
                             onDelete = {
                                 detailId = null
                                 eventActions.delete(card.id)
@@ -431,6 +463,7 @@ fun HomeScreen(
                             initial = form,
                             categories = categoryNames,
                             categoryAliases = categoryAliases,
+                            tagSuggestions = tagSuggestions,
                             onManageCategories = { showCategories = true },
                             onDismiss = { editingForm = null },
                             onSave = { saved ->
@@ -488,6 +521,20 @@ fun HomeScreen(
                             state = reminders,
                             actions = reminderActions,
                             onDismiss = { showReminders = false },
+                        )
+                    }
+
+                    if (showArchive) {
+                        com.morrowviento.morrow.ui.archive.ArchiveSheet(
+                            cards = state.archived,
+                            actions = eventActions,
+                            onDismiss = { showArchive = false },
+                        )
+                    }
+
+                    if (showCalculator) {
+                        com.morrowviento.morrow.ui.tools.DateCalculatorSheet(
+                            onDismiss = { showCalculator = false },
                         )
                     }
 

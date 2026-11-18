@@ -90,10 +90,18 @@ fun CalendarScreen(
                     canPrev = canPrev,
                     canNext = canNext,
                     onPrev = {
-                        if (state.view == CalendarView.MONTH) actions.shiftMonth(-1) else actions.shiftYear(-1)
+                        when (state.view) {
+                            CalendarView.MONTH -> actions.shiftMonth(-1)
+                            CalendarView.TIMELINE -> actions.shiftDay(-1)
+                            else -> actions.shiftYear(-1)
+                        }
                     },
                     onNext = {
-                        if (state.view == CalendarView.MONTH) actions.shiftMonth(1) else actions.shiftYear(1)
+                        when (state.view) {
+                            CalendarView.MONTH -> actions.shiftMonth(1)
+                            CalendarView.TIMELINE -> actions.shiftDay(1)
+                            else -> actions.shiftYear(1)
+                        }
                     },
                 ) {
                     CalendarAnimatedContent(transition, Modifier.fillMaxSize().clipToBounds()) { snapshot ->
@@ -243,6 +251,7 @@ private fun CalendarPage(
         CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
         CalendarView.YEAR -> YearView(state, actions)
         CalendarView.LIST -> MonthListView(state, onOpenEvent)
+        CalendarView.TIMELINE -> TimelineView(state, onOpenEvent)
     }
 }
 
@@ -256,12 +265,11 @@ private val CalendarViewItems: List<Pair<CalendarView, String>> =
     CalendarView.entries.map { it to it.label }
 
 /** 当前浏览的周期是否已经包含今天（是则「今天」按钮置灰）。 */
-private fun onTodayPeriod(state: CalendarUiState): Boolean =
-    if (state.view == CalendarView.MONTH) {
-        state.month == YearMonth.from(state.today)
-    } else {
-        state.month.year == state.today.year
-    }
+private fun onTodayPeriod(state: CalendarUiState): Boolean = when (state.view) {
+    CalendarView.MONTH -> state.month == YearMonth.from(state.today)
+    CalendarView.TIMELINE -> (state.selected ?: state.today) == state.today
+    else -> state.month.year == state.today.year
+}
 
 // ---------------------------------------------------------------- 头部
 
@@ -274,7 +282,11 @@ private fun CalendarHeader(
     canPrev: Boolean,
     canNext: Boolean,
 ) {
-    val isMonthView = state.view == CalendarView.MONTH
+    val navUnit = when (state.view) {
+        CalendarView.MONTH -> "月"
+        CalendarView.TIMELINE -> "天"
+        else -> "年"
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -286,14 +298,17 @@ private fun CalendarHeader(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NavButton("‹", "上一${if (isMonthView) "月" else "年"}", enabled = canPrev) {
-            if (isMonthView) actions.shiftMonth(-1) else actions.shiftYear(-1)
+        NavButton("‹", "上一$navUnit", enabled = canPrev) {
+            when (state.view) {
+                CalendarView.MONTH -> actions.shiftMonth(-1)
+                CalendarView.TIMELINE -> actions.shiftDay(-1)
+                else -> actions.shiftYear(-1)
+            }
         }
         CalendarAnimatedContent(transition, Modifier.weight(1f), slide = false) { snapshot ->
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                val monthView = snapshot.view == CalendarView.MONTH
                 Text(
-                    text = if (monthView) "${snapshot.month.year}年${snapshot.month.monthValue}月" else "${snapshot.month.year}年",
+                    text = calendarTitle(snapshot),
                     maxLines = 1,
                     style = TextStyle(
                         fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold,
@@ -302,7 +317,7 @@ private fun CalendarHeader(
                     ),
                 )
                 Text(
-                    text = if (monthView) "本月 ${snapshot.monthEventCount} 次事件" else "全年 ${snapshot.yearEventCount} 次事件",
+                    text = calendarSubtitle(snapshot),
                     maxLines = 1,
                     style = TextStyle(
                         fontSize = 11.sp, lineHeight = 15.sp, fontFeatureSettings = "tnum",
@@ -311,8 +326,12 @@ private fun CalendarHeader(
                 )
             }
         }
-        NavButton("›", "下一${if (isMonthView) "月" else "年"}", enabled = canNext) {
-            if (isMonthView) actions.shiftMonth(1) else actions.shiftYear(1)
+        NavButton("›", "下一$navUnit", enabled = canNext) {
+            when (state.view) {
+                CalendarView.MONTH -> actions.shiftMonth(1)
+                CalendarView.TIMELINE -> actions.shiftDay(1)
+                else -> actions.shiftYear(1)
+            }
         }
         Spacer(Modifier.width(10.dp))
         NavButton("✕", "关闭日历", onClick = onDismiss)
@@ -363,3 +382,25 @@ private fun NavButton(glyph: String, description: String? = null, enabled: Boole
 
 internal val CalendarFontMetrics = PlatformTextStyle(includeFontPadding = false)
 internal val CalendarLineHeight = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
+
+/** 头部大标题：月视图到月、年/列表到年、时间块到日。 */
+private fun calendarTitle(state: CalendarUiState): String = when (state.view) {
+    CalendarView.MONTH -> "${state.month.year}年${state.month.monthValue}月"
+    CalendarView.TIMELINE -> {
+        val day = state.selected ?: state.today
+        "${day.monthValue}月${day.dayOfMonth}日"
+    }
+    else -> "${state.month.year}年"
+}
+
+/** 头部副标题：时间块顺带把星期写出来，否则单看日期不知道是周几。 */
+private fun calendarSubtitle(state: CalendarUiState): String = when (state.view) {
+    CalendarView.MONTH -> "本月 ${state.monthEventCount} 次事件"
+    CalendarView.TIMELINE -> {
+        val day = state.selected ?: state.today
+        "${WEEKDAY_FULL[day.dayOfWeek.value - 1]} · ${state.monthEventCount} 件事"
+    }
+    else -> "全年 ${state.yearEventCount} 次事件"
+}
+
+private val WEEKDAY_FULL = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")

@@ -54,6 +54,14 @@ data class SettingsUiState(
     val fonts: List<AppFont> = emptyList(),
     /** 一次性提示，展示后由 [SettingsActions.consumeMessage] 清掉。 */
     val message: String? = null,
+    /**
+     * 正在预览的节日皮肤（只在设置页打开期间有效，不落盘）。
+     *
+     * 节日一年只有八九天会生效，其余日子点开设置只能看到一句「节日当天才有」，
+     * 用户没法确认这个开关到底做了什么。预览时首页 / 设置页的背景当场换成那个
+     * 节日的柔光，标题下的祝语也跟着变，看完点一下结束。
+     */
+    val festivalPreview: com.morrowviento.morrow.ui.glass.FestivalPreview? = null,
     /** M7：应用内更新检查 / 下载 / 安装的进度。 */
     val update: UpdateUiState = UpdateUiState(),
 ) {
@@ -82,6 +90,10 @@ data class SettingsActions(
     val setReduceMotion: (Boolean) -> Unit,
     /** 节日皮肤开关（节日当天的背景柔光与标题祝语）。 */
     val setFestivalSkin: (Boolean) -> Unit,
+    /** 预览节日柔光：没有预览时切到最近的节日，正在预览时切到下一个，轮完回到关闭。 */
+    val cycleFestivalPreview: () -> Unit,
+    /** 结束预览：离开设置页时调用，避免首页无缘无故顶着节日祝语。 */
+    val clearFestivalPreview: () -> Unit,
     val exportTo: (android.net.Uri) -> Unit,
     val loadImport: (android.net.Uri) -> Unit,
     val confirmImport: (ImportMode) -> Unit,

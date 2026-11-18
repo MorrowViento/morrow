@@ -173,4 +173,64 @@ class EventFormStateTest {
         assertEquals("工作", base.withCategoryAlias(mapOf("旅行" to "出行")).category)
         assertEquals(base, base.withCategoryAlias(emptyMap()))
     }
+
+    @Test
+    fun lunarYearly_savesLunarMonthAndDayNotSolar() {
+        // 2026-02-17 是农历正月初一；公历月日是 2/17，若按公历存进去就会「每年 2 月 17 日」
+        val event = requireNotNull(
+            form().copy(
+                date = LocalDate.of(2026, 2, 17),
+                repeatType = RepeatType.YEARLY,
+                repeatOnLunar = true,
+            ).toEvent(),
+        )
+        assertEquals(true, event.repeatOnLunar)
+        assertEquals(1, event.repeatMonth)
+        assertEquals(1, event.repeatDay)
+        // 表单往返保留农历开关
+        assertEquals(true, EventFormState.fromEvent(event).repeatOnLunar)
+    }
+
+    @Test
+    fun solarYearly_ignoresLunarFlagOfOtherTypes() {
+        // 只有年循环能用农历；月/周/日重复带上这个标记会被归一掉
+        val monthly = requireNotNull(
+            form().copy(repeatType = RepeatType.MONTHLY, repeatOnLunar = true).toEvent(),
+        )
+        assertEquals(false, monthly.repeatOnLunar)
+    }
+
+    @Test
+    fun multiDayEndDate_isNormalizedAndFollowsStartDate() {
+        val base = form().copy(date = LocalDate.of(2026, 9, 1))
+        // 结束日等于开始日 = 单日，归一成 null
+        assertNull(requireNotNull(base.copy(endDate = LocalDate.of(2026, 9, 1)).toEvent()).endDate)
+
+        val ranged = requireNotNull(base.copy(endDate = LocalDate.of(2026, 9, 5)).toEvent())
+        assertEquals(LocalDate.of(2026, 9, 5), ranged.endDate)
+        assertEquals(4, ranged.spanDays)
+
+        // 开始日推到结束日之后：结束日作废，不会出现负跨度
+        assertNull(base.copy(endDate = LocalDate.of(2026, 9, 5)).withDate(LocalDate.of(2026, 9, 10)).endDate)
+    }
+
+    @Test
+    fun weeklyWithoutWeekdays_usesAnchorDayAndKeepsInterval() {
+        val event = requireNotNull(
+            form().copy(
+                date = LocalDate.of(2026, 11, 18), // 周三
+                repeatType = RepeatType.WEEKLY,
+                repeatInterval = 2,
+            ).toEvent(),
+        )
+        assertEquals(2, event.repeatInterval)
+        assertEquals(emptySet<Int>(), event.repeatWeekdays)
+        // 不选星期时日历上仍落在周三（由 RepeatRule 用锚点兜底）
+        assertEquals(
+            java.time.DayOfWeek.WEDNESDAY,
+            com.morrowviento.morrow.domain.time.RepeatRule
+                .futureOccurrences(event, LocalDate.of(2026, 11, 19))
+                .first().dayOfWeek,
+        )
+    }
 }
