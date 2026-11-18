@@ -1,15 +1,15 @@
 # 运行时依赖许可与版权归属审阅
 
-> 2026-11-18。对象：4.1.1 / 70 实际发行 runtime classpath。本文件是**工程核对记录**，不是法律意见；它把「逐组件看一遍」落成可复核的表，剩余判断仍由人做。
+> 2026-11-18。对象：4.1.2 / 71 实际发行 runtime classpath（4.1.1 / 70 的同一批依赖，新增 protobuf 静态归属后复核）。本文件是**工程核对记录**，不是法律意见；它把「逐组件看一遍」落成可复核的表，剩余判断仍由人做。
 
 ## 结论摘要
 
 - **109 个坐标**：107 个 Apache-2.0、1 个 BSD-3-Clause（`datastore-preferences-external-protobuf`）、1 个 MIT + MCU Apache-2.0 混合（`material-color-utilities-android`）。
-- 正文载体 8 组，互不重复；三份 Apache 正文都含完整条款（`END OF TERMS AND CONDITIONS` + 第 9 条），不是摘要版。
+- 正文载体 **9 组**，互不重复；三份 Apache 正文都含完整条款（`END OF TERMS AND CONDITIONS` + 第 9 条），不是摘要版。
 - **35** 个坐标的归档里没有任何 LICENSE/NOTICE，由静态 `apache-2.0.txt` 补 §4(a) 副本义务；其余 **74** 个自带正文。
 - §4(d) 只有一处需要转发：Glasmio 六个模块的 `THIRD_PARTY_NOTICES.md`，已按原字节随包；其余 103 个归档内无 NOTICE。
-- **一个真实缺口**：protobuf 的 BSD-3 正文**没有版权行**，而 BSD-3 第 1 条要求保留版权声明（§4.1）。
-- 审阅过程中发现并已修掉的清单缺陷：`androidx.core:core:1.18.0` 在解析结果里出现两次，清单因此多打一条完全相同的记录、artifact 计数虚高一个；加 `distinctBy(坐标, 文件, classifier)` 后为 109 条，`runtime.txt` 110,947 B / SHA-256 `4773AF4B609D49E7970EF0B40D37F8A3CAF421823E30301F256E1A9CA46948A4`（原 111,134 B）。
+- **原缺口已补**：protobuf 归档里的 BSD-3 模板没有版权行，4.1.2 起除保留归档原文外，无条件追加静态归属正文 `protobuf-bsd-3.txt`（2,482 B，含 `Copyright 2008 Google Inc.` 与上游全文），见 §4.1。
+- 审阅过程中发现并已修掉的清单缺陷：`androidx.core:core:1.18.0` 在解析结果里出现两次，清单因此多打一条完全相同的记录、artifact 计数虚高一个；加 `distinctBy(坐标, 文件, classifier)` 后为 109 条，`runtime.txt` 110,947 B（原 111,134 B）；补上 protobuf 归属后现行清单为 **116,447 B / SHA-256 `d1508af0daca478bccd9d29b62991dc5847f5adb3246a5692be7881d8f6d1449`**。
 - 本轮不覆盖：源码文件头逐文件版权、R8 之后的类级残留、Apple 素材授权本身。
 
 ## 1. 口径与方法
@@ -19,7 +19,7 @@
 - 正文完整性：Apache 组以 `END OF TERMS AND CONDITIONS` 与第 9 条是否齐备判断是否全文；MIT/BSD 组检查保留条款与免责声明。
 - 覆盖范围仅「随包的许可文本」这一层：包内的许可资产、`runtime.txt` 的元数据、归档内文本三类事实互相对账。
 
-## 2. 正文载体（8 组）
+## 2. 正文载体（9 组）
 
 | SHA-256 前 12 | 字节 | 载体 | 覆盖坐标 | 版权/归属行 |
 | --- | --- | --- | --- | --- |
@@ -27,7 +27,8 @@
 | `1781b86746a6` | 10,775 | 静态 `apache-2.0.txt`（androidx.core 1.18.0 AAR 原文） | 0（补 35 个缺口） | 同上 |
 | `cfc7749b96f6` | 11,358 | 归档自带 Apache-2.0（Glasmio 六模块，含 APPENDIX） | 6 | 同上 |
 | `8741d7edb8ae` | 11,195 | 静态 `material-color-utilities.txt` | 1（MaterialKolor 的 MCU 部分） | `Copyright 2021 Google LLC` |
-| `a01b712fbb30` | 1,434 | 归档自带 BSD-3-Clause（protobuf） | 1 | **缺失**，见 §4.1 |
+| `a01b712fbb30` | 1,434 | 归档自带 BSD-3-Clause 模板（protobuf） | 1 | 无版权行，原字节保留，见 §4.1 |
+| `835c9e420581` | 2,482 | 静态 `protobuf-bsd-3.txt`（上游全文） | 1（protobuf 归属补充） | `Copyright 2008 Google Inc.  All rights reserved.` |
 | `d29ac877ee63` | 1,631 | 静态 `materialkolor.txt` | 1（MaterialKolor 本体） | `Copyright (c) 2025 Jordon de Hoog` |
 | `e7327a8f2829` | 5,151 | 归档自带 `THIRD_PARTY_NOTICES.md` → `glasmio-third-party-notices.txt` | 6 | 逐项列明，含 Apple 图像声明 |
 | `413d645c35f7` | 1,129 | 根 `LICENSE` → `morrow.txt` | 应用自身 | `Copyright (c) 2026 Morrow contributors` / `Gao Shuai (ying-derived portions)` |
@@ -44,11 +45,12 @@ Apache-2.0 正文里没有、也不要求逐组件版权行；义务是 §4(a) �
 
 ## 4. 例外逐项
 
-### 4.1 protobuf：BSD-3 正文缺版权行（真实缺口，未修）
+### 4.1 protobuf：BSD-3 正文缺版权行（4.1.2 起已补）
 
-- 事实：`androidx.datastore:datastore-preferences-external-protobuf:1.3.0` 的 `META-INF/androidx/datastore/datastore-preferences-external-protobuf/LICENSE.txt`（1,434 B）**从「Redistribution and use…」直接开始**，全文无 `Copyright`、无 `Google`；随包正文照搬原字节，所以包里也没有。
-- 风险：BSD-3-Clause 第 1 条要求「保留上述版权声明」，当前没有声明可保留。原样转发是「不改上游文件」的正确做法，但**不足以满足该条**——上游缺行不能顺延成我们的合规。
-- 建议处置：新增一份静态归属文件（上游 protobuf 的 BSD-3 全文 + `Copyright 2008 Google Inc. All rights reserved.` + `Source:`/`License:` 头）挂到该坐标。这需要生成器支持「坐标已有归档正文时**追加**静态归属」，当前 `expectedTextGaps` 只补缺口、不做追加。改动会影响清单字节与 APK，随下一次发行（4.1.2 / 71）一起走。
+- 事实：`androidx.datastore:datastore-preferences-external-protobuf:1.3.0` 的 `META-INF/androidx/datastore/datastore-preferences-external-protobuf/LICENSE.txt`（1,434 B）**从「Redistribution and use…」直接开始**，全文无 `Copyright`、无 `Google`，并且把条款里的「Google Inc.」改成了「the copyright holder」——它是一份**没有归属的 BSD-3 模板**。原样转发是「不改上游文件」的正确做法，但不满足 BSD-3 第 1 条「保留上述版权声明」。
+- 处置（4.1.2 / 71 落地）：新增 `app/src/main/assets/licenses/protobuf-bsd-3.txt`（2,482 B，SHA-256 `835c9e42…5320`），内容为 `Source:`/`License:` 头 + 上游 `protocolbuffers/protobuf` v3.25.5 的完整 LICENSE（含 `Copyright 2008 Google Inc.  All rights reserved.`、三条条款、免责声明与代码生成条款）。
+- 生成器改动：`RuntimeNoticePolicy.attributionFiles(coordinate)` 与 `fallbackFiles` 分开——前者**不看归档是否有正文，坐标命中就无条件追加**；文件缺失直接失败，不记成「缺口」蒙混过关。`fallbackFiles(protobuf)` 仍为空，归档模板消失依然算新增缺口。
+- 结果：清单里 protobuf 一条同时列出「归档原文 1 项 …静态归属 1 项」、两份 SHA-256 与归属说明；归档模板与上游全文各自成组，不互相顶替。`runtime.txt` 110,947 → **116,447 B**，SHA-256 `d1508af0…1449`。
 
 ### 4.2 Glasmio 与 Apple 原始图像
 
@@ -188,7 +190,7 @@ Apache-2.0 正文里没有、也不要求逐组件版权行；义务是 §4(a) �
 
 ## 6. 未完成 / 需要人判断
 
-1. **protobuf 版权行**（§4.1）：需生成器支持追加静态归属，随 4.1.2 / 71 发行。
+1. ~~protobuf 版权行~~ 已闭合（§4.1）：4.1.2 / 71 起随包 `protobuf-bsd-3.txt`，且归档模板仍原字节保留。
 2. **源码文件头版权**：各依赖 `*.kt` / `*.java` 文件头的版权行未逐文件核对；R8 之后哪些类残留也没有逐类比对。本轮只覆盖「随包许可文本」。
 3. **ying 派生边界**：逐文件归属仍需人工判定（§4.4）。
 4. **Apple 素材**：只证明不分发，不涉及授权本身；`apache-2.0.txt` 也不覆盖它们。

@@ -1,6 +1,17 @@
 # TODO — 朝夕 · 当前待办
 
-> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「#19 运行时许可与 README」与「#21 提交、推送与正式发布实录」），再读本文件；历史实现见 CHANGELOG。**4.1.1 / 70 已于 2026-11-18 正式发布，工程动作结束，剩余人工版权审阅与真机验收。**
+> 更新：2026-11-18。续接先读 [HANDOFF](HANDOFF.md)（「4.1.2 / 71：结构重构与 protobuf 归属」与「发布实录」），再读本文件；历史实现见 CHANGELOG。**4.1.2 / 71 已于 2026-11-18 发布**（结构重构 + protobuf 许可归属），工程动作结束，剩余人工版权审阅与真机验收。
+
+## 4.1.2 / 71：结构重构 + protobuf 许可归属（2026-11-18 已发布）
+
+- [x] **五个超大 UI 文件拆分（无行为变更）**：只改可见性与文件级注释，逐文件用「行多重集比对」确认 0 丢行。
+  - `SettingsScreen` 1,345 → `SettingsScreen`(461) + `SettingsRows`(363) + `SettingsGlyphs`(306) + `BackdropCropScreen`(128) + `LicensesSheet`(205)
+  - `GlassBottomBar` 989 → `GlassBottomBar`(674) + `GlassBottomBarParts`(366)；`GlassTheme` 690 → `GlassTheme`(475) + `GlassBackdrop`(236)
+  - `HomeScreen` 841 → `HomeScreen`(549) + `HomeSections`(328)；`CalendarScreen` 806 → `CalendarScreen`(357) + `CalendarViews`(477)
+  - 工具：仓库外 `../tools/kt_split.py`（按声明移动 + 自动裁剪 import；`by` 委托的 `getValue/setValue` 必须按写法保留）。
+- [x] **版本 4.1.2 / 71 与全量验证**：`testDebugUnitTest --rerun + lintDebug + assembleDebug + assembleRelease + verifyRuntimeNoticeCompleteness` → `BUILD SUCCESSFUL in 6m15s`（114 任务，63 executed）；**380 项 / 47 XML / 0 failures·errors·skipped**；lint **0 errors / 15 warnings**（无新增）。
+- [x] **APK 核验**：**5,199,013 B / `601b3beb…73a6`**，146 条目；`aapt2` **71 / 4.1.2** / minSdk 33 / targetSdk 37；证书 `8894605E…8D02` 同正式 68；**8 份**许可资产（6 源文件 MATCH）；图像条目 0、无嵌套归档、资源表 Apple 关键词 0 匹配；本地副本 `../morrow-71-4.1.2-release.apk` 逐字节一致。
+- [ ] **真机验收（沿用下方清单）**：视觉/帧率/小部件/许可长文滚动，以及 **68→71 原位升级保数据**。
 
 ## 当前：4.1.1 视觉与开源发布（已批准）
 
@@ -25,7 +36,7 @@
 
 - [x] **发布后修复：设置页状态栏割裂（2026-11-18，`956461d`）**：设置页原先在安全区内自绘壁纸，与日历页 4.1.1 修过的同一处病根；改为由全窗口 `GlassBackdropHost` 提供背景，并在设置页打开期间让首页整块让位避免透底。379 项单测 / 47 XML 全通过、lint 0 errors / 15 warnings（无新增）、`assembleDebug` 成功；**真机观感未验**。已推送 `main=956461d`；**源码已领先已发布的 70 包，下次发行须 4.1.2 / 71**。
 - [x] **逐组件许可与版权归属审阅（2026-11-18，`docs/LICENSE-AUDIT.md`）**：按 109 个坐标回 `~/.gradle/caches` 重开归档、独立重算正文 SHA-256 并重建「坐标→正文组」映射（0 缺失）。结论：107 Apache-2.0 / 1 BSD-3 / 1 MIT+MCU；8 组正文载体；35 个坐标无自带文本，由静态 `apache-2.0.txt` 补 §4(a)；§4(d) 仅 Glasmio 六模块需转发 NOTICE，已随包。**发现两处问题**：① protobuf 的 BSD-3 正文缺版权行（真实缺口，未修，见下）；② `androidx.core:core:1.18.0` 在清单里重复输出两次，已加 `distinctBy` 修掉，`runtime.txt` 111,134 → **110,947 B**。
-- [ ] **下一单步：为 protobuf 追加静态版权归属**（`docs/LICENSE-AUDIT.md` §4.1）：上游 `datastore-preferences-external-protobuf:1.3.0` 随包的 BSD-3 正文没有 `Copyright` 行，不满足 BSD-3 第 1 条。做法：新增静态归属文件（上游 BSD-3 全文 + `Copyright 2008 Google Inc. All rights reserved.` + `Source:`/`License:` 头），并让 `generateRuntimeNotices` 支持「坐标已有归档正文时追加静态归属」（当前 `expectedTextGaps` 只补缺口）；随后重跑门槛与全量回归，随 4.1.2 / 71 发行。
+- [x] **为 protobuf 追加静态版权归属（4.1.2 / 71 完成）**（`docs/LICENSE-AUDIT.md` §4.1）：上游 `datastore-preferences-external-protobuf:1.3.0` 随包的 BSD-3 正文没有 `Copyright` 行，不满足 BSD-3 第 1 条。做法：新增静态归属文件（上游 BSD-3 全文 + `Copyright 2008 Google Inc. All rights reserved.` + `Source:`/`License:` 头），并让 `generateRuntimeNotices` 支持「坐标已有归档正文时追加静态归属」（当前 `expectedTextGaps` 只补缺口）；随后重跑门槛与全量回归，随 4.1.2 / 71 发行。**结果**：新增 `assets/licenses/protobuf-bsd-3.txt`（2,482 B，SHA-256 `835c9e42…5320`，上游 v3.25.5 全文 + `Copyright 2008 Google Inc.`）；生成器新增 `attributionFiles()`，条件与 `fallbackFiles()` 不同——**坐标命中即无条件追加**，缺文件直接失败；归档模板仍原字节保留，两者互不顶替。`runtime.txt` 110,947 → **116,447 B / `d1508af0…1449`**（9 组 / 119 来源），清单同时打印两份 SHA-256 与归属说明；`LicenseCatalog` 增第 8 条、两个测试类补断言；380 项单测与完整性门槛通过。
 
 上一批结果与真机未验事项保留如下；**366 项旧基线已由 2026-11-18 的全量 379 项取代**（47 份 XML，0 failures/errors/skipped），lint 0 errors / 15 warnings。**4.1.1 / 70 已正式发布**：tag `v4.1.1`、Release「朝夕 4.1.1」（`449587411`）、资产 5,196,689 B / `7F92400A…D963`，`/releases/latest` 与 manifest 均已回读一致。工程动作已全部结束，剩余为**人工逐组件版权审阅**与**真机验收（含 68→70 保数据升级）**。下方“本批”均指历史 4.1.0 功能批次。
 

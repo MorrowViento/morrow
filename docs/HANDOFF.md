@@ -1,7 +1,7 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-18。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前执行已批准的 4.1.1 视觉/动画/小部件/开源发布方案：#16–#18 已完成；#19 工程项全部闭合（许可正文/README/设置页可读许可/缺口 0）；#20 已构建并核验 **4.1.1 / 70**（379 项单测 / lint 0 errors·15 warnings / 证书同 68 / 145 条目 / 7 份资产一致 / Apple 素材 0 匹配，**5,196,689 B / SHA-256 `7F92400A49F50C1BCA041D2E1125E25AC3160C32C637DA541AEC8770AA20D963`**）；**#21 已发布**：tag `v4.1.1`、Release「朝夕 4.1.1」id `449587411`、`published_at` 2026-11-18T06:05:24Z，`/releases/latest` 回读一致，`update/manifest.json` 已按真实数据回填并独立提交（`4a31259`），**推送时先用 WorkBuddy 自带代理 502，改走本机 `127.0.0.1:10809` 后推送成功并回读远端清单一致**。**当前只剩人工逐组件版权/NOTICE 审阅与真机验收（含 68→70 保数据升级）。发布后另修了设置页状态栏割裂（`956461d`，源码已领先已发布的 70 包，下次发行须 4.1.2 / 71）。** 下方 338 项、366 项、69 包与 feature-update 包均为历史证据。**续接请先读「#19 运行时许可与 README」与「#20/#21 发布实录」章节。**
+> 当前状态：**4.1.2 / 71 已构建、核验并发布**（tag `v4.1.2`、Release「朝夕 4.1.2」、资产 `morrow-71-4.1.2-release.apk` **5,199,013 B / SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`**）。本版两件事：① **五个超大 UI 文件按职责拆分**（SettingsScreen 1,345→461 行等，无行为变更）；② **补上 protobuf 的 BSD-3 版权归属**（新增静态 `protobuf-bsd-3.txt`，生成器 `attributionFiles()` 无条件追加，`runtime.txt` 116,447 B）。回归 **380 项单测 / 47 XML / 0 失败错误跳过**、lint 0 errors / 15 warnings、8 份许可资产与源一致、Apple 素材 0 匹配、证书同 68。上一版 4.1.1 / 70（`7F92400A…D963`）已发布，详见下方 #20/#21 实录。**当前只剩人工逐组件源码层版权审阅与真机验收（含 68→71 保数据升级）。** 下方 338/366/379 项、69 包与 feature-update 包均为历史证据。**续接先读「4.1.2 / 71：结构重构与 protobuf 归属」章节。**
 
 ## 当前批次与授权
 
@@ -160,15 +160,27 @@
 - 做法：不采信生成器自述，按 109 个坐标回 `~/.gradle/caches/modules-2/files-2.1` 重开归档，独立重算每个正文的 SHA-256、重建「坐标 → 正文组」映射（109/109 定位成功）。
 - 结论：**107 Apache-2.0 / 1 BSD-3-Clause / 1 MIT+MCU 混合**；正文载体 8 组（三份 Apache 均含 `END OF TERMS AND CONDITIONS` 与第 9 条，非摘要版）；35 个坐标归档内无任何许可文本，由静态 `apache-2.0.txt` 承担 §4(a)；§4(d) 仅 Glasmio 六模块的 `THIRD_PARTY_NOTICES.md` 需转发，已随包，其余 103 个归档内无 NOTICE。
 - **两处发现**：
-  1. **protobuf BSD-3 缺版权行**——`datastore-preferences-external-protobuf:1.3.0` 的 `LICENSE.txt`（1,434 B）从「Redistribution and use…」开始，无 `Copyright`/`Google`；BSD-3 第 1 条要求保留版权声明，原样转发不足以免责。**未修**，处置方案见 LICENSE-AUDIT §4.1，需生成器支持追加静态归属，随 4.1.2 / 71 走。
+  1. **protobuf BSD-3 缺版权行**——`datastore-preferences-external-protobuf:1.3.0` 的 `LICENSE.txt`（1,434 B）从「Redistribution and use…」开始，无 `Copyright`/`Google`；BSD-3 第 1 条要求保留版权声明，原样转发不足以免责。**4.1.2 / 71 已闭合**（见下节「protobuf 归属」）。
   2. **清单重复记录**——`androidx.core:core:1.18.0` 在解析结果里出现两次，`runtime.txt` 因此多打一条相同记录、artifact 计数虚高 1。已在 `app/build.gradle.kts` 加 `distinctBy(坐标, 文件, classifier)`，`runtime.txt` 111,134 → **110,947 B / SHA-256 `4773AF4B…48A4`**，坐标 109 条且无重复。
 - 仍不覆盖：源码文件头逐文件版权、R8 后类级残留、ying 派生边界逐文件判定、Apple 素材授权本身。`verifyRuntimeNoticeCompleteness` 退出 0 只证明「该有文本的坐标都有文本」，不等于归属审阅完成。
+
+### 4.1.2 / 71：结构重构与 protobuf 归属（2026-11-18）
+- **重构范围（无行为变更）**：把五个单文件巨物按职责拆开，只改可见性与文件级注释，正文用「行多重集比对」逐文件核对，丢行数均为 0。
+  - `ui/settings/`：`SettingsScreen` 1,345 → `SettingsScreen`(461) + `SettingsRows`(363) + `SettingsGlyphs`(306) + `BackdropCropScreen`(128) + `LicensesSheet`(205)。行/弹层/图标/裁剪/许可各自成文件，设置页主体只留组合与状态编排。
+  - `ui/glass/`：`GlassBottomBar` 989 → `GlassBottomBar`(674) + `GlassBottomBarParts`(366)（融合玻璃、选中块、三格图标、加号移出，底栏本体只算几何与串状态）；`GlassTheme` 690 → `GlassTheme`(475) + `GlassBackdrop`(236)（壁纸采样与宿主从主题材质里分开）。
+  - `ui/home/`：`HomeScreen` 841 → `HomeScreen`(549) + `HomeSections`(328)（日历槽、大标题、排序胶囊、列表/空态）。
+  - `ui/calendar/`：`CalendarScreen` 806 → `CalendarScreen`(357) + `CalendarViews`(477)（动画/几何与视图排版分开）。
+  - 拆分工具：`../tools/kt_split.py`（仓库外，按声明移动 + 自动裁剪 import；`by` 委托的 `getValue/setValue` 需按写法判断，否则会被当成未使用删掉）。
+- **protobuf 归属**：新增 `app/src/main/assets/licenses/protobuf-bsd-3.txt`（2,482 B，SHA-256 `835c9e42…5320`）= `Source:`/`License:` 头 + 上游 protobuf v3.25.5 完整 LICENSE（含 `Copyright 2008 Google Inc.  All rights reserved.` 与代码生成条款）。`RuntimeNoticePolicy.attributionFiles()` 与 `fallbackFiles()` 分开：前者**坐标命中就无条件追加**、文件缺失直接失败；后者仍只补缺口，所以归档模板消失依然是新增缺口。清单里 protobuf 一条同时给出「归档原文 1 项、静态归属 1 项」、两份 SHA-256 与归属说明；`runtime.txt` 110,947 → **116,447 B / `d1508af0…1449`**（9 个原字节组 / 119 个来源 / 80 份归档原文）。
+- **许可目录**：`LicenseCatalog` 增加「Protocol Buffers / BSD-3-Clause」第 8 条，设置页可直接读到带版权行的上游全文；`RuntimeNoticesAssetTest` 与 `LicenseCatalogTest` 各补断言（归档模板与归属正文并存、不互相顶替）。
+- **版本与验证**：`versionCode 71`、`versionName 4.1.2`（公开展示不附 code）。`:app:testDebugUnitTest --rerun :app:lintDebug :app:assembleDebug :app:assembleRelease :app:verifyRuntimeNoticeCompleteness` → `BUILD SUCCESSFUL in 6m15s`（114 任务，63 executed）；**380 项 / 47 XML / 0 failures·errors·skipped**（379 + 1 项新的 protobuf 归属测试）；lint **0 errors / 15 warnings**（同基线，无新增）。
+- **APK**：5,199,013 B / `601b3beb…73a6`，**146 条目**；`aapt2` **71 / 4.1.2** / minSdk 33 / targetSdk 37；`apksigner` 证书 `8894605E…8D02` 与正式 68 一致；**8 份** `assets/licenses/` 资产（6 份源文件 MATCH、`runtime.txt`/`morrow.txt` 为生成物）；图像条目 0、无嵌套归档、资源表 1,341 行检索 `tapback|listening|adaptive_audio` 0 匹配；`classes.dex` 含 `LicenseDocument` 与 `protobuf-bsd-3` 标记。debug 80,518,929 B / `4f51bf8c…b171`。本地副本 `../morrow-71-4.1.2-release.apk` 与源包逐字节一致。
 
 ### 仍未完成 / 未验证
 - `README.md` 与设置页许可 UI **本轮已完成**（见上），但**只在 Robolectric/Compose 测试与 release 构建层面验证**，真机未验：弹层滚动与长文本帧率、大字体、浅色主题下的可读性都还没有设备证据。
 - `domain/time/LunarCalendar.kt`：自实现农历/压缩年表，未见明确外部版权；无证据表明复制了不许可来源，也未完成全部来源审核。
 - `docs/RELEASE.md` 仍是 4.1.0 旧基线 + 旧 `v<name>-<code>` 脚本规则，发布阶段统一。
-- 仍缺的是**人工版权/NOTICE 归属审阅结论**（`apache-2.0.txt` 只是协议副本，逐组件源码层归属未逐一审阅）；许可改动后的全量回归**已完成（379 项）**、4.1.1 / 70 **已构建、核验并正式发布**（`7F92400A…D963`），见上两节。设置页展示不改变各组件自身的版权归属。
+- 仍缺的是**人工版权/NOTICE 归属审阅结论**（`apache-2.0.txt` 只是协议副本，逐组件源码层归属未逐一审阅）。随包许可文本这一层已闭合：4.1.2 起 protobuf 也有版权行，8 份资产与源一致。设置页展示不改变各组件自身的版权归属。
 
 ### 续接顺序（#19 → #20 → #21）
 1. **已完成**当前69审计包的AAR/最终APK核验，十项Apple图像不分发；生成器修复与正文补齐后又对最新145文件的包重验，#20正式70包仍须重复核验。
@@ -179,13 +191,13 @@
 6. **已完成许可改动后的全量回归**：379 项单测（47 XML，0 失败/错误/跳过）、`lintDebug` 0 errors / 15 warnings（同基线）、debug 与原签名 release（含 `lintVitalRelease`）构建成功；release 5,196,693 B / `320E5E90…4D1DF9`，证书与 68 一致。**366+13=379 已对账，无因新代码回归**。
 7. **已完成 #20 的 4.1.1 / 70**：版本字段只改 `app/build.gradle.kts`；四任务 + 完整性门槛一次跑通，379 项单测 / lint 0 errors·15 warnings / debug 与原签名 release 成功，`aapt2` 70 / 4.1.1，证书同 68，145 条目、7 份资产一致、Apple 素材 0 匹配，最终 **5,196,689 B / `7F92400A…D963`** 并复制到 `../morrow-70-4.1.1-release.apk`。
 8. **已完成 #21 发布**：普通提交 `505c822` / `fbc1a89` / `4a31259` 全部推送 main 并回读（第三个提交改走本机 `127.0.0.1:10809` 代理后成功）；确认 `v4.1.1` 未被占用；draft→上传→回下载比对摘要→转正式；`/releases/latest` 与 `git ls-remote --tags` 双向回读一致；远端 `update/manifest.json` 200 且与本地语义一致。CHANGELOG / RELEASE / SIGNING 已同步。
-9. **剩余（无待发布动作）**：人工逐组件版权/NOTICE 审阅；真机验收（视觉/帧率/系统提醒/SAF/G/H/J/L/M）与 68→70 原位升级保数据，按 TODO「真机与发布待办」执行。
+9. **剩余**：人工逐组件版权/NOTICE 审阅；真机验收（视觉/帧率/系统提醒/SAF/G/H/J/L/M）与 **68→71 原位升级保数据**，按 TODO「真机与发布待办」执行。4.1.2 / 71 的提交、发行与清单回填见下节末尾。
 
 ### 本阶段环境与受保护文件
 - `docs/MANUAL-TEST.md` 既有本地修改 SHA-256 回读 = `93FBCB61575E9B06AFED6BF0971BFC7818E6274FD5C2F41F712B29E3042C8A4A`（未变）。不编辑、不代勾、不提交；本批 diff 检查用 `git diff --check -- . ':!docs/MANUAL-TEST.md'`。
 - 本批已有大量修改/新增文件，不能再说 MANUAL-TEST 是唯一工作区改动（详见 git status）。
-- HEAD 基线 `fbc1a89` + 本次发布文档提交；源码 **4.1.1 / 70** 已发布，Release / tag / manifest 均已更新。
-- 本轮已运行全量 379 项单测、`lintDebug`、`assembleDebug`、原签名 `assembleRelease`（含 `lintVitalRelease`）与 `verifyRuntimeNoticeCompleteness`，并复核签名证书同 68、7 份许可资产与源一致、Apple 素材 0 匹配、最终 SHA-256 已绑定。366 基线此后**由 379 取代**，不再引用旧全量数字。#20 的构建与核验已完成；#21 提交/推送/发行未开始。
+- 源码 **4.1.2 / 71**；4.1.1 / 70 的 tag、Release 与 manifest 均保留未动，新版另起 tag `v4.1.2`。
+- 4.1.2 已运行全量 **380 项**单测、`lintDebug`、`assembleDebug`、原签名 `assembleRelease`（含 `lintVitalRelease`）与 `verifyRuntimeNoticeCompleteness`，并复核证书同 68、**8 份**许可资产与源一致、Apple 素材 0 匹配、最终 SHA-256 已绑定。379 是 4.1.1 的基线，别与 380 混用。
 - 未安装/卸载设备；未做真机视觉/FPS/启动器/升级保数据验收。
 
 ## 下一步：用户测试与反馈修复

@@ -88,12 +88,14 @@ app/src/main/assets/licenses/   # 随包许可原文（见下）
 | Glasmio 0.1.3 | **Apache-2.0**（不是 MIT）；第三方声明与 Apple 素材排除项见 `assets/licenses/glasmio-third-party-notices.txt` |
 | AndroidX / Jetpack Compose / Room / DataStore | Apache-2.0 |
 | MaterialKolor 4.1.1 | MIT；内嵌 Material Color Utilities 部分为 Apache-2.0，两份正文分别随包 |
-| DataStore external protobuf 1.3.0 | BSD-3-Clause |
+| DataStore external protobuf 1.3.0 | BSD-3-Clause；归档内正文缺版权行，随包另附上游全文 `assets/licenses/protobuf-bsd-3.txt` |
 
 `app/build.gradle.kts` 的 `generateRuntimeNotices` 按**精确坐标与版本**审核 release 运行时依赖，
 把每个组件实际随包的 LICENSE / NOTICE 原文收集到 `assets/licenses/runtime.txt`，并逐条登记坐标、
 artifact 与来源。原文只按字节完全相同去重，不同来源不会合并；缺少正文的坐标必须补静态全文，
-否则构建失败。设置页「开源许可」可离线阅读这些全文。
+否则构建失败。`fallbackFiles()` 只在归档缺正文时补齐，`attributionFiles()` 则是**坐标命中即无条件
+追加**——用于归档正文虽在、但漏掉了版权行这类「字节齐全、归属不齐」的情况（目前的 protobuf 即如此）。
+设置页「开源许可」可离线阅读这些全文。
 
 Glasmio 的 AAR 内含若干源自 Apple 系统资源的图像（Tapback 帧、音频与聆听图标）。它们**不受
 Apache-2.0 覆盖**，本项目通过资源裁剪与构建后核验确保不随包分发；应用也不使用 SF Symbols、

@@ -3,6 +3,19 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
+## [2026-11-18] 4.1.2 (71)：超大 UI 文件拆分 + protobuf 许可归属补齐（已发布，见下）
+
+- **结构重构（无行为变更）**：五个单文件巨物按职责拆分，靠「行多重集比对 + 全量单测」证明没有内容增删，只做可见性调整与文件级注释。
+  - `ui/settings/SettingsScreen.kt` 1,345 行 → `SettingsScreen`(461) + `SettingsRows`(363) + `SettingsGlyphs`(306) + `BackdropCropScreen`(128) + `LicensesSheet`(205)；
+  - `ui/glass/GlassBottomBar.kt` 989 行 → `GlassBottomBar`(674) + `GlassBottomBarParts`(366)：融合玻璃/选中块/三格图标与加号移出，底栏本体只算几何、串状态；
+  - `ui/glass/GlassTheme.kt` 690 行 → `GlassTheme`(475) + `GlassBackdrop`(236)：壁纸采样与宿主从主题材质里分开；
+  - `ui/home/HomeScreen.kt` 841 行 → `HomeScreen`(549) + `HomeSections`(328)；
+  - `ui/calendar/CalendarScreen.kt` 806 行 → `CalendarScreen`(357) + `CalendarViews`(477)：动画/几何与视图排版分开。
+- **许可缺口补齐**：`datastore-preferences-external-protobuf:1.3.0` 随包的 BSD-3 是无版权行模板（还把「Google Inc.」写成「the copyright holder」）。新增 `assets/licenses/protobuf-bsd-3.txt`（2,482 B，上游 protobuf v3.25.5 全文 + `Copyright 2008 Google Inc.`），生成器新增 `RuntimeNoticePolicy.attributionFiles()`：**与补缺口不同，坐标命中就无条件追加**，文件缺失直接失败。归档模板仍按原字节保留，两份不互相顶替。`runtime.txt` 110,947 → **116,447 B**（9 组 / 119 来源），清单里 protobuf 一条同时列出两份 SHA-256 与归属说明。
+- **版本**：`versionCode 70→71`、`versionName 4.1.1→4.1.2`（公开展示不附 code），依赖/AGP/Kotlin/schema/包名/CI/签名/proguard 均未动。
+- **回归**：380 项单测 / 47 份 XML / 0 failures·errors·skipped（379 + 1 项 protobuf 归属测试）；lint **0 errors / 15 warnings**（与基线同一组，无新增）；debug + 原签名 release（含 lintVital/R8/资源裁剪）成功；`verifyRuntimeNoticeCompleteness` 退出 0。
+- **最终 APK** `morrow-71-4.1.2-release.apk`：**5,199,013 B**，SHA-256 `601b3beb4db1c20f9cf94f31ff933e79295c917608d499d577df032f4f8673a6`，146 条目；`aapt2` **71 / 4.1.2** / minSdk 33 / targetSdk 37；`apksigner` 证书 SHA-256 `8894605E…8D02` 与正式 68 一致（可原位升级）；**8 份**许可资产与源一致（6 份源文件 MATCH，`runtime.txt`/`morrow.txt` 为生成物），图像条目 0、资源表 `tapback|listening|adaptive_audio` 0 匹配、无嵌套归档，dex 含 `LicenseDocument`。
+
 ## [2026-11-18] 未发布：设置页状态栏割裂修复（提交 `956461d`）
 
 - 现象：进入设置页后，状态栏那一截与页面之间有一道横线——页面底色从状态栏下沿才开始，渐变原点与照片裁剪比例都和系统栏对不上。日历页在 4.1.1 已用「不在安全区内重绘壁纸」修过，设置页漏了同一处。
