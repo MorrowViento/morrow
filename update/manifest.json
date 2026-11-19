@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.3.1",
-  "name": "朝夕 4.3.1",
-  "body": "## 朝夕 4.3.1\n\n4.3.0 的补丁版。上一版「有时间的事件设成每天/每周，进列表就闪退」的真正根因在这里找到并修掉。\n\n### 修复\n- 日历列表视图闪退：列表项的 key 只用事件 id，而每天 / 每周的事件在同一个月里会展开成多条（同一个 id），跨多天的持续事件同理。key 一撞，Compose 抛 IllegalArgumentException 直接把进程杀掉。现在 key 带上日期，不再冲突。\n- 月视图「选中某天」那一栏的 key 也一并带上日期兜底。\n\n### 界面\n- 年视图改成每行两个月（两列，一屏 6 行），月度板块再紧凑一档。\n- 首页顶栏按钮位置对齐：排序胶囊与「⋯」改为顶对齐、按 34dp 标准顶栏兜住，与日历、设置页按钮同基线。\n\n### 验证\n- 458 项单测 / 56 份 XML / 0 失败（新增 16 项重复事件渲染回归）\n- 先回退修复复现到 Key ... was already used 三条失败，再恢复确认全绿\n- lint 0 errors / 15 warnings\n\n> 安装包 morrow-75-4.3.1-release.apk（versionCode 75）。可从 4.3.0 / 74 原位升级，数据无需迁移（schema 未变）。",
-  "published_at": "2026-11-19T02:34:55Z",
+  "tag_name": "v4.4.0",
+  "name": "朝夕 4.4.0",
+  "body": "## 朝夕 4.4.0\n\n界面打磨与依赖升级。\n\n### 界面\n- 三页顶栏真正对齐：标题首行与按钮各占固定 46dp 的槽，首页 / 日历 / 设置三页按钮中心恒在同一条基线上（此前差 1.5–7dp）。\n- 日历月视图：今天不再画整格圆圈（它总会压住底部的事件点），改成只包住数字的淡色圆角底；事件点固定占底部、最多 4 个，间距更松。年视图的今天改用强调色 + 加粗。\n- 小部件：行卡片去掉纯白实心，改成半透明渐变玻璃行，壁纸能透出来；圆角 26→22dp，描边更柔。\n- 应用图标：换成「半日半月」——一侧实心暖金半圆、另一侧同色描边圆弧，中间一刀分开；纯色无渐变，缩小到启动器尺寸也不糊。\n- 字体设置：移除「去哪里找字体」的外链推荐，只保留本机导入。\n\n### 依赖\n- Glasmio 从 0.1.3 换到 main 源码（030d31c，比 0.1.3 多 30 个提交：insets / 安全区策略、玻璃渲染回退、popover / tooltip、菜单快照、导航过渡修复）。源码以 submodule 固定在 vendor/glasmio，本机发布为 0.1.4-main。\n- 构建新增 NDK 27.1.12297006 + CMake 3.22.1 依赖（Glasmio 的 C++ 着色器），方法见仓库 scripts/build-glasmio.sh。\n\n### 验证\n- 459 项单测 / 57 份 XML / 0 失败（新增 PageHeaderAlignmentTest 量三页按钮边界）\n- lint 0 errors / 15 warnings；许可完整性门槛退出 0\n\n> 安装包 morrow-76-4.4.0-release.apk（versionCode 76）。可从 4.3.x / 75 原位升级，Room schema 未变。",
+  "published_at": "2026-11-19T03:54:20Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-75-4.3.1-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.3.1/morrow-75-4.3.1-release.apk",
-      "size": 5313569,
-      "digest": "sha256:459e88a8851ae8d00588964aae72e215139bfa8d50ce30add881c85e402dc53e"
+      "name": "morrow-76-4.4.0-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.4.0/morrow-76-4.4.0-release.apk",
+      "size": 5322913,
+      "digest": "sha256:8d5f7539a2fe9fe3085bf8997f0d6797095bcebe5787d2bb648b14f9571b2182"
     }
   ]
 }
