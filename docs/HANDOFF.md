@@ -2,9 +2,13 @@
 
 > 更新：2026-11-19。默认只读本文件与 [TODO](TODO.md)；历史批次查 [CHANGELOG](CHANGELOG.md)，
 > 许可归属查 [LICENSE-AUDIT](LICENSE-AUDIT.md)，人工验收查 [MANUAL-TEST](MANUAL-TEST.md)（该文件不代勾）。
-> 当前状态：**4.6.1 / 80 发布中（见 #32）**。修 4.6.0 上线当天收到的三条：纪念日点不进详情
-> （分区后按 id 取卡漏了纪念日段）、自定义「第 N 天」删不掉（chips 只画了预设）、
+> 当前状态：**4.6.1 / 80 已正式发布（2026-11-19T12:57:28Z）**。修 4.6.0 上线当天收到的三条：
+> 纪念日点不进详情（分区后按 id 取卡漏了纪念日段）、自定义「第 N 天」删不掉（chips 只画了预设）、
 > 点排序列表乱跳（LazyColumn 记索引不记 key）；另把那套图标重绘成国风淡色。
+> tag `v4.6.1` → `7619ea6`（代码+文档）、Release「朝夕 4.6.1」id `451346587`、
+> 资产 `morrow-80-4.6.1-release.apk` **5,392,709 B / `bad57767…b1ff`**
+> （API 与公网回下载均 `cmp` 逐字节一致后才转正式）。
+> 提交链 `7619ea6`(代码+文档) → `bd679d7`(manifest) → 本次(文档回填)；**tag 不等于 main 属正常**（4.1.1 起同例）。
 > 上一版 4.6.0 / 79 已正式发布（2026-11-19T12:07:20Z）：tag `v4.6.0` → `f130067`、
 > Release `451292263`、资产 `morrow-79-4.6.0-release.apk` 5,376,105 B / `3619711f…5023`
 > （纪念日里程碑、首页分区、时间轴轻点不再改时长）。
@@ -161,7 +165,11 @@ val milestoneChips = (PRESETS + form.milestones).distinct().sorted()
 - **544 项单测 / 0 失败 / 62 套件**（较 4.6.0 的 542 增 2）：`EventPresentationTest.cardById_findsAnniversaryCard`
   （三段各取一张 + 合并顺序）、`EventChecklistFormTest` 的自定义天数可删 / 满员不踢人。
 - `assembleDebug` 与 `lintDebug` 通过（10 warnings，无图标 / 矢量相关）；
-  aapt2 复核 APK 内 `ic_launcher_background.xml` **没有**派生出 `__0` 资源。
+  lint release **0 errors / 15 warnings**；`assembleRelease`、`verifyRuntimeNoticeCompleteness` 通过。
+- APK 复核：**5,392,709 B / `bad57767…b1ff`**、**145 条目**（与 4.6.0 相同 → 背景没有派生出
+  `$ic_launcher_background__0`）、证书 `8894605E…8D02` 同 68、`runtime.txt` 122,289 B 未变。
+- CI 在 `7619ea6` 转绿 → draft `451346587` → 上传 → API 与公网回下载均 `cmp` 一致 → 转正式
+  （`published_at` 2026-11-19T12:57:28Z）→ 回填 `update/manifest.json`（`bd679d7`）。
 
 ## #30 4.5.0 / 78：子任务 · 时间轴 15 分钟 · 拖拽 · 自然语言 · 进度环
 

@@ -30,6 +30,14 @@
 - **验证**：**544 项单测 / 0 失败 / 62 套件**（新增 2 项：`cardById` 跨段取卡的回归用例、
   自定义里程碑可删 + 满员不踢人的用例）；`assembleDebug` 与 `lintDebug` 通过（10 warnings，
   无图标 / 矢量相关）。图标按同一套 path 参数离线渲染核对过比例与配色。
+- **最终 APK** `morrow-80-4.6.1-release.apk`：**5,392,709 B**，SHA-256 `bad57767…b1ff`；
+  aapt2 80 / 4.6.1 / minSdk 33 / targetSdk 37；证书 SHA-256 `8894605E…8D02`（同 68，可原位升级）；
+  **145 条目**（与 4.6.0 相同，确认背景没有派生出 `$ic_launcher_background__0`）、
+  8 份许可资产齐全、`runtime.txt` 122,289 B 未变；lint release 0 errors / 15 warnings；
+  `assembleRelease` 与 `verifyRuntimeNoticeCompleteness` 通过。
+- **发布**：CI 在 `7619ea6` 转绿；Release「朝夕 4.6.1」id `451346587`，
+  `published_at` 2026-11-19T12:57:28Z，tag `v4.6.1` = `7619ea6`（代码+文档），
+  manifest 回填提交 `bd679d7`；API 与公网回下载均 `cmp` 逐字节一致后才转正式。
 
 ## [2026-11-19] 4.6.0 (79)：纪念日里程碑 · 首页分区 · 时间轴拖拽修复
 
