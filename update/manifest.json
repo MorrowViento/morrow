@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.4.0",
-  "name": "朝夕 4.4.0",
-  "body": "## 朝夕 4.4.0\n\n界面打磨与依赖升级。\n\n### 界面\n- 三页顶栏真正对齐：标题首行与按钮各占固定 46dp 的槽，首页 / 日历 / 设置三页按钮中心恒在同一条基线上（此前差 1.5–7dp）。\n- 日历月视图：今天不再画整格圆圈（它总会压住底部的事件点），改成只包住数字的淡色圆角底；事件点固定占底部、最多 4 个，间距更松。年视图的今天改用强调色 + 加粗。\n- 小部件：行卡片去掉纯白实心，改成半透明渐变玻璃行，壁纸能透出来；圆角 26→22dp，描边更柔。\n- 应用图标：换成「半日半月」——一侧实心暖金半圆、另一侧同色描边圆弧，中间一刀分开；纯色无渐变，缩小到启动器尺寸也不糊。\n- 字体设置：移除「去哪里找字体」的外链推荐，只保留本机导入。\n\n### 依赖\n- Glasmio 从 0.1.3 换到 main 源码（030d31c，比 0.1.3 多 30 个提交：insets / 安全区策略、玻璃渲染回退、popover / tooltip、菜单快照、导航过渡修复）。源码以 submodule 固定在 vendor/glasmio，本机发布为 0.1.4-main。\n- 构建新增 NDK 27.1.12297006 + CMake 3.22.1 依赖（Glasmio 的 C++ 着色器），方法见仓库 scripts/build-glasmio.sh。\n\n### 验证\n- 459 项单测 / 57 份 XML / 0 失败（新增 PageHeaderAlignmentTest 量三页按钮边界）\n- lint 0 errors / 15 warnings；许可完整性门槛退出 0\n\n> 安装包 morrow-76-4.4.0-release.apk（versionCode 76）。可从 4.3.x / 75 原位升级，Room schema 未变。",
-  "published_at": "2026-11-19T03:54:20Z",
+  "tag_name": "v4.4.1",
+  "name": "朝夕 4.4.1",
+  "body": "## 朝夕 4.4.1\n\n工程修复版：界面与功能同 4.4.0，只把构建链修好。\n\n### 修复\n- **依赖只在本机**：4.4.0 的 CI 三次推送全红，`io.github.neoruaa.glasmio:*:0.1.4-main` 只有 `publishToMavenLocal` 的产物，GitHub Actions 与任何干净检出都报 `Could not find ...:glasmio-scaffold:0.1.4-main`。现把 6 个模块的 AAR 随仓库提交（`vendor/glasmio-maven`，6.3 MB / 18 文件），构建不再依赖 `mavenLocal()`，使用方也不需要 NDK / CMake。\n- **许可校验窗口错位**：补上 AAR 后又挂在 `generateRuntimeNotices`——Glasmio 声明的锁定哈希原本按 Windows 工作区的 CRLF 字节算（`d68c34e6…`），而 `.gitattributes` 是 `eol=lf`，CI 检出成 LF 必然对不上。改按仓库内 LF 字节锁定（`297bbf9d…`，与上游 `030d31c` 的 blob 逐字节一致）。\n- 随包的 `glasmio-third-party-notices.txt` 由 CRLF 规范为 LF（5245→5185 B）。\n\n### 验证\n- CI 在 `ca12bfd` 通过（assembleDebug + 单测 + lint）；本地搬走 `~/.m2` 与依赖缓存后仍可构建\n- 459 项单测 / 57 份 XML / 0 失败；lint 0 errors / 15 warnings\n- APK 145 条目、8 份许可资产与源文件逐字节一致、图像条目 0\n\n> 安装包 morrow-77-4.4.1-release.apk（versionCode 77）。可从 4.4.0 / 76 及更早版本原位升级，Room schema 未变。",
+  "published_at": "2026-11-19T05:21:27Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-76-4.4.0-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.4.0/morrow-76-4.4.0-release.apk",
-      "size": 5322913,
-      "digest": "sha256:8d5f7539a2fe9fe3085bf8997f0d6797095bcebe5787d2bb648b14f9571b2182"
+      "name": "morrow-77-4.4.1-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.4.1/morrow-77-4.4.1-release.apk",
+      "size": 5325145,
+      "digest": "sha256:4ea97ff95ca0461e7c1e63dc9df74b8e5eb4022667b17ab781b6312e201d08dc"
     }
   ]
 }
