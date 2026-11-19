@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.3.0",
-  "name": "朝夕 4.3.0",
-  "body": "## 朝夕 4.3.0\n\n4.2.0 的修复打磨版。\n\n### 修复\n- 修「添加有时长的事件后点列表闪退」\n- 多天事件结束日滚轮与开始时间保持一致（上面能选时分下面也能选，上面全天下面全天）\n\n### 界面打磨\n- 详情页「归档」改成与置顶/删除同尺寸的 56dp 圆钮\n- 日历年视图每月板块缩小，突出预览\n- 首页排序与「⋯」按钮和全站顶栏按钮高度统一\n- 重绘应用图标：非渐变、线条分明（金色日轮 + 放射光芒 + 地平线 + 倒影）\n\n> 安装包 morrow-74-4.3.0-release.apk（versionCode 74）。可从 4.2.x / 73 原位升级，数据自动迁移（Room schema 4→5）。",
-  "published_at": "2026-11-18T19:10:27Z",
+  "tag_name": "v4.3.1",
+  "name": "朝夕 4.3.1",
+  "body": "## 朝夕 4.3.1\n\n4.3.0 的补丁版。上一版「有时间的事件设成每天/每周，进列表就闪退」的真正根因在这里找到并修掉。\n\n### 修复\n- 日历列表视图闪退：列表项的 key 只用事件 id，而每天 / 每周的事件在同一个月里会展开成多条（同一个 id），跨多天的持续事件同理。key 一撞，Compose 抛 IllegalArgumentException 直接把进程杀掉。现在 key 带上日期，不再冲突。\n- 月视图「选中某天」那一栏的 key 也一并带上日期兜底。\n\n### 界面\n- 年视图改成每行两个月（两列，一屏 6 行），月度板块再紧凑一档。\n- 首页顶栏按钮位置对齐：排序胶囊与「⋯」改为顶对齐、按 34dp 标准顶栏兜住，与日历、设置页按钮同基线。\n\n### 验证\n- 458 项单测 / 56 份 XML / 0 失败（新增 16 项重复事件渲染回归）\n- 先回退修复复现到 Key ... was already used 三条失败，再恢复确认全绿\n- lint 0 errors / 15 warnings\n\n> 安装包 morrow-75-4.3.1-release.apk（versionCode 75）。可从 4.3.0 / 74 原位升级，数据无需迁移（schema 未变）。",
+  "published_at": "2026-11-19T02:34:55Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-74-4.3.0-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.3.0/morrow-74-4.3.0-release.apk",
+      "name": "morrow-75-4.3.1-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.3.1/morrow-75-4.3.1-release.apk",
       "size": 5313569,
-      "digest": "sha256:376dba9c7fea8ad5ef9fab7aab158576473bdd46e2d8d7cff787cc6c8927455b"
+      "digest": "sha256:459e88a8851ae8d00588964aae72e215139bfa8d50ce30add881c85e402dc53e"
     }
   ]
 }
