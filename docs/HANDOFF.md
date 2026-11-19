@@ -65,10 +65,14 @@ PageHeaderRow {                       // padding 16/12/16/4 + 顶对齐
 玻璃 popover/tooltip、pull-to-refresh、菜单字段快照、导航过渡中断修复等），但 `VERSION_NAME` 仍是 0.1.3、
 Maven Central 最新也只到 0.1.3，没有可依赖的发布物。
 
-- `vendor/glasmio` 是 **git submodule**（固定在 `030d31c`），Morrow 依赖 `0.1.4-main`、仓库加 `mavenLocal()`。
+- `vendor/glasmio` 是 **git submodule**（固定在 `030d31c`），只作源码参考；**构建吃的是 `vendor/glasmio-maven/`
+  里随仓库提交的 6 个模块 AAR（6.3 MB / 18 文件，版本 `0.1.4-main`）**，不依赖 `mavenLocal()`、不需要 NDK。
+- **为什么不发 mavenLocal**：4.4.0 只发本机时，GitHub Actions 与任何干净检出都报
+  `Could not find io.github.neoruaa.glasmio:glasmio-ui:0.1.4-main`，三次推送全线红（4.4.1 修的就是这个）。
 - **不能用 `includeBuild`**：AGP 9 的 Android 库在 composite build 里不发布 `library` / `androidJvm` 变体属性，
   依赖解析直接报 variant ambiguity（已实测失败）。
-- `glasmio-glass` 有 C++ SDF 着色器，构建需要 **NDK 27.1.12297006 + CMake 3.22.1**（已装进 `.toolchain/sdk`）。
+- `glasmio-glass` 有 C++ SDF 着色器，**只有重新编译 Glasmio 时**才需要 **NDK 27.1.12297006 + CMake 3.22.1**
+  （已装进 `.toolchain/sdk`）；上游 AAR 自带四 ABI 预编译 `.so`，用方不编原生代码。
 - 同步命令见下「Glasmio 源码同步」；`vendor` 里改 `gradle.properties` 的版本号不算改动（用 `-PVERSION_NAME` 覆盖）。
 
 ### ⑥ 图标换设计：「半日半月」
@@ -108,14 +112,13 @@ export ANDROID_HOME="$(cd ../.toolchain && pwd)/sdk"
 ```bash
 # 1) 拉上游 main（首次：git submodule update --init --recursive）
 cd vendor/glasmio && git fetch origin main && git checkout origin/main
-# 2) 发布到本机 Maven 本地仓库（版本号用 -P 覆盖，别改 gradle.properties）
-cd ../.. && ../.toolchain/gradle-9.6.0/bin/gradle -p vendor/glasmio -PVERSION_NAME=0.1.4-main \
-    :glasmio-core:publishToMavenLocal :glasmio-glass:publishToMavenLocal \
-    :glasmio-icons:publishToMavenLocal :glasmio-ui:publishToMavenLocal \
-    :glasmio-preference:publishToMavenLocal :glasmio-scaffold:publishToMavenLocal
-# 3) 六个模块都发完再构建 Morrow（Dokka 会拖时间，属正常）
+# 2) 重新编译并同步进仓库内 Maven 目录（脚本会跑 publishToMavenLocal 再 cp 出 .aar/.pom/.module）
+cd ../.. && scripts/build-glasmio.sh
+# 3) 提交 vendor/glasmio-maven —— 不提交的话 CI 与干净检出必挂
+git add vendor/glasmio-maven .gitmodules vendor/glasmio && git commit -m "build: glasmio <新commit> 同步"
 ```
 
+只换 commit、AAR 已经在 `~/.m2` 里时，可只跑 `scripts/build-glasmio.sh sync`。
 升级后必须回归：`GlassPanel` / `GlassCirclePanel` / `GlassMenu` / `GlassSheet` / `GlasmioScaffold` 的调用点
 （封装层在 `ui/glass/`，改动只在那一层收口）。
 

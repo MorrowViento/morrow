@@ -1,0 +1,244 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.neoruaa.glasmio",
+    "module": "glasmio-scaffold",
+    "version": "0.1.4-main",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.compose",
+          "module": "compose-bom",
+          "version": {
+            "requires": "2026.09.00"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui"
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.12.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "io.github.neoruaa.glasmio",
+          "module": "glasmio-ui",
+          "version": {
+            "requires": "0.1.4-main"
+          }
+        },
+        {
+          "group": "androidx.navigation3",
+          "module": "navigation3-runtime",
+          "version": {
+            "requires": "1.2.0"
+          }
+        },
+        {
+          "group": "androidx.navigationevent",
+          "module": "navigationevent-compose",
+          "version": {
+            "requires": "1.1.2"
+          }
+        },
+        {
+          "group": "top.yukonga.miuix.kmp",
+          "module": "miuix-navigation3-ui-android",
+          "version": {
+            "requires": "0.9.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "glasmio-scaffold-0.1.4-main.aar",
+          "url": "glasmio-scaffold-0.1.4-main.aar",
+          "size": 574987,
+          "sha512": "caaf80ae266ec6bf4c0067feb92be6edc355213e2c2927a4cad089e4f06c78e56ab86234fb894ca6681afab5a707ad774e51be4c7e234f52bf8d6a0b76326544",
+          "sha256": "dafcdddc6bae220197986cc5c217a96b4f99d24bbfdd63b427eda861c719c8f0",
+          "sha1": "7b77592185de3a4203b784b4f4f0b7289f813492",
+          "md5": "efad4c54832a10723defa77ae06f48e6"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "top.yukonga.miuix.kmp",
+          "module": "miuix-ui-android",
+          "version": {
+            "requires": "0.9.3"
+          }
+        },
+        {
+          "group": "androidx.activity",
+          "module": "activity-compose",
+          "version": {
+            "requires": "1.13.0"
+          }
+        },
+        {
+          "group": "androidx.compose",
+          "module": "compose-bom",
+          "version": {
+            "requires": "2026.09.00"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui"
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.12.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "io.github.neoruaa.glasmio",
+          "module": "glasmio-ui",
+          "version": {
+            "requires": "0.1.4-main"
+          }
+        },
+        {
+          "group": "androidx.navigation3",
+          "module": "navigation3-runtime",
+          "version": {
+            "requires": "1.2.0"
+          }
+        },
+        {
+          "group": "androidx.navigationevent",
+          "module": "navigationevent-compose",
+          "version": {
+            "requires": "1.1.2"
+          }
+        },
+        {
+          "group": "top.yukonga.miuix.kmp",
+          "module": "miuix-navigation3-ui-android",
+          "version": {
+            "requires": "0.9.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "glasmio-scaffold-0.1.4-main.aar",
+          "url": "glasmio-scaffold-0.1.4-main.aar",
+          "size": 574987,
+          "sha512": "caaf80ae266ec6bf4c0067feb92be6edc355213e2c2927a4cad089e4f06c78e56ab86234fb894ca6681afab5a707ad774e51be4c7e234f52bf8d6a0b76326544",
+          "sha256": "dafcdddc6bae220197986cc5c217a96b4f99d24bbfdd63b427eda861c719c8f0",
+          "sha1": "7b77592185de3a4203b784b4f4f0b7289f813492",
+          "md5": "efad4c54832a10723defa77ae06f48e6"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "glasmio-scaffold-0.1.4-main-sources.jar",
+          "url": "glasmio-scaffold-0.1.4-main-sources.jar",
+          "size": 83108,
+          "sha512": "1d8b8a56234d7a9119a078b5843a98cc0870bd4688b31fe14581e17641cae31c6e87bb9247ede50dacac53453b95640173c2f661d126368dacd49e5c89138a69",
+          "sha256": "e46a2e6671ea06f63146c0f7c2ce3f908498087c3179651a0f9c96a68bc8a799",
+          "sha1": "70182e457f03c57728edee3350ddcfbc10213e13",
+          "md5": "79bef2a3c595cdb1409be7e29b650157"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "glasmio-scaffold-0.1.4-main-javadoc.jar",
+          "url": "glasmio-scaffold-0.1.4-main-javadoc.jar",
+          "size": 575347,
+          "sha512": "b92bf1b8e5b2758446a583cb87b4512d04b1a2923f2fb97e80f5eb3e156f1b04fedc2e1fdb75cdae5b2005cc7843ca7d8105e143a6473c6b3ec6f5c520fe39ca",
+          "sha256": "ef10b106f935944bd91e15bdc94d8c3d360d543889d45a1eb32f707be1d88066",
+          "sha1": "d0e58cec43e943c93320779037947df0b446498c",
+          "md5": "06918ea84b91405f189f582fc6b1aa5a"
+        }
+      ]
+    }
+  ]
+}

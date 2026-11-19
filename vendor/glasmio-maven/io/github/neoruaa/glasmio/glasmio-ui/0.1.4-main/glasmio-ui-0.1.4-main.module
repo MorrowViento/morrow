@@ -1,0 +1,202 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.neoruaa.glasmio",
+    "module": "glasmio-ui",
+    "version": "0.1.4-main",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.compose",
+          "module": "compose-bom",
+          "version": {
+            "requires": "2026.09.00"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui"
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.12.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "io.github.neoruaa.glasmio",
+          "module": "glasmio-glass",
+          "version": {
+            "requires": "0.1.4-main"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "glasmio-ui-0.1.4-main.aar",
+          "url": "glasmio-ui-0.1.4-main.aar",
+          "size": 3718209,
+          "sha512": "b8910ec534969ca66d6b9137581074f59d3a6e64b361828c8c4823679b64ed7081f182601ae7066fcc99d28b52b4c065d03462fc13c9183fa8d34b6f589967df",
+          "sha256": "73809d601aaacc4a3cf95d6cd69e8cd1540a2fb0df3f9206adbe4b1fca52eb01",
+          "sha1": "cf44c70436283beb68c9ca3d262722df663a7300",
+          "md5": "67f773a90e22317f31842fa21bdf8074"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.activity",
+          "module": "activity-compose",
+          "version": {
+            "requires": "1.13.0"
+          }
+        },
+        {
+          "group": "sh.calvin.reorderable",
+          "module": "reorderable",
+          "version": {
+            "requires": "3.1.0"
+          }
+        },
+        {
+          "group": "androidx.compose",
+          "module": "compose-bom",
+          "version": {
+            "requires": "2026.09.00"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui"
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.12.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "io.github.neoruaa.glasmio",
+          "module": "glasmio-glass",
+          "version": {
+            "requires": "0.1.4-main"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "glasmio-ui-0.1.4-main.aar",
+          "url": "glasmio-ui-0.1.4-main.aar",
+          "size": 3718209,
+          "sha512": "b8910ec534969ca66d6b9137581074f59d3a6e64b361828c8c4823679b64ed7081f182601ae7066fcc99d28b52b4c065d03462fc13c9183fa8d34b6f589967df",
+          "sha256": "73809d601aaacc4a3cf95d6cd69e8cd1540a2fb0df3f9206adbe4b1fca52eb01",
+          "sha1": "cf44c70436283beb68c9ca3d262722df663a7300",
+          "md5": "67f773a90e22317f31842fa21bdf8074"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "glasmio-ui-0.1.4-main-sources.jar",
+          "url": "glasmio-ui-0.1.4-main-sources.jar",
+          "size": 186485,
+          "sha512": "de412b5355c6869b5d28575a15bbaa74a10056a9fa00e927a271339ebfd0c83682b0cd31dc3713b5c520a39d08d54bb06ad2ab32264eb4105ad88cba316fcc58",
+          "sha256": "cb76c4875f187ee5b93c05795773d64b4618455847ff7a94f3d211971b30cd2b",
+          "sha1": "d96e22ea57a423e10ca3b84cc3825ab681e711b2",
+          "md5": "e2e55e6bfde9f5427a91e405c1b1ecef"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "glasmio-ui-0.1.4-main-javadoc.jar",
+          "url": "glasmio-ui-0.1.4-main-javadoc.jar",
+          "size": 664424,
+          "sha512": "0b3371266a5346e58a1e33c6ced1def304fec7e024d08e7d0799e041875ad5c8f9aded3385d878edc6f85b7db1f5fc81b3a6872ed05d7d36c92fb4b814a2fc90",
+          "sha256": "f78b4af9f344c12dbafb69bf7882b3693741e812738bb6c378924424d2938d0f",
+          "sha1": "f5b322f30339b2195c534801f70707612c0e0a80",
+          "md5": "fb2b2e870aa456954f03ab7b5a9c8817"
+        }
+      ]
+    }
+  ]
+}

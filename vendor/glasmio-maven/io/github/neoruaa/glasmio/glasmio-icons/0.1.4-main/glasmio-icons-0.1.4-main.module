@@ -1,0 +1,178 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.neoruaa.glasmio",
+    "module": "glasmio-icons",
+    "version": "0.1.4-main",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.compose",
+          "module": "compose-bom",
+          "version": {
+            "requires": "2026.09.00"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui"
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.12.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "glasmio-icons-0.1.4-main.aar",
+          "url": "glasmio-icons-0.1.4-main.aar",
+          "size": 219824,
+          "sha512": "55b92d6bf454afad3248ef854c1bdcfbcb64a385f69945b21fe21b6a2590b453c8fe2d360ab8b9e501992f4c1430f8fc4b2e972ba0d0c0896437e7bc14f17f40",
+          "sha256": "d569e409c0fe06782afb2a596afd147c5fd9d12bfeb0a49b0da26382e614fdf3",
+          "sha1": "e7474fc5c4aa78b7a1a7bff38c198b97277671b9",
+          "md5": "633ba22995e9e0ededc17f23b8a006aa"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.compose.material",
+          "module": "material-icons-extended"
+        },
+        {
+          "group": "androidx.compose",
+          "module": "compose-bom",
+          "version": {
+            "requires": "2026.09.00"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "androidx.compose.ui",
+          "module": "ui"
+        },
+        {
+          "group": "androidx.compose.foundation",
+          "module": "foundation",
+          "version": {
+            "requires": "1.12.1"
+          }
+        },
+        {
+          "group": "androidx.compose.material3",
+          "module": "material3",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "glasmio-icons-0.1.4-main.aar",
+          "url": "glasmio-icons-0.1.4-main.aar",
+          "size": 219824,
+          "sha512": "55b92d6bf454afad3248ef854c1bdcfbcb64a385f69945b21fe21b6a2590b453c8fe2d360ab8b9e501992f4c1430f8fc4b2e972ba0d0c0896437e7bc14f17f40",
+          "sha256": "d569e409c0fe06782afb2a596afd147c5fd9d12bfeb0a49b0da26382e614fdf3",
+          "sha1": "e7474fc5c4aa78b7a1a7bff38c198b97277671b9",
+          "md5": "633ba22995e9e0ededc17f23b8a006aa"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "glasmio-icons-0.1.4-main-sources.jar",
+          "url": "glasmio-icons-0.1.4-main-sources.jar",
+          "size": 79779,
+          "sha512": "81b18dfed78dfc8f71e04a4ded05d562f72a4fcd189f402cc5a163455891b073e15f09fa15d165c902a537c34d2621807fa92778e64357445fc3cc3cd2841249",
+          "sha256": "527603f9aa23476423c6e4edb465a9bf34c6fcb302ec69aadc2d9cdabfc068a8",
+          "sha1": "a1ea8618e4aba6fddbfd5f6d8af78860ffa708ef",
+          "md5": "a9781d308ab63d00f0a4ae2a60e516bd"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "glasmio-icons-0.1.4-main-javadoc.jar",
+          "url": "glasmio-icons-0.1.4-main-javadoc.jar",
+          "size": 448648,
+          "sha512": "49381239178b9f1a27a1e670d2aa0b113a91e7b1030c3d7226bcd9d2c49d6d0494b447bad9cfa195dc23d827094c6623f83f2e879e73512230875344866ca41e",
+          "sha256": "342433f2e0fca4c81dfe110fe6553e4f8f073b8679b635e12267c588530ee159",
+          "sha1": "59638dc8df9d06630ddf7720c51b4b9fec2b23f9",
+          "md5": "46f1cb0b90d873609457c230be1628eb"
+        }
+      ]
+    }
+  ]
+}

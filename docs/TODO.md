@@ -9,7 +9,7 @@
 - [x] **月视图今天标记**：去掉整格描边圆（直径盖住农历行与底部事件点，圈底必然压点），改成只包住日期数字的淡色圆角底 + 强调色数字；事件点固定占底部 6dp，最多 4 点、2.5dp 直径。年视图格子只有 16dp，改用「强调色 + 加粗」标今天，不画圆。
 - [x] **小部件行卡片**：`widget_row_fill` 由纯白实心改「白色纵向 alpha 渐变」（顶部 0.90 → 底部 0.75），圆角 26→22dp；描边改 30% 白；`WidgetAppearance.rowTint` 新增 0.62 不透明度上限，任何配色档都不会刷成实心白纸片。
 - [x] **删除字体推荐链接**：移除 `FontSheet` 的「去哪里找字体」区块与四款 OFL 字体跳转，连同 `AppFont` 的 `RecommendedFont` / `RECOMMENDED_FONTS`；导入引导与授权提示保留。
-- [x] **Glasmio 换 main 源码**：`vendor/glasmio` 作为 submodule 固定 main 的 `030d31c`（比 0.1.3 多 30 个提交：insets/安全区、玻璃渲染回退、菜单快照、导航过渡修复等）。因 AGP 9 的 Android 库在 composite build 下变体匹配失败，改用 `scripts/build-glasmio.sh` 发布 `0.1.4-main` 到 mavenLocal 再依赖。本地新增 NDK 27.1.12297006 + CMake 3.22.1（glasmio-glass 的 SDF 着色器需要）。
+- [x] **Glasmio 换 main 源码**：`vendor/glasmio` 作为 submodule 固定 main 的 `030d31c`（比 0.1.3 多 30 个提交：insets/安全区、玻璃渲染回退、菜单快照、导航过渡修复等）。因 AGP 9 的 Android 库在 composite build 下变体匹配失败，改由 `scripts/build-glasmio.sh` 编出 `0.1.4-main`，**AAR 随仓库提交在 `vendor/glasmio-maven`**（用方无需 NDK，也不再依赖 mavenLocal）。
 - [x] **图标换设计**：「半日半月」——一侧实心暖金半圆、另一侧等宽描边圆弧，中间一刀分开；背景纯色 `#171728`。去掉光芒/地平线/倒影等装饰，缩小到启动器尺寸也不糊。
 - [x] **交接文档精简**：HANDOFF 359→约 120 行、TODO 176→约 80 行，历史批次收敛为「一行索引 + 指向 CHANGELOG」。
 - [x] **验证**：**459 项单测 / 57 份 XML / 0 失败**；lint 0 errors / 15 warnings；`assembleRelease` + `verifyRuntimeNoticeCompleteness` 通过；APK 5,322,913 B / `8d5f7539…b2182`、76 / 4.4.0、证书同 68、7 份许可资产一致、图像 0、`runtime.txt` 116,929 B / `6b0dfaf0…92bc`。
