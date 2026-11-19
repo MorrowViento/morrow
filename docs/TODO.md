@@ -1,8 +1,9 @@
 # TODO — 朝夕 · 当前待办
 
 > 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)；历史实现见 [CHANGELOG](CHANGELOG.md)，许可归属见 [LICENSE-AUDIT](LICENSE-AUDIT.md)。
-> 当前状态：**4.5.0 / 78 已构建、全绿，待发布**（APK 5,359,721 B / `bdb0f872…53667a`，证书同 68）。
-> 上一版 4.4.1 / 77 已发布（Release `450909704`、资产 `4ea97ff9…08dc`）。
+> 当前状态：**4.5.0 / 78 已正式发布（2026-11-19T09:59:53Z）**——Release `451154161`、tag `v4.5.0` = `9043c9b`、
+> 资产 `morrow-78-4.5.0-release.apk` 5,359,721 B / `bdb0f872…53667a`，证书同 68（可原位升级）。
+> 上一版 4.4.1 / 77：Release `450909704`、资产 `4ea97ff9…08dc`。
 
 ## 4.5.0 / 78：子任务 · 时间轴 15 分钟 · 拖拽 · 自然语言 · 进度环
 
@@ -15,7 +16,7 @@
 - [x] **小按钮按压去泛白**：`GlassPanel` / `GlassCirclePanel` / `GlassTextButton` 不再把 `onClick` 交给材质（小控件满档 + 3.33 倍增益 = 整块白），改自绘「缩小 4.5% + 7% 薄高光」。
 - [x] **存储**：Room schema **5→6**（`MIGRATION_5_6`）；备份 format **4→5**；`UndoCodec` + `UndoKind.TOGGLE_CHECKLIST`。
 - [x] **验证**：**514 项单测 / 0 失败**（新增 50 项：checklist 12、自然语言 17、表单合并 13、进度环 8；三条存储路径各补往返）；lint **0 errors / 15 warnings**；`assembleRelease` + `verifyRuntimeNoticeCompleteness` 通过。
-- [ ] **发布 4.5.0 / 78**：提交 → 推送 main → 等 CI 绿 → 建 draft → 上传 `morrow-78-4.5.0-release.apk` → 回下载 `cmp` 逐字节一致 → 转正式 → 回填 `update/manifest.json`。
+- [x] **发布 4.5.0 / 78**：CI 在 `9043c9b` 转绿 → draft（id `451154161`）→ 上传 `morrow-78-4.5.0-release.apk` → API 回下载 `cmp` 逐字节一致 → 转正式（`published_at` 2026-11-19T09:59:53Z）→ 回填 `update/manifest.json`（`9ce37c6`）；`/releases/latest` 与公网下载地址均已回读一致。
 
 ## 4.4.1 / 77：修构建链（Glasmio AAR 进仓库 · 许可哈希按 LF 锁定）
 

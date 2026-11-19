@@ -46,7 +46,11 @@
   `UndoCodecTest` 各补子任务往返；`BackupRepositoryTest` 的 1→N 迁移用例补上 5→6 路径）。
   lint release **0 errors / 15 warnings**；`assembleRelease` 与 `verifyRuntimeNoticeCompleteness` 通过。
 - **最终 APK** `morrow-78-4.5.0-release.apk`：**5,359,721 B**，SHA-256 `bdb0f872…53667a`；
-  证书 SHA-256 `8894605E…8D02`（自 68 未变，可原位升级）。
+  aapt2 78 / 4.5.0 / minSdk 33 / targetSdk 37；证书 SHA-256 `8894605E…8D02`（自 68 未变，可原位升级）；
+  145 条目、8 份许可资产与源逐字节一致（`morrow.txt` = 根 `LICENSE`）、图像条目 0、`runtime.txt` 122,289 B 未变。
+- **发布**：CI 在 `9043c9b` 转绿；Release「朝夕 4.5.0」id `451154161`，`published_at` 2026-11-19T09:59:53Z，
+  tag `v4.5.0` = `9043c9b`（代码+文档），manifest 回填提交 `9ce37c6`；资产回下载 `cmp` 逐字节一致后才转正式，
+  `/releases/latest` 与公网下载地址均已回读一致。
 
 ## [2026-11-19] 4.4.1 (77)：修构建链（Glasmio AAR 进仓库、许可哈希按 LF 锁定）
 
