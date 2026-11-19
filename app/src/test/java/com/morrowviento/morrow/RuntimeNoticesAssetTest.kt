@@ -128,7 +128,7 @@ class RuntimeNoticesAssetTest {
     @Test
     fun lockedGlasmioNoticeRetainsUpstreamTextAndAppleExclusions() {
         val bytes = asset("glasmio-third-party-notices.txt")
-        assertEquals("d68c34e6d1175b0688e1029dabf4216a753cf67acb39a719b52f994fbd96a37f", sha256(bytes))
+        assertEquals("297bbf9d3745103a1d04fc205fc9da50c4b9a544927393f6a15b3feef2654318", sha256(bytes))
         val notice = text(bytes)
         assertTrue(notice.contains("Apple Inc. retains copyright"))
         assertTrue(notice.contains("not covered by Glasmio's Apache-2.0 license"))

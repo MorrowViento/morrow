@@ -106,6 +106,10 @@ export ANDROID_HOME="$(cd ../.toolchain && pwd)/sdk"
 - 只有 `testDebugUnitTest` 一个单测变体（没有 `testReleaseUnitTest`）。
 - `rm -rf` 删 `test-results` 会触发安全删除拦截，用 `--rerun`。
 - 工具链固定在 `../.toolchain/{jdk,gradle,sdk}`；本批新增 `sdk/ndk/27.1.12297006` 与 `sdk/cmake/3.22.1`。
+- **许可锁定的哈希按仓库内 LF 字节算**：`.gitattributes` 是 `* text=auto eol=lf`，而 Windows 工作区可能留着 CRLF
+  副本（`git status` 显示 M、`git diff` 却是空）。此时本地 `generateRuntimeNotices` 能过、CI 解析到 LF 就报
+  「Glasmio main 第三方声明与锁定上游原文不一致」——4.4.0 的 CI 正是栽在这。落盘重取一次（`git checkout -- <文件>`
+  或写回 `\r\n`→`\n`）再比对 `sha256sum` 与 `git cat-file -p HEAD:<文件> | sha256sum` 是否一致。
 
 ### Glasmio 源码同步
 

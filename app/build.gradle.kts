@@ -154,7 +154,7 @@ object RuntimeNoticePolicy {
     const val version = 4
     const val protobuf = "androidx.datastore:datastore-preferences-external-protobuf:1.3.0"
     const val materialKolor = "com.materialkolor:material-color-utilities-android:4.1.1"
-    const val glasmioNoticeSha256 = "d68c34e6d1175b0688e1029dabf4216a753cf67acb39a719b52f994fbd96a37f"
+    const val glasmioNoticeSha256 = "297bbf9d3745103a1d04fc205fc9da50c4b9a544927393f6a15b3feef2654318"
     const val glasmioNoticeSource =
         "https://github.com/NEORUAA/Glasmio/blob/030d31c1cb1b9958ddab0b6764c4e8ed82864b0b/THIRD_PARTY_NOTICES.md"
 
