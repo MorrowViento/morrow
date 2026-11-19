@@ -3,11 +3,22 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
+## [2026-11-19] 4.3.1 (75)：修日历列表视图闪退（重复事件撞 key）、年视图每行两个月、顶栏按钮真正对齐
+
+> 4.3.0 的补丁版。上一版「有时长事件点列表闪退」的**真正根因**在这里找到并修掉。
+
+- **闪退根因（真凶）**：日历**列表视图**的 `LazyColumn` key 是 `"e-<月>-<事件id>"`。每天 / 每周的事件在同一个月的 `MonthGroup.entries` 里会出现多条（同 id），跨多天的持续事件同理——key 一撞，Compose 直接抛 `IllegalArgumentException: Key "e-2026-11-…" was already used` 把进程杀掉。这就是 4.3.0 里「有时长 / 有时间 + 每天每周，进列表就闪退」的真因（上一版只加了详情页渲染测试，没覆盖列表视图，所以没抓到）。
+  修法：key 改为 `"e-<月>-<日期>-<事件id>"`；`MonthView` 选中日那一栏的 key 也一并带上日期做兜底。
+- **年视图每行两个月**：`YearView` 从 `GridCells.Adaptive(160.dp)` 改成 `GridCells.Fixed(2)`（两列、一屏 6 行）；`MonthCard` 内边距 10→8dp、格子高度 18→16dp、字号再下压一档（月份 14→13sp、星期 8→7.5sp、日期/摘要 9.5→9sp），预览感更强。
+- **顶栏按钮位置对齐**：首页 `HomeHeader` 原来用 `CenterVertically`，右侧「排序胶囊 + ⋯」被「大标题 + 副标题」的多行块拽到中间，比日历 / 设置页的顶栏圆钮低一截。改成顶对齐，并把按钮组按 `PageChrome.ChipHeight`(34dp) 兜住、内部居中——三页按钮的上边缘与视觉中心落在同一条基线上。
+- **验证**：**458 项单测 / 56 份 XML / 0 failures·errors·skipped**（新增 `CalendarRepeatRenderTest` 6 项：四视图 × 重复事件真实组合渲染；新增 `RepeatTimedEventRenderTest` 10 项：每天/每周 × 全天/有时刻 × 时长/持续 × 表单往返 × 列表/详情/新建面板渲染）。**先用回退版复现到 `Key ... was already used` 三条失败，再恢复修复确认全绿**。lint release **0 errors / 15 warnings**；`assembleRelease` 成功；`verifyRuntimeNoticeCompleteness` 退出 0。
+- **最终 APK** `morrow-75-4.3.1-release.apk`：**5,313,569 B**，SHA-256 `459e88a8851ae8d00588964aae72e215139bfa8d50ce30add881c85e402dc53e`；aapt2 75 / 4.3.1 / minSdk 33 / targetSdk 37；证书 SHA-256 `8894605E…8D02` 同 68；8 份许可资产与源一致（`morrow.txt` = 根 `LICENSE`）；图像条目 0；`runtime.txt` 116,447 B / `d1508af0…1449` 未变。
+
 ## [2026-11-19] 4.3.0 (74)：修复与界面打磨 + 多天事件结束时刻 + 图标重绘
 
 > 4.2.0 的修复打磨版。修「有时长事件点列表闪退」、归档按钮统一、年视图缩小、顶栏高度统一、多天事件滚轮对齐、重绘图标。
 
-- **修「添加有时长的事件后点列表闪退」**：排查 `durationMinutes` 完整数据链路（领域模型 → Room → 备份/撤销 → 详情渲染）均安全——时长文案 `durationLabelOf` 无除零、详情页 `durationLabel` 有 null 兜底；新增 `EventDetailScreenTest` 组合渲染回归钉住「有时长事件打开详情不崩」。真机日志未复现（本机无 adb 设备），列为待真机确认。
+- **修「添加有时长的事件后点列表闪退」**：排查 `durationMinutes` 完整数据链路（领域模型 → Room → 备份/撤销 → 详情渲染）均安全——时长文案 `durationLabelOf` 无除零、详情页 `durationLabel` 有 null 兜底；新增 `EventDetailScreenTest` 组合渲染回归钉住「有时长事件打开详情不崩」。真机日志未复现（本机无 adb 设备），列为待真机确认。**> 更正（4.3.1）：真因是日历列表视图的 LazyColumn key 冲突（重复事件同月多条同 id），本条的链路排查不是根因，详见上一条。**
 - **归档按钮统一**：详情页「归档/恢复」从 34dp 文字按钮改成 56dp 圆钮（`DetailArchiveIcon`），与置顶/删除同尺寸同材质；未归档画「盒子+向下箭头」、已归档画「盒子+向上箭头」。
 - **日历年视图缩小**：`MonthCard` 内边距、格子高度（24→18dp）、字号整体下压一档，突出「预览」而非「完整日历」，一屏能多露几行摘要。
 - **顶栏按钮高度统一**：`GlassSegmentedControl` 默认高度 32→34dp，与首页排序胶囊、日历「今天」、各页圆钮对齐。

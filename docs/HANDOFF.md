@@ -1,9 +1,27 @@
 # HANDOFF — 朝夕 · 会话续接入口
 
 > 更新：2026-11-19。默认只读本文件和 [TODO](TODO.md)；历史、验收、发布细节按需查。
-> 当前状态：**4.3.0 / 74 代码完成，构建核验已过，发布进行中**。本批是 4.2.0 的修复打磨版：修「有时长事件点列表闪退」、归档按钮统一、日历年视图缩小、顶栏高度统一、多天事件滚轮对齐、图标重绘。已升版 `versionCode 74` / `versionName 4.3.0`；release APK 已出（5,313,569 B / `376dba9c…7455b`），aapt2 74/4.3.0、证书 `8894605E…8D02` 同 68、`runtime.txt` 116,447 B / `d1508af0…1449` 未变、`verifyRuntimeNoticeCompleteness` 退出 0、全量 **443 项 / 54 XML / 0 失败**、lint 0 errors / 15 warnings。上一版 4.2.0 / 73（tag `v4.2.0` 指向 `dd5e1ba`、Release `450282686`、资产 `morrow-73-4.2.0-release.apk` 5,313,701 B / `d1c02522…097d`）保留未动。**续接先读「#26」（本批）与「#24」（发布实录）。** 剩余：人工逐组件源码层版权审阅与真机验收（含 73→新版保数据升级）。
+> 当前状态：**4.3.1 / 75 代码完成，构建核验已过，发布进行中**。补丁版，修三件事：① **日历列表视图闪退真因**——`MonthListView` 的 LazyColumn key 只用事件 id，每天/每周（以及跨多天持续）事件在同一月产生多条同 id 条目，key 撞了 Compose 直接抛 `IllegalArgumentException` 杀进程；② 年视图改每行两个月（`GridCells.Fixed(2)` + `MonthCard` 再下压一档）；③ 首页顶栏「排序/⋯」改顶对齐，与日历/设置页按钮同基线。已升版 `versionCode 75` / `versionName 4.3.1`；release APK 已出（5,313,569 B / `459e88a8…c53e`），aapt2 75/4.3.1、证书 `8894605E…8D02` 同 68、`runtime.txt` 116,447 B / `d1508af0…1449` 未变、`verifyRuntimeNoticeCompleteness` 退出 0、全量 **458 项 / 56 XML / 0 失败**、lint 0 errors / 15 warnings。上一版 4.3.0 / 74（tag `v4.3.0` 指向 `f782a5e`、Release `450435913`、资产 `morrow-74-4.3.0-release.apk` 5,313,569 B / `376dba9c…7455b`）已正式发布。**续接先读「#27」（本批）与「#26」（4.3.0 实况）。** 剩余：人工逐组件源码层版权审阅与真机验收（列表视图不再闪退、年视图两列观感、顶栏齐平、74→75 保数据升级）。
 
-## #26 修复打磨 + 多天事件结束时刻 + 图标重绘（4.3.0 / 74，发布中）
+## #27 4.3.1 / 75：列表视图闪退真因 + 年视图两列 + 顶栏对齐（发布中）
+
+**用户指令**：有时间设置为每天或每周，进列表还是闪退；年视图改成每行两个月（共两列）；首页创建 / 三个点的按钮位置仍没和日历、设置界面对齐。
+
+**① 闪退真因（本批最重要）**：`ui/calendar/CalendarViews.kt` 的 `MonthListView`：
+```kotlin
+items(group.entries, key = { "e-${group.month}-${it.id}" })   // 旧：重复事件同月多条 → 撞 key
+items(group.entries, key = { "e-${group.month}-${it.date}-${it.id}" })  // 新
+```
+`MonthGroup.entries` 由 `marks.toSortedMap().flatMap { (date, list) -> list.map { entryOf(...) } }` 得到，**一个每天重复的事件一个月就有 30 条同 id 条目**；跨多天的持续事件同理。Compose 抛 `IllegalArgumentException: Key "e-2026-11-…" was already used`，进程直接被杀——这正是「进列表就闪退」。`MonthView` 选中日那一栏的 key 也一并带上日期兜底。
+> 4.3.0 之所以没修掉：当时只加了详情页渲染测试（`EventDetailScreenTest`），没覆盖日历列表视图，而 `HomeUiState` 侧有 `.catch`，异常到不了那里。
+
+**② 年视图两列**：`YearView` 的 `GridCells.Adaptive(160.dp)` → `GridCells.Fixed(2)`；`MonthCard` 内边距 10→8dp、格子 18→16dp、字号下压（14→13sp / 8→7.5sp / 9.5→9sp）。
+
+**③ 顶栏对齐**：`HomeHeader` 的 `Row` 由 `CenterVertically` 改 `Top`；右侧按钮组按 `PageChrome.ChipHeight`(34dp) 兜住并内部居中。原先多行标题块把按钮拽到中间，比其它页低一截。
+
+**回归测试**：`CalendarRepeatRenderTest`（6 项，四视图 × 重复事件真实组合渲染）、`RepeatTimedEventRenderTest`（10 项，每天/每周 × 全天/有时刻 × 时长/持续 × 表单往返 × 列表/详情/新建面板）。**做法：先回退 key 复现到 3 条 `Key ... was already used` 失败，再恢复修复确认全绿。**
+
+## #26 修复打磨 + 多天事件结束时刻 + 图标重绘（4.3.0 / 74，已发布）
 
 **用户指令**：修「添加有时长的事件后点击列表闪退」、归档按钮与旁边三钮协调、日历年视图板块缩小、首页排序/三个点按钮与其他界面顶栏高度统一、多天事件滚轮与开始时间保持一致、重绘非渐变线条分明的图标，然后发布一个 release。
 
