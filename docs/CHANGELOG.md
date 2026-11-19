@@ -27,6 +27,7 @@
 - **最终 APK** `morrow-77-4.4.1-release.apk`：**5,325,145 B**，SHA-256 `4ea97ff95ca0461e7c1e63dc9df74b8e5eb4022667b17ab781b6312e201d08dc`；
   aapt2 77 / 4.4.1 / minSdk 33 / targetSdk 37；证书 SHA-256 `8894605E…8D02`（同 68，可原位升级）；
   145 条目、**8 份许可资产**与源逐字节一致（`morrow.txt` = 根 `LICENSE`）、图像条目 0、`runtime.txt` 122,289 B / `478adc67…a8d6`。
+- **发布**：Release「朝夕 4.4.1」id `450909704`，`published_at` 2026-11-19T05:21:27Z；tag `v4.4.1` = `4186831`（代码+版本+文档），manifest 回填提交 `9bf0457`，main = `9bf0457`；`/releases/latest` 与 `update/manifest.json` 已回读一致。
 
 ## [2026-11-19] 4.4.0 (76)：顶栏三页同基线、月视图今天标记、小部件玻璃行、图标换设计、Glasmio 走 main
 

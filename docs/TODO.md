@@ -9,7 +9,7 @@
 - [x] **AAR 进仓库**：`vendor/glasmio-maven/` 6 模块 `.aar`/`.pom`/`.module`（6.3 MB / 18 文件），`settings.gradle.kts` 用 file Maven 仓替代 `mavenLocal()`，`scripts/build-glasmio.sh` 加 `sync`。
 - [x] **哈希改 LF**：`glasmioNoticeSha256` → `297bbf9d…`（= 上游 `030d31c` blob）；随包声明文件落盘 LF；`RuntimeNoticesAssetTest` 同步。
 - [x] **验证**：搬走 `~/.m2` 与 Gradle 依赖缓存后仍可解析；CI 在 `ca12bfd` 转绿；459 项 / 57 XML / 0 失败；lint 0/15；APK 5,325,145 B / `4ea97ff9…08dc`、77 / 4.4.1、8 份许可资产一致、图像 0、`runtime.txt` 122,289 B / `478adc67…a8d6`。
-- [x] **发布**：77 / 4.4.1 已发布；tag 与资产回下载 `cmp` 一致后转正式，`/releases/latest` 与 `update/manifest.json` 回读一致。
+- [x] **发布**：77 / 4.4.1 已发布——Release id `450909704`、`published_at` 2026-11-19T05:21:27Z、tag `v4.4.1` = `4186831`、main = `9bf0457`；资产回下载 `cmp` 一致后转正式，`/releases/latest` 与 `update/manifest.json` 回读一致。
 
 ## 4.4.0 / 76：顶栏同基线 · 月视图标记 · 小部件玻璃行 · 图标换设计 · Glasmio 走 main
 
