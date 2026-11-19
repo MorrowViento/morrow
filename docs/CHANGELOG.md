@@ -3,6 +3,21 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
+## [2026-11-19] 4.4.0 (76)：顶栏三页同基线、月视图今天标记、小部件玻璃行、图标换设计、Glasmio 走 main
+
+> 界面打磨版。三页顶栏按钮真正落在同一条基线上；月视图的今天圆圈不再压住事件点；小部件行卡片去掉纸白；
+> 图标换成「半日半月」；Glasmio 依赖从停更的 0.1.3 换成 main 源码；字体推荐外链删除。
+
+- **顶栏同基线**：新增 `ui/component/PageHeader.kt`（`PageHeaderRow` / `PageTitleSlot` / `PageHeaderActions`）。病根是三页都用 `CenterVertically`，而 Row 高度由最高子项决定——首页「34sp 大标题 + 副标题」、日历「17sp 标题 + 副标题」、设置单行 22sp，同一颗 34dp 圆钮被各自拽到不同位置。改成标题首行与按钮各占固定 46dp 的槽、槽内居中，按钮中心恒为 `HeaderTop(12) + 46/2 = 35dp`；日历右侧按钮间距 10→8dp。回归 `PageHeaderAlignmentTest` 量三种真实标题形态的按钮边界并断言全等。
+- **月视图今天标记**：旧实现画整格描边圆（直径约 36dp），而内容高约 34dp，圈底必然压住事件点。改成只包住日期数字的强调色圆角底（18% 强调色 + 7dp 圆角）+ 强调色数字；事件点固定占底部 6dp、最多 4 个、2.5dp 直径。年视图格子仅 16dp，改用「强调色 + 加粗」标今天，不画圆。
+- **小部件行卡片去纸白**：`widget_row_fill` 由 `#FFFFFFFF` 实心改为白色纵向 alpha 渐变（`E6→BF`）、圆角 26→22dp、描边降到 30% 白；`WidgetAppearance.rowTint` 加 0.62 不透明度上限（原本 `veilAlpha(opaque)` 会到 0.72，行卡等于实心白片）。在壁纸上呈磨砂玻璃，不再是贴纸。
+- **Glasmio 换 main 源码**：`vendor/glasmio` 为 submodule，固定在 main 的 `030d31c`（比 `v0.1.3` 多 30 个提交：insets / 安全区策略、玻璃渲染回退、popover / tooltip、菜单快照、导航过渡中断修复）。AGP 9 的 Android 库在 composite build 下变体匹配失败，改由 `scripts/build-glasmio.sh` 发布 `0.1.4-main` 到本机 Maven 仓库；构建新增 NDK 27.1.12297006 + CMake 3.22.1 依赖。
+- **图标换设计**：去掉「日轮 + 八道光芒 + 地平线 + 倒影」的插画式构图，改成几何分割圆——左半实心暖金 `#F3C56C`（朝）、右半同色 6dp 描边圆弧（夕），背景纯色 `#171728`；三份 drawable 同几何、无渐变，缩小到启动器尺寸也不糊。
+- **删除字体推荐外链**：移除 `FontSheet` 的「去哪里找字体」与四款 OFL 跳转、`AppFont.RecommendedFont` / `RECOMMENDED_FONTS`；导入引导、32 MB 上限、sfnt 校验、就地预览、授权提示保留。
+- **文档精简**：HANDOFF 359→约 150 行、TODO 176→约 90 行，历史批次收敛为一行索引并指向本文件；新增「Glasmio 源码同步」步骤与 `scripts/build-glasmio.sh`。
+- **验证**：**459 项单测 / 57 份 XML / 0 failures·errors·skipped**（新增 `PageHeaderAlignmentTest` 3 项，另随 glasmio 换源更新 `RuntimeNoticesAssetTest` 与 `WidgetAppearanceTest` 的事实断言）；lint release **0 errors / 15 warnings**；`assembleRelease` 与 `verifyRuntimeNoticeCompleteness` 均通过。
+- **最终 APK** `morrow-76-4.4.0-release.apk`：**5,322,913 B**，SHA-256 `8d5f7539a2fe9fe3085bf8997f0d6797095bcebe5787d2bb648b14f9571b2182`；aapt2 76 / 4.4.0 / minSdk 33 / targetSdk 37；证书 SHA-256 `8894605E…8D02`（自 68 未变，可原位升级）；145 条目、7 份许可资产与源一致（`morrow.txt` = 根 `LICENSE`）、图像条目 0；`runtime.txt` **116,929 B / `6b0dfaf0…92bc`**（较 4.3.1 增加 482 B：Glasmio main 的 Miuix 安全区用途声明 + 版本串）。
+
 ## [2026-11-19] 4.3.1 (75)：修日历列表视图闪退（重复事件撞 key）、年视图每行两个月、顶栏按钮真正对齐
 
 > 4.3.0 的补丁版。上一版「有时长事件点列表闪退」的**真正根因**在这里找到并修掉。
