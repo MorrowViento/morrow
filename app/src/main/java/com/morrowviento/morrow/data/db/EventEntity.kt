@@ -50,4 +50,6 @@ data class EventEntity(
     @ColumnInfo(name = "archived_at") val archivedAt: Long? = null,
     /** 预计时长（分钟），0 表示未指定；只影响时间块高度。 */
     @ColumnInfo(name = "duration_minutes", defaultValue = "0") val durationMinutes: Int = 0,
+    /** 子任务清单，JSON 数组：[{id, title, done}]。空串表示没有子任务。 */
+    @ColumnInfo(defaultValue = "''") val checklist: String = "",
 )

@@ -73,6 +73,10 @@ fun CalendarScreen(
     /** 还能不能往左 / 往右翻；到农历年表边界时为 false，滑动只被判为无效。 */
     canPrev: Boolean = false,
     canNext: Boolean = false,
+    /** 时间块视图：拖拽/长按拖出的区间新建事件。 */
+    onCreateRange: (java.time.LocalDate, Int, Int) -> Unit = { _, _, _ -> },
+    /** 时间块视图：拖块底边改时长。 */
+    onResizeEvent: (String, Int, Int) -> Unit = { _, _, _ -> },
 ) {
     val transition = updateTransition(state, label = "calendarSnapshot")
     Box(Modifier.fillMaxSize()) {
@@ -114,7 +118,17 @@ fun CalendarScreen(
                             selectDay = { if (active) actions.selectDay(it) },
                             openMonth = { if (active) actions.openMonth(it) },
                         )
-                        CalendarPage(snapshot, pageActions) { if (active) onOpenEvent(it) }
+                        CalendarPage(
+                            state = snapshot,
+                            actions = pageActions,
+                            onOpenEvent = { if (active) onOpenEvent(it) },
+                            onCreateRange = { date, start, end ->
+                                if (active) onCreateRange(date, start, end)
+                            },
+                            onResizeEvent = { id, start, end ->
+                                if (active) onResizeEvent(id, start, end)
+                            },
+                        )
                     }
                 }
             }
@@ -249,12 +263,14 @@ private fun CalendarPage(
     state: CalendarUiState,
     actions: CalendarActions,
     onOpenEvent: (String) -> Unit,
+    onCreateRange: (java.time.LocalDate, Int, Int) -> Unit,
+    onResizeEvent: (String, Int, Int) -> Unit,
 ) {
     when (state.view) {
         CalendarView.MONTH -> MonthView(state, actions, onOpenEvent)
         CalendarView.YEAR -> YearView(state, actions)
         CalendarView.LIST -> MonthListView(state, onOpenEvent)
-        CalendarView.TIMELINE -> TimelineView(state, onOpenEvent)
+        CalendarView.TIMELINE -> TimelineView(state, onOpenEvent, onCreateRange, onResizeEvent)
     }
 }
 
@@ -362,7 +378,7 @@ private fun CalendarHeader(
     }
 }
 
-/** 头部圆钮：玻璃材质自己的按压光学。 */
+/** 头部圆钮：按压反馈由 [GlassCirclePanel] 自绘（缩小 + 7% 薄高光），不走材质的按压光效。 */
 @Composable
 private fun NavButton(glyph: String, description: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
     val primary = glassTextPrimary()

@@ -20,6 +20,7 @@ import com.morrowviento.morrow.ui.category.CategoryViewModel
 import com.morrowviento.morrow.ui.event.EventActions
 import com.morrowviento.morrow.ui.event.EventViewModel
 import com.morrowviento.morrow.ui.home.HomeScreen
+import com.morrowviento.morrow.ui.home.NewEventRequest
 import com.morrowviento.morrow.ui.reminder.ReminderActions
 import com.morrowviento.morrow.ui.reminder.ReminderViewModel
 import com.morrowviento.morrow.ui.settings.SettingsActions
@@ -54,6 +55,15 @@ class MainActivity : ComponentActivity() {
      * 用自增计数而不是布尔量：连续点两次通知也要各收一次。
      */
     private val notificationEntries = MutableStateFlow(0L)
+
+    /**
+     * 长按图标的「新建」请求。
+     *
+     * 带自增序号而不是 Boolean：用户可能连着长按两次都选「新建待办」，
+     * 布尔量第二次不会变化，界面就不会再响应。
+     */
+    private val newEventRequest = MutableStateFlow<NewEventRequest?>(null)
+    private var newEventSerial = 0L
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,6 +113,8 @@ class MainActivity : ComponentActivity() {
             val reminders by reminderViewModel.state.collectAsStateWithLifecycle()
             val openDetail by pendingDetailId.collectAsStateWithLifecycle()
             val notificationEntry by notificationEntries.collectAsStateWithLifecycle()
+            // 长按图标的快捷新建请求。取个不同的名字，避免与 HomeScreen 的同名参数混淆。
+            val shortcutRequest by newEventRequest.collectAsStateWithLifecycle()
             val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
 
             // 系统栏图标跟着**应用内**的明暗走，不是跟着系统走。
@@ -137,6 +149,8 @@ class MainActivity : ComponentActivity() {
                     delete = viewModel::deleteEvent,
                     toggleCompleted = viewModel::toggleEventCompleted,
                     togglePinned = viewModel::togglePinned,
+                    toggleChecklist = viewModel::toggleChecklistItem,
+                    resizeDuration = viewModel::setDuration,
                     clearCompleted = viewModel::clearCompleted,
                     clearAll = viewModel::clearAll,
                     undo = viewModel::undoLast,
@@ -226,6 +240,7 @@ class MainActivity : ComponentActivity() {
                 openDetailRequest = openDetail,
                 onDetailRequestConsumed = { pendingDetailId.value = null },
                 closeOverlaysRequest = notificationEntry,
+                newEventRequest = shortcutRequest,
                 onEndFestivalPreview = settingsViewModel::clearFestivalPreview,
             )
         }
@@ -244,6 +259,21 @@ class MainActivity : ComponentActivity() {
 
     /** 冷启动与复用实例两条路径共用，避免只处理其中一条导致「点通知没反应」。 */
     private fun handleIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_NEW_EVENT -> {
+                newEventSerial += 1
+                newEventRequest.value = NewEventRequest(newEventSerial, allDay = false)
+            }
+            ACTION_NEW_TODO -> {
+                newEventSerial += 1
+                newEventRequest.value = NewEventRequest(newEventSerial, allDay = true)
+            }
+        }
+        // 消费掉 action：Activity 重建（旋转、深色模式切换）会重新走 onCreate，
+        // 不清掉的话会再弹一次新建面板。
+        if (intent?.action != null && intent.action!!.startsWith(ACTION_PREFIX)) {
+            intent.action = null
+        }
         pendingDetailId.value = intent?.getStringExtra(EXTRA_EVENT_ID)
         if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
             notificationEntries.value += 1
@@ -269,6 +299,11 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /** 新建类快捷方式的 action 前缀；只用于「消费后清空」，业务判定用下面两个完整值。 */
+        const val ACTION_PREFIX = "com.morrowviento.morrow.action."
+        const val ACTION_NEW_EVENT = "com.morrowviento.morrow.action.NEW_EVENT"
+        const val ACTION_NEW_TODO = "com.morrowviento.morrow.action.NEW_TODO"
+
         /** 通知 -> 详情页的事件 id 额外字段，与 [com.morrowviento.morrow.reminder.ReminderNotifier] 对齐。 */
         const val EXTRA_EVENT_ID = "event_id"
 

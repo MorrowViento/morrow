@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.domain.model.CountDirection
@@ -39,6 +41,7 @@ import com.morrowviento.morrow.ui.component.SectionTitle
 import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.component.WheelDateTimePicker
 import com.morrowviento.morrow.ui.glass.GlassSheet
+import com.morrowviento.morrow.ui.glass.glassAccent
 import com.morrowviento.morrow.ui.glass.SheetHeader
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
@@ -73,6 +76,12 @@ fun EventEditSheet(
     var customReminder by remember { mutableStateOf("") }
     /** 标签输入框内容。 */
     var tagInput by remember { mutableStateOf("") }
+    /** 子任务输入框内容。 */
+    var checklistInput by remember { mutableStateOf("") }
+    /** 自然语言输入框内容。 */
+    var naturalInput by remember { mutableStateOf("") }
+    /** 自然语言解析失败时的提示（与标题校验共用 error 样式）。 */
+    var naturalError by remember { mutableStateOf<String?>(null) }
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     val isEditing = form.id != null
@@ -115,6 +124,39 @@ fun EventEditSheet(
                     .padding(start = 18.dp, end = 18.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                    // 自然语言入口：一句话把日期/时刻/重复/时长都填好。
+                    // 故意不自动解析——中文歧义多，让用户看一眼结果再决定，
+                    // 比「边打字边改表单」更不容易把人吓到。
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        GlassTextField(
+                            value = naturalInput,
+                            onValueChange = {
+                                naturalInput = it
+                                naturalError = null
+                            },
+                            placeholder = "一句话：明天下午三点 开会 1 小时",
+                            error = naturalError,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ChoiceChip("解析", false) {
+                            val parsed = com.morrowviento.morrow.domain.time.NaturalDateParser.parse(naturalInput)
+                            if (!parsed.matched) {
+                                naturalError = "没认出时间，试试「明天下午三点」或「3 天后」"
+                            } else {
+                                naturalError = null
+                                // 合并规则全在 EventFormState.applyParsed 里（可单测），
+                                // 这里只管把结果写回并清空输入框
+                                form = form.applyParsed(parsed)
+                                // 解析成功后清空输入框：留着会让人以为标题也是它的一部分
+                                naturalInput = ""
+                            }
+                        }
+                    }
+
                     GlassTextField(
                         value = form.title,
                         onValueChange = { form = form.copy(title = it) },
@@ -322,11 +364,47 @@ fun EventEditSheet(
                         }
                     }
 
+                    // 子任务：把一件事拆成可勾的步骤。完整度会显示在卡片和详情页，
+                    // 但**不会**自动把事件标成已完成——完成与否仍由「标记完成」决定。
+                    val doneCount = form.checklist.count { it.done }
+                    SectionTitle(
+                        if (form.checklist.isEmpty()) {
+                            "子任务（可拆步骤，最多 ${com.morrowviento.morrow.domain.model.EventChecklist.MAX_COUNT} 条）"
+                        } else {
+                            "子任务（$doneCount/${form.checklist.size}）"
+                        },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        GlassTextField(
+                            value = checklistInput,
+                            onValueChange = {
+                                checklistInput = it.take(com.morrowviento.morrow.domain.model.EventChecklist.MAX_TITLE)
+                            },
+                            placeholder = "如 订机票、写邀请函",
+                            modifier = Modifier.weight(1f),
+                        )
+                        ChoiceChip("添加", false) {
+                            form = form.addChecklistItem(checklistInput)
+                            checklistInput = ""
+                        }
+                    }
+                    form.checklist.forEach { item ->
+                        ChecklistEditRow(
+                            item = item,
+                            onToggle = { form = form.toggleChecklistItem(item.id) },
+                            onRemove = { form = form.removeChecklistItem(item.id) },
+                        )
+                    }
+
                     // 时长只服务时间块视图：它决定块占多高。全天事件不需要（顶部整条就是它的位置）。
                     if (!form.isAllDay) {
                         SectionTitle("时长（时间块里占多高）")
                         ChipRow {
-                            listOf(30, 60, 90, 120, 240).forEach { minutes ->
+                            listOf(15, 30, 45, 60, 90, 120, 240).forEach { minutes ->
                                 ChoiceChip(durationText(minutes), form.durationMinutes == minutes) {
                                     form = form.withDuration(minutes)
                                 }
@@ -444,4 +522,66 @@ private fun com.morrowviento.morrow.domain.model.RepeatType.intervalUnit(): Stri
 private fun CountDirection.next(): CountDirection {
     val all = CountDirection.entries
     return all[(ordinal + 1) % all.size]
+}
+
+/**
+ * 编辑态的一条子任务。
+ *
+ * 整行可点（勾选/取消），右侧 ✕ 删除。勾选后标题加删除线并转次要色——
+ * 与「已完成事件」的视觉语言一致，不额外引入第三种状态色。
+ */
+@Composable
+private fun ChecklistEditRow(
+    item: com.morrowviento.morrow.domain.model.ChecklistItem,
+    onToggle: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val accent = glassAccent()
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .height(18.dp)
+                .width(18.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(if (item.done) accent.copy(alpha = 0.85f) else primary.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.done) {
+                Text(
+                    text = "✓",
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                )
+            }
+        }
+        Text(
+            text = item.title,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(
+                fontSize = 14.sp,
+                textDecoration = if (item.done) TextDecoration.LineThrough else null,
+            ),
+            color = if (item.done) secondary else primary,
+        )
+        Box(
+            modifier = Modifier
+                .height(24.dp)
+                .width(24.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "✕", style = TextStyle(fontSize = 11.sp), color = secondary)
+        }
+    }
 }

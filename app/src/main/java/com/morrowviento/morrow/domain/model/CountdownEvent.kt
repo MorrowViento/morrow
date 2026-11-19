@@ -81,8 +81,24 @@ data class CountdownEvent(
      * 只影响时间块的高度，不改变提醒与倒计时语义。
      */
     val durationMinutes: Int = 0,
+    /**
+     * 子任务清单（有序、可勾选）。存法与提醒一致：事件表一列 JSON，见 [EventChecklist]。
+     *
+     * 子任务**不改变**事件自身的完成语义：[isCompleted] 仍由「标记完成」动作决定。
+     * 全部子任务勾完不会自动把事件置为已完成——那会让「编辑一次标题」把完成态重置掉
+     * （`EventFormState.toEvent` 里 `isCompleted` 仍沿用 existing）。
+     */
+    val checklist: List<ChecklistItem> = emptyList(),
 ) {
     val isArchived: Boolean get() = archivedAt != null
+
+    /** 已勾选的子任务数。 */
+    val checklistDone: Int get() = checklist.count { it.done }
+
+    /** 子任务完成度（0..1）；空清单为 0。 */
+    val checklistProgress: Float get() = EventChecklist.progress(checklist)
+
+    val hasChecklist: Boolean get() = checklist.isNotEmpty()
 
     /** 时间块视图里这个事件占多高：未指定时长时用一个格的默认值。 */
     val blockMinutes: Int get() = if (durationMinutes > 0) durationMinutes else DEFAULT_BLOCK_MINUTES

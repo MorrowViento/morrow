@@ -1,25 +1,27 @@
 package com.morrowviento.morrow.ui.glass
 
-import com.morrowviento.morrow.ui.component.Text
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.neoruaa.glasmio.glass.GlassEmphasis
-import io.github.neoruaa.glasmio.ui.GlasmioButton
-import io.github.neoruaa.glasmio.ui.GlasmioButtonSize
+import com.morrowviento.morrow.ui.component.Text
 
 /**
- * 文字玻璃按钮（Glasmio 0.1.3 的 `GlasmioButton`）。
+ * 文字玻璃按钮（胶囊）。
  *
- * 为什么用它而不是自己拼 `GlassSurface`：`GlasmioButton` 已经带了完整的一套——
- * 高度 / 内边距 / 文字色（跟随玻璃明暗自适应）/ 按下时的折射光斑 / 禁用态降级
- * （`LocalGlassColors provides disabledButtonColors()`）。自己复刻只会各处跑偏。
+ * 原先直接用 Glasmio 的 `GlasmioButton`：高度 / 内边距 / 禁用态都省事，但**按压光效**
+ * 也一并交给了材质——那套是按大面板调的，28~34dp 的胶囊属于「小控件」，
+ * `pressOpacity` 直接满档、`Clear` 材质增益 3.33 倍，按下去整颗泛白。
+ * 4.5.0 起改用 [GlassPanel]（应用自绘按压，见 `rememberGlassPress`），
+ * 几何与字号照抄原实现，视觉只在「按下时」这一帧不同。
  *
- * @param active 选中态：用 `GlassEmphasis.Prominent`（iOS 的 tinted glass）代替
- *   「换一个背景色」，这样按下时的光斑仍然画在材质里。
- * @param compact 小号（28dp 档）用于头部这类密集位置，默认档高 34dp。
+ * @param active 选中态：走 `GlassEmphasis.Prominent`（iOS 的 tinted glass），
+ *   而不是换一个背景色——底色仍由材质给，边框与文字才跟着变。
+ * @param compact 小号（28dp 档）用于头部这类密集位置，默认档 34dp。
  */
 @Composable
 fun GlassTextButton(
@@ -30,12 +32,12 @@ fun GlassTextButton(
     enabled: Boolean = true,
     compact: Boolean = true,
 ) {
-    GlasmioButton(
+    GlassPanel(
+        modifier = modifier.height(if (compact) 28.dp else 34.dp),
+        capsule = true,
+        prominent = active,
         onClick = onClick,
-        modifier = modifier,
         enabled = enabled,
-        emphasis = if (active) GlassEmphasis.Prominent else GlassEmphasis.Regular,
-        size = if (compact) GlasmioButtonSize.Small else GlasmioButtonSize.Medium,
     ) {
         Text(
             text = text,
@@ -43,7 +45,11 @@ fun GlassTextButton(
             style = TextStyle(
                 fontSize = if (compact) 12.5.sp else 14.sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                // 禁用态：按原 Glasmio 的处理「压灰」，这里用主文字色的 38% 近似，
+                // 玻璃明暗两边都不需要另配一套灰
+                color = glassTextPrimary().copy(alpha = if (enabled) 1f else 0.38f),
             ),
+            modifier = Modifier.padding(horizontal = if (compact) 10.dp else 12.dp),
         )
     }
 }

@@ -112,6 +112,8 @@ fun HomeScreen(
     closeOverlaysRequest: Long = 0L,
     /** 结束设置页里的节日预览（首页标题下那行「预览 · 祝语」点了会调它）。 */
     onEndFestivalPreview: () -> Unit = {},
+    /** 长按图标的「新建」请求；null 表示没有待处理的请求。 */
+    newEventRequest: NewEventRequest? = null,
 ) {
     var backdropSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val listState = rememberLazyListState()
@@ -176,6 +178,14 @@ fun HomeScreen(
         val id = openDetailRequest ?: return@LaunchedEffect
         detailId = id
         onDetailRequestConsumed()
+    }
+
+    // 长按图标选「新建」：直接开表单。带序号，所以连按两次同一个快捷方式也会各开一次。
+    LaunchedEffect(newEventRequest) {
+        val request = newEventRequest ?: return@LaunchedEffect
+        editingForm = EventFormState.newEvent().let { base ->
+            if (request.allDay) base.withAllDay(true) else base
+        }
     }
 
     // 从通知进入时收起上一次留下的浮层。不清 detailId：真实提醒要靠 openDetailRequest 打开详情
@@ -259,6 +269,21 @@ fun HomeScreen(
                             actions = calendarActions,
                             onOpenEvent = { detailId = it },
                             onDismiss = { showCalendar = false },
+                            // 时间块里拖出来的区间直接进新建表单：日期、开始时刻、时长都带好，
+                            // 用户只需要补标题——「先划时间再想内容」比「先开表单再滚时间」顺
+                            onCreateRange = { date, startMinute, endMinute ->
+                                editingForm = EventFormState.newEvent(date).copy(
+                                    time = java.time.LocalTime.of(
+                                        (startMinute / 60).coerceAtMost(23),
+                                        startMinute % 60,
+                                    ),
+                                    durationMinutes = (endMinute - startMinute)
+                                        .coerceIn(15, 24 * 60),
+                                )
+                            },
+                            onResizeEvent = { id, startMinute, endMinute ->
+                                eventActions.resizeDuration(id, endMinute - startMinute)
+                            },
                         )
 
                         else -> Column(Modifier.fillMaxSize()) {
@@ -447,6 +472,7 @@ fun HomeScreen(
                             },
                             onToggleCompleted = { eventActions.toggleCompleted(card.id) },
                             onTogglePinned = { eventActions.togglePinned(card.id) },
+                            onToggleChecklist = { itemId -> eventActions.toggleChecklist(card.id, itemId) },
                             onArchive = {
                                 detailId = null
                                 if (card.isArchived) eventActions.unarchive(card.id) else eventActions.archive(card.id)
@@ -608,4 +634,17 @@ private val CategoryFilterSaver: Saver<CategoryFilter, String> = Saver(
             else -> CategoryFilter.Named(raw)
         }
     },
+)
+
+/**
+ * 外部（图标快捷方式）发起的「新建」请求。
+ *
+ * [serial] 每次请求自增：用 Boolean 的话，连续两次选同一个快捷方式时值没变，
+ * `LaunchedEffect` 不会重启，第二次就像没点到。
+ */
+@androidx.compose.runtime.Immutable
+data class NewEventRequest(
+    val serial: Long,
+    /** true = 待办（全天）；false = 事件（沿用当前时刻）。 */
+    val allDay: Boolean,
 )

@@ -47,11 +47,12 @@ data class TimelineDay(
 ) {
     val isEmpty: Boolean get() = allDay.isEmpty() && blocks.isEmpty()
 
-    /** 时间轴需要滚到哪一分钟（最早的事件前留半小时）；空的一天停在 08:00。 */
+    /** 时间轴需要滚到哪一分钟（最早的事件前一格）；空的一天停在 08:00。 */
     val scrollToMinute: Int
         get() {
             val first = blocks.minOfOrNull { it.startMinute } ?: return DEFAULT_SCROLL_MINUTE
-            return (first - 30).coerceIn(0, TimelineLayout.MINUTES_PER_DAY - 60)
+            // 对齐到 15 分钟，滚动后第一条网格线正好落在顶部
+            return TimelineLayout.snapClamped(first - TimelineLayout.SNAP_MINUTES)
         }
 
     private companion object {
@@ -71,8 +72,26 @@ object TimelineLayout {
 
     const val MINUTES_PER_DAY = 24 * 60
 
-    /** 画出来的块最短 20 分钟，否则 5 分钟的事会变成一条不可点的线。 */
-    const val MIN_BLOCK_MINUTES = 20
+    /**
+     * 时间轴的吸附粒度：15 分钟。
+     *
+     * 拖拽创建、拖边缘改时长都以它为步长——比 15 分钟更细的话，一小时只有 56dp 高，
+     * 一像素已经接近 1 分钟，手指根本点不准；比它更粗又会让「九点半」这种常见时间放不下。
+     */
+    const val SNAP_MINUTES = 15
+
+    /** 画出来的块最短 15 分钟（= 一格），否则短会会变成一条不可点的线。 */
+    const val MIN_BLOCK_MINUTES = SNAP_MINUTES
+
+    /** 把分钟吸附到 15 的整数倍（向下取整，落在格线上）。 */
+    fun snapMinute(minute: Int): Int {
+        val clamped = minute.coerceIn(0, MINUTES_PER_DAY - SNAP_MINUTES)
+        return clamped / SNAP_MINUTES * SNAP_MINUTES
+    }
+
+    /** 吸附后再夹进一天：拖到 23:58 也落在 23:45，不会溢出到次日。 */
+    fun snapClamped(minute: Int, min: Int = 0): Int =
+        snapMinute(minute).coerceIn(snapMinute(min), MINUTES_PER_DAY - SNAP_MINUTES)
 
     @Immutable
     data class LaneAssignment(val lane: Int, val laneCount: Int)

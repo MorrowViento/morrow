@@ -2,6 +2,7 @@ package com.morrowviento.morrow.data
 
 import com.morrowviento.morrow.data.db.EventMapper
 import com.morrowviento.morrow.domain.model.CountDirection
+import com.morrowviento.morrow.domain.model.ChecklistItem
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
 import com.morrowviento.morrow.domain.model.RepeatType
@@ -93,5 +94,23 @@ class EventMapperTest {
         assertEquals(0, EventMapper.decodeReminders("").size)
         assertEquals(0, EventMapper.decodeReminders("[]").size)
         assertEquals(0, EventMapper.decodeReminders("not json").size)
+    }
+
+    @Test
+    fun `子任务清单往返，脏 JSON 不让整条事件挂掉`() {
+        val withTasks = sample().copy(
+            checklist = listOf(
+                ChecklistItem(id = "c1", title = "订机票", done = true),
+                ChecklistItem(id = "c2", title = "确认酒店", done = false),
+            ),
+        )
+        val entity = EventMapper.toEntity(withTasks, zone)
+        assertEquals(withTasks.checklist, EventMapper.toDomain(entity, zone).checklist)
+
+        // 手改库塞进非法内容：只是这一列解不出来，事件本身仍可用
+        assertEquals(
+            emptyList<ChecklistItem>(),
+            EventMapper.toDomain(entity.copy(checklist = "{不是数组}"), zone).checklist,
+        )
     }
 }

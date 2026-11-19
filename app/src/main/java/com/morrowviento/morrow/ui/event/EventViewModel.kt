@@ -19,6 +19,7 @@ import com.morrowviento.morrow.ui.calendar.CalendarPresentation
 import com.morrowviento.morrow.ui.calendar.CalendarStrip
 import com.morrowviento.morrow.ui.calendar.CalendarUiState
 import com.morrowviento.morrow.ui.calendar.CalendarView
+import com.morrowviento.morrow.ui.calendar.TimelineLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.currentCoroutineContext
@@ -337,6 +338,51 @@ class EventViewModel(
                 reminders.cancel(id)
                 reminders.sync(updated)
             }
+        }
+    }
+
+    /**
+     * 时间块视图拖底边改时长。
+     *
+     * 刻意不进撤销队列：这是连续手势的终点，一次拖动理应只有一个结果，
+     * 若每松手一次就压一条撤销，撤销条会被「恢复 45 分钟」这类噪声塞满。
+     * 时长只影响块的观感，不改提醒与倒计时语义，因此也不需要重排闹钟。
+     */
+    fun setDuration(id: String, minutes: Int) {
+        val safe = minutes.coerceIn(
+            TimelineLayout.MIN_BLOCK_MINUTES,
+            CountdownEvent.MAX_DURATION_MINUTES,
+        )
+        mutate {
+            val event = events.findById(id) ?: return@mutate
+            if (event.durationMinutes == safe) return@mutate
+            events.save(event.copy(durationMinutes = safe))
+        }
+    }
+
+    /**
+     * 勾选 / 取消一条子任务。
+     *
+     * 只动 checklist 这一个字段：不改 `isCompleted`、不动提醒、不重排闹钟。
+     * 子任务是「步骤」，一件事做完了仍旧由「标记完成」显式确认；反过来，
+     * 全部勾完也不该在用户没点的情况下把事件挪进「已完成」区。
+     */
+    fun toggleChecklistItem(eventId: String, itemId: String) {
+        mutate {
+            val event = events.findById(eventId) ?: return@mutate
+            val item = event.checklist.firstOrNull { it.id == itemId } ?: return@mutate
+            val updated = event.copy(
+                checklist = event.checklist.map {
+                    if (it.id == itemId) it.copy(done = !it.done) else it
+                },
+            )
+            undo.clear()
+            events.save(updated)
+            pushUndo(
+                kind = UndoKind.TOGGLE_CHECKLIST,
+                message = "「${item.title}」${if (item.done) "已取消勾选" else "已勾选"}",
+                snapshot = listOf(event),
+            )
         }
     }
 

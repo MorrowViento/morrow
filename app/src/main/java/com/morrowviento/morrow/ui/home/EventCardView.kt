@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -120,6 +122,35 @@ fun EventCardView(
                         style = TextStyle(fontSize = 12.sp, color = primary.fade(0.75f)),
                     )
                 }
+                // 子任务：计数 + 一条细进度条。环已经在右侧徽章上，这里只补「拆了几步、
+                // 做完几步」这类没法用角度表达的信息。
+                if (card.hasChecklist) {
+                    Spacer(Modifier.height(5.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${card.checklistLabel} 子任务",
+                            style = TextStyle(fontSize = 11.sp, color = secondary),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(56.dp)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(primary.copy(alpha = 0.12f)),
+                        ) {
+                            if (card.checklistProgress > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(card.checklistProgress)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(primary.copy(alpha = 0.55f)),
+                                )
+                            }
+                        }
+                    }
+                }
                 // 多维标记：`#报销 #出差`。放最下面一行，不抢标题和日期的位置
                 if (card.tagLine.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
@@ -137,7 +168,12 @@ fun EventCardView(
     }
 }
 
-/** 右侧天数徽章；非重复事件在外圈画进度环，重复事件不画（进度无意义）。 */
+/**
+ * 右侧天数徽章，外圈是进度环。
+ *
+ * 4.5.0 起所有卡片都画环：重复事件（生日、纪念日）按「上次 → 下次」的周期算，
+ * 不再因为「重复」整类跳过——那恰好把最需要环的生日排除在外。
+ */
 @Composable
 private fun CountdownBadge(card: EventCardModel, dim: Float) {
     val primary = glassTextPrimary().dimBy(dim)
@@ -145,31 +181,29 @@ private fun CountdownBadge(card: EventCardModel, dim: Float) {
     val isToday = card.dayDelta == 0
 
     Box(modifier = Modifier.size(62.dp), contentAlignment = Alignment.Center) {
-        if (card.repeatType == com.morrowviento.morrow.domain.model.RepeatType.NONE) {
-            Canvas(Modifier.matchParentSize()) {
-                val stroke = 3.dp.toPx()
-                val inset = stroke / 2f
-                val arcSize = Size(size.width - stroke, size.height - stroke)
+        Canvas(Modifier.matchParentSize()) {
+            val stroke = 3.dp.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(
+                color = primary.fade(0.14f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke),
+            )
+            if (card.progress > 0f) {
                 drawArc(
-                    color = primary.fade(0.14f),
+                    color = primary.fade(0.8f),
                     startAngle = -90f,
-                    sweepAngle = 360f,
+                    sweepAngle = 360f * card.progress,
                     useCenter = false,
                     topLeft = Offset(inset, inset),
                     size = arcSize,
-                    style = Stroke(width = stroke),
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
                 )
-                if (card.progress > 0f) {
-                    drawArc(
-                        color = primary.fade(0.8f),
-                        startAngle = -90f,
-                        sweepAngle = 360f * card.progress,
-                        useCenter = false,
-                        topLeft = Offset(inset, inset),
-                        size = arcSize,
-                        style = Stroke(width = stroke, cap = StrokeCap.Round),
-                    )
-                }
             }
         }
         Column(

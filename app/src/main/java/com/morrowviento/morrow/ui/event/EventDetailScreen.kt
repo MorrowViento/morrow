@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -30,11 +31,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.component.PageChrome
 import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassSheet
+import com.morrowviento.morrow.ui.glass.glassAccent
 import com.morrowviento.morrow.ui.glass.glassTextPrimary
 import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import java.time.format.DateTimeFormatter
@@ -55,6 +58,8 @@ fun EventDetailScreen(
     onDelete: () -> Unit,
     /** 归档 / 取消归档。归档把事件移出首页与日历，但保留数据；与「完成」不是一回事。 */
     onArchive: () -> Unit = {},
+    /** 勾选 / 取消一条子任务。 */
+    onToggleChecklist: (String) -> Unit = {},
 ) {
     // 与新建/编辑面板同一套 UIKit 弹层：下拉关闭、滚动到顶继续上拉展开
     GlassSheet(title = "事件详情", onDismiss = onDismiss) { dismiss ->
@@ -95,6 +100,35 @@ fun EventDetailScreen(
                     InfoRow("创建", card.createdAt.format(CREATED_AT_FORMAT))
                     if (card.isCompleted) InfoRow("状态", "已完成")
                     card.archivedLabel?.let { InfoRow("归档", it) }
+
+                    // 子任务：能直接勾，不用进编辑面板。全部勾完也不会自动标完成——
+                    // 那一步仍要用户自己点「标记完成」，否则一条「编辑标题」就能把完成态吃掉。
+                    if (card.hasChecklist) {
+                        Spacer(Modifier.height(18.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "子任务",
+                                style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "${card.checklistDone}/${card.checklistTotal}",
+                                style = TextStyle(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = glassTextPrimary(),
+                                ),
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        card.checklist.forEach { item ->
+                            DetailChecklistRow(
+                                item = item,
+                                dim = if (card.isCompleted) 0.7f else 1f,
+                                onToggle = { onToggleChecklist(item.id) },
+                            )
+                        }
+                    }
 
                     if (card.note.isNotBlank()) {
                         Spacer(Modifier.height(16.dp))
@@ -304,4 +338,58 @@ private fun countdownHeadline(card: EventCardModel): String = when {
     card.dayDelta == 0 -> "就是今天"
     card.dayDelta > 0 -> "还有 ${card.dayDelta} 天"
     else -> "已过去 ${-card.dayDelta} 天"
+}
+
+/**
+ * 详情页的一条子任务：整行可点（勾选/取消），勾上后标题加删除线并转次要色。
+ *
+ * 与编辑面板里的 `ChecklistEditRow` 视觉一致，区别是这里**没有删除**——
+ * 详情页只做「推进度」，增删改成走编辑面板，避免误删。
+ */
+@Composable
+private fun DetailChecklistRow(
+    item: com.morrowviento.morrow.domain.model.ChecklistItem,
+    dim: Float,
+    onToggle: () -> Unit,
+) {
+    val accent = glassAccent()
+    val primary = glassTextPrimary()
+    val secondary = glassTextSecondary()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle)
+            .padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .height(18.dp)
+                .width(18.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(
+                    if (item.done) accent.copy(alpha = 0.85f) else primary.copy(alpha = 0.10f),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.done) {
+                Text(
+                    text = "✓",
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                )
+            }
+        }
+        Text(
+            text = item.title,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(
+                fontSize = 14.sp,
+                textDecoration = if (item.done) TextDecoration.LineThrough else null,
+            ),
+            color = (if (item.done) secondary else primary).let { if (dim >= 1f) it else it.copy(alpha = it.alpha * dim) },
+        )
+    }
 }

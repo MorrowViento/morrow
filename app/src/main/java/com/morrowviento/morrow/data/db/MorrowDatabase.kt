@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [EventEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class MorrowDatabase : RoomDatabase() {
@@ -69,9 +69,22 @@ abstract class MorrowDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 4.5.0：子任务清单。
+         *
+         * 一列 JSON（`[{id,title,done}]`），不建子表——与 `reminders` 同构，且能避开
+         * `EventDao.replaceAll()`（clear + upsertAll）留下的孤儿子项。旧行升级后清单为空，
+         * 卡片不显示子任务区，行为与升级前一致。
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE events ADD COLUMN checklist TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(context: Context): MorrowDatabase =
             Room.databaseBuilder(context, MorrowDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

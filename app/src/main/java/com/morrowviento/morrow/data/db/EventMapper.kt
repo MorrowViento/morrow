@@ -60,6 +60,7 @@ object EventMapper {
         tags = com.morrowviento.morrow.domain.model.EventTags.encode(event.tags),
         archivedAt = event.archivedAt?.atZone(zone)?.toInstant()?.toEpochMilli(),
         durationMinutes = event.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+        checklist = com.morrowviento.morrow.domain.model.EventChecklist.encode(event.checklist),
     )
 
     fun toDomain(
@@ -92,6 +93,7 @@ object EventMapper {
         tags = com.morrowviento.morrow.domain.model.EventTags.decode(entity.tags),
         archivedAt = entity.archivedAt?.let { toLocalDateTime(it, zone) },
         durationMinutes = entity.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+        checklist = com.morrowviento.morrow.domain.model.EventChecklist.decode(entity.checklist),
     )
 
     fun toLocalDateTime(millis: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDateTime =

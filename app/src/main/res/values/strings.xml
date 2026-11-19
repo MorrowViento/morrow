@@ -29,6 +29,10 @@
     <string name="widget_pin_failed">没能添加到桌面，请长按桌面空白处 → 小部件</string>
 
     <!-- 长按桌面图标弹出的快捷方式（静态 shortcut） -->
+    <string name="shortcut_new_event_short">新建事件</string>
+    <string name="shortcut_new_event_long">新建一条带时间的事件</string>
+    <string name="shortcut_new_todo_short">新建待办</string>
+    <string name="shortcut_new_todo_long">新建一条全天的待办</string>
     <string name="shortcut_widget_overview_short">总览小部件</string>
     <string name="shortcut_widget_overview_long">添加「朝夕 · 总览」到桌面</string>
     <string name="shortcut_widget_detail_short">单事件小部件</string>

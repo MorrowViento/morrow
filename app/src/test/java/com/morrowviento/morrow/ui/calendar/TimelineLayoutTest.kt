@@ -147,7 +147,7 @@ class TimelineLayoutTest {
 
         assertTrue(timeline.isEmpty)
         assertEquals(8 * 60, timeline.scrollToMinute)
-        // 有事件时停在第一个事件前半小时
-        assertEquals(9 * 60 - 30, TimelineLayout.build(listOf(event("a", 9)), day).scrollToMinute)
+        // 有事件时停在第一个事件前 15 分钟，并对齐到 15 分钟格线
+        assertEquals(9 * 60 - 15, TimelineLayout.build(listOf(event("a", 9)), day).scrollToMinute)
     }
 }

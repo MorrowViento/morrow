@@ -1,5 +1,6 @@
 package com.morrowviento.morrow.data.undo
 
+import com.morrowviento.morrow.domain.model.ChecklistItem
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
@@ -135,5 +136,34 @@ class UndoCodecTest {
             .atZone(java.time.ZoneId.systemDefault())
             .toLocalDateTime()
         assertEquals(expected, restored?.targetDate)
+    }
+
+    @Test
+    fun `子任务清单随撤销快照往返`() {
+        val event = sampleEvent().copy(
+            checklist = listOf(
+                ChecklistItem(id = "c1", title = "订机票", done = true),
+                ChecklistItem(id = "c2", title = "确认酒店"),
+            ),
+        )
+        val operation = UndoOperation(
+            id = "u-checklist",
+            kind = UndoKind.TOGGLE_CHECKLIST,
+            message = "已更新子任务",
+            snapshot = listOf(event),
+            expiresAtMillis = 1L,
+        )
+        val decoded = UndoCodec.decode(UndoCodec.encode(operation))
+        assertEquals(event.checklist, decoded?.snapshot?.single()?.checklist)
+        assertEquals(UndoKind.TOGGLE_CHECKLIST, decoded?.kind)
+    }
+
+    @Test
+    fun `旧版撤销快照没有子任务字段时解成空清单`() {
+        val raw = """
+            {"id":"u","kind":"DELETE","message":"m","expiresAt":1,
+             "events":[{"id":"e1","title":"t","targetDate":"2027-02-06T09:30:00","createdAt":"2026-11-01T20:15:00"}]}
+        """.trimIndent()
+        assertEquals(emptyList<ChecklistItem>(), UndoCodec.decode(raw)?.snapshot?.single()?.checklist)
     }
 }

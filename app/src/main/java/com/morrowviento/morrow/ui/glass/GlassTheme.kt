@@ -1,12 +1,18 @@
 package com.morrowviento.morrow.ui.glass
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -15,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.capsule.ContinuousRoundedRectangle
@@ -289,6 +296,47 @@ fun Modifier.glassContentSource(handle: GlassContentBackdrop): Modifier =
 
 
 /**
+ * 玻璃控件按下去的反馈：**由应用自己画，不交给材质**。
+ *
+ * 为什么不用 Glasmio 的按压光学：它是照 iOS 的「控件被按亮」做的，而那套亮度
+ * 是按**大控件**调的——`configureNativePressGlow` 里，尺寸 ≥120dp 的面板整套光效
+ * 只按 `0.3 - 0.1 × t` 出，而 <120dp 的小控件直接 `pressOpacity × 1.0` 满档；
+ * 配合 `nativePressDodgeGain` 在 `Clear` 材质下 1/(1-0.7) = **3.33 倍**增亮，
+ * 34dp 的排序胶囊、关闭 ✕ 一按下去就整块泛白，正好把玻璃最要紧的「通透」按没了。
+ *
+ * 现在小控件走这里：缩小 4.5% + 一层 7% 的主文字色（深色主题是白、浅色主题是近黑），
+ * 与 [com.morrowviento.morrow.ui.component.ChoiceChip] 用同一条弹簧曲线，
+ * 手感一致，但峰值只有几个百分点，不会盖掉背后的壁纸。
+ *
+ * @property modifier 需要接到 GlassSurface 上的手势层（缩放 + clickable）
+ * @property progress 0→1 的按压进度，用于画那层薄高光
+ */
+private class GlassPress(val modifier: Modifier, val progress: Float)
+
+@Composable
+private fun rememberGlassPress(enabled: Boolean, onClick: (() -> Unit)?): GlassPress {
+    if (onClick == null) return GlassPress(Modifier, 0f)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val progress by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        // dampingRatio 0.55 会留一点点回弹，与库的按压曲线同款
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 1200f, visibilityThreshold = 0.01f),
+        label = "glassPress",
+    )
+    val modifier = Modifier
+        .graphicsLayer {
+            // 缩小而不是放大：手指压下去，控件「沉」进玻璃里
+            val scale = 1f - 0.045f * progress
+            scaleX = scale
+            scaleY = scale
+        }
+        // 不用默认 ripple：它只按布局边界裁，会在圆角/圆形外面留一圈方块
+        .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
+    return GlassPress(modifier, progress)
+}
+
+/**
  * 玻璃面板：Glasmio 的核心材质控件（模糊 / 折射 / 高光）。
  *
  * backdrop 默认取 `LocalGlassBackdrop`，因此必须置于 [GlassBackdropHost]
@@ -308,9 +356,11 @@ fun Modifier.glassContentSource(handle: GlassContentBackdrop): Modifier =
  *   [capsule] / [cornerRadius]。
  * @param backdrop 显式采样源（底栏传 [GlassContentBackdrop]）。不传就沿用宿主的壁纸层——
  *   这正是「只有壁纸被采样」的老问题，见 [glassContentSource]。
- * @param onClick 非空即成为玻璃按钮：**按压光学直接由 Glasmio 材质绘制**
- *   （`GlassSurface` 内部是 `clickable(indication = null)` + 按压高光采样，
- *   因此天然没有 Material 的矩形 ripple）。点击后不会有任何 Material 指示器。
+ * @param onClick 非空即成为玻璃按钮。按压反馈**由本封装自己画**（缩小 4.5% + 7% 薄高光，
+ *   见 [rememberGlassPress]），不再交给材质的按压光效——那套是为大面板调的，
+ *   34dp 的小控件会被按成一整片白，通透感全丢。
+ *   点击同样不会有任何 Material ripple。只对「小控件」按得住；
+ *   整块大面板（例如可点的卡片）如果要更强的按压感，应自行在外层做。
  *
  * 这里**固定用 `NavigationGlassMaterial.Clear`**（示例里那张能看见壁纸的 Clear 卡）。
  * 翻源码可以看到另外三个材质的「面」有多实：
@@ -346,8 +396,11 @@ fun GlassPanel(
     val veil = glassVeil()
     val surfaceShape = shape ?: glassShape(capsule, cornerRadius)
     val surfaceBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
+    // 按压交给应用自己画（见 rememberGlassPress）：材质的按压光效在小控件上是满档的，会把玻璃按成白片
+    val press = rememberGlassPress(enabled, onClick)
+    val pressColor = glassTextPrimary()
     GlassSurface(
-        modifier = modifier,
+        modifier = modifier.then(press.modifier),
         backdrop = surfaceBackdrop,
         shape = surfaceShape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
@@ -355,7 +408,7 @@ fun GlassPanel(
         material = CLEAR_MATERIAL,
         // 连续的模糊半径：厚度档位真正改变光学的地方
         frostRadius = frostRadiusOf(LocalGlassFrost.current * frostScale),
-        onClick = onClick,
+        onClick = null,
         enabled = enabled,
         contentAlignment = contentAlignment,
     ) {
@@ -368,6 +421,15 @@ fun GlassPanel(
         // 之前 `tint` 直接把 veil 顶掉，导致「减弱透明 + 选中格」反而更透。
         if (tint != null) {
             Box(Modifier.matchParentSize().clip(surfaceShape).background(tint))
+        }
+        // 按压薄高光：7% 封顶，只够让「按到了」看得见，不足以糊掉背后的壁纸
+        if (press.progress > 0.005f) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(surfaceShape)
+                    .background(pressColor.copy(alpha = 0.07f * press.progress)),
+            )
         }
         content()
     }
@@ -396,15 +458,17 @@ fun GlassCirclePanel(
 ) {
     val veil = if (clear) null else glassVeil()
     val surfaceBackdrop = backdrop?.backdrop ?: LocalGlassBackdrop.current
+    val press = rememberGlassPress(enabled, onClick)
+    val pressColor = glassTextPrimary()
     GlassSurface(
-        modifier = modifier,
+        modifier = modifier.then(press.modifier),
         backdrop = surfaceBackdrop,
         shape = CircleShape,
         emphasis = if (prominent) GlassEmphasis.Prominent else GlassEmphasis.Regular,
         navigationSurfaceColor = accent,
         material = CLEAR_MATERIAL,
         frostRadius = frostRadiusOf(LocalGlassFrost.current * frostScale),
-        onClick = onClick,
+        onClick = null,
         enabled = enabled,
         contentAlignment = Alignment.Center,
     ) {
@@ -413,6 +477,14 @@ fun GlassCirclePanel(
         }
         if (tint != null) {
             Box(Modifier.matchParentSize().clip(CircleShape).background(tint))
+        }
+        if (press.progress > 0.005f) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(pressColor.copy(alpha = 0.07f * press.progress)),
+            )
         }
         content()
     }

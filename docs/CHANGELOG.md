@@ -3,6 +3,51 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
+## [2026-11-19] 4.5.0 (78)：子任务 · 时间轴 15 分钟粒度 · 拖拽建块 · 现在线 · 自然语言 · 进度环补全
+
+> 本批是「把倒计时用起来」的一版：一条事件可以拆成可勾选的子任务，时间轴能直接拖出新块并改时长，
+> 表单可以用一句中文把时间地点填好，倒计时环终于覆盖生日与待办。
+
+- **子任务 / checklist**：`events.checklist` 一列 JSON（`[{id,title,done}]`，上限 20 条、标题 60 字）。
+  没建子表，理由同提醒——数量有限，独立的表会让 `EventDao.replaceAll()` 的 clear + upsert 留下孤儿子项。
+  编码走 JSON 而不是标签那种逗号串：`EventTags.clean` 会把逗号换成空格，子任务标题里出现逗号就毁数据。
+  三处入口：新建/编辑面板可增删勾、详情页可勾（无删除）、首页卡片标题下显示「3/5 子任务」+ 细进度条。
+- **进度环三条轨道**（这版修的就是「生日没有进度条」）：① 待办且有子任务 → 勾选比例；② 重复事件 →
+  上一次发生 → 下一次发生的本周期走量；③ 其余 → 创建 → 目标。`EventCardView` 去掉「只有不重复才画环」
+  的旧限制，`HomeUiState` 新增 `cycleProgressOf()`。**系列还没发生过**（刚建的生日锚点在未来）时按间隔
+  往回退一个周期算起点，否则新建的生日环又是空的。
+- **每秒刷新不许打回**：`refreshClock` 原来一律用 `progressOf` 重算，会把上面两轨在一秒内打回旧语义；
+  改成「前两轨天内是常量、只推进第三轨」。
+- **时间轴 15 分钟粒度**：`SNAP_MINUTES = 15`、`MIN_BLOCK_MINUTES = 15`，网格从 48 条变 96 条（整点稍重）；
+  新建面板时长档位补 15 / 30 / 45 / 60 / 90 / 120 / 240。
+- **拖拽创建**：时间轴空白处长按 0.5 秒后纵向拖，拖出区间就开新建面板（起始时刻 + 时长已填好）。
+  用 `detectDragGesturesAfterLongPress` 而不是点按：点按会和纵向滚动抢手势，时间轴就滚不动了。
+- **拖动边缘调时长**：块底 14dp 把手，`detectDragGestures` 按像素换算分钟再吸附到 15 分钟。
+  这条**刻意不进撤销队列**——连续手势会产生几十条撤销，噪声大于价值。
+- **「现在」线**：左侧强调色时刻标签 + 横贯全宽 1.5dp 线，30 秒刷新一次。
+- **日期计算器农历可切年份**：`Stepper` 从 `enabled = false` 改为可 ±，夹在 `LunarCalendar.MIN_YEAR..MAX_YEAR`；
+  年份进 `remember` 状态并在基准日变化时跟随，不再每次从 `base` 现算。
+- **长按图标快捷新建**：`shortcuts.xml` 加 `new_event` / `new_todo` 两条静态快捷方式，
+  `MainActivity` 按 `intent.action` 分派，**消费后清空 action**（否则旋转屏幕会再弹一次）。
+- **自然语言输入**：`NaturalDateParser`（纯函数、无网络、可单测）。先长后短匹配并从工作串删除已匹配片段，
+  剩字即标题；认不出就 `matched = false` 让用户手填，绝不猜。「每周一三五」整体认（单独认会漏字）；
+  时段词修正小时（下午三点 → 15:00）；「初十」要单独判（`drop(1)` 拿到的是「十」，不在数字表里）。
+  合并规则收在 `EventFormState.applyParsed()`：只覆盖解析到的字段，标题只在空着时填。
+- **小按钮按压不再泛白**：根因不在 App，在 Glasmio 的按压光效——它按大面板调参，
+  <120dp 的小控件 `pressOpacity` 满档、`Clear` 材质增益 `1/(1-0.7) = 3.33` 倍，
+  34dp 的排序胶囊与关闭 ✕ 一按就整块白。`GlassPanel` / `GlassCirclePanel` 不再把 `onClick` 交给材质，
+  改由 `rememberGlassPress` 自绘（缩小 4.5% + 7% 主文字色薄高光，与 `ChoiceChip` 同一条弹簧）；
+  `GlassTextButton` 也从 `GlasmioButton` 换成同一套封装。
+- **存储变更**：Room **schema 5 → 6**（`MIGRATION_5_6`：`ALTER TABLE events ADD COLUMN checklist TEXT NOT NULL DEFAULT ''`）；
+  备份 **format 4 → 5**（可选字段，但旧版本会直接报「请先升级」，而不是静默丢子任务）；
+  `UndoCodec` 与 `UndoKind.TOGGLE_CHECKLIST` 同步。三条路径都做到「非空才写、解码宽松」。
+- **验证**：**514 项单测 / 0 失败**（新增 `EventChecklistTest` 12、`NaturalDateParserTest` 17、
+  `EventChecklistFormTest` 13、`CountdownRingTest` 8，并在 `EventMapperTest` / `BackupCodecTest` /
+  `UndoCodecTest` 各补子任务往返；`BackupRepositoryTest` 的 1→N 迁移用例补上 5→6 路径）。
+  lint release **0 errors / 15 warnings**；`assembleRelease` 与 `verifyRuntimeNoticeCompleteness` 通过。
+- **最终 APK** `morrow-78-4.5.0-release.apk`：**5,359,721 B**，SHA-256 `bdb0f872…53667a`；
+  证书 SHA-256 `8894605E…8D02`（自 68 未变，可原位升级）。
+
 ## [2026-11-19] 4.4.1 (77)：修构建链（Glasmio AAR 进仓库、许可哈希按 LF 锁定）
 
 > 纯工程修复，界面与功能同 4.4.0。4.4.0 的三次推送在 CI 上全红——依赖只存在于本机 `~/.m2`，

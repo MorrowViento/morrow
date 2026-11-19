@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +63,9 @@ fun DateCalculatorSheet(onDismiss: () -> Unit) {
     var offsetText by remember { mutableStateOf("30") }
     var lunarMonth by remember { mutableIntStateOf(1) }
     var lunarDay by remember { mutableIntStateOf(1) }
+    // 反查用的农历年。旧实现把它从 base 现算并禁用步进，于是「想查明年农历八月十五」
+    // 根本做不到；这里改成独立 state，并在 base 变化时跟随（用户没手动改过年时）
+    var lunarYear by remember { mutableIntStateOf(LunarCalendar.fromSolar(LocalDate.now())?.year ?: LocalDate.now().year) }
     // 0 = 都收起；1/2/3 表示展开哪一个日期滚轮（一次只展开一个，否则面板被三个滚轮占满）
     var expanded by remember { mutableIntStateOf(0) }
 
@@ -194,8 +198,11 @@ fun DateCalculatorSheet(onDismiss: () -> Unit) {
                         style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
                     )
                 }
-                // 反查：农历月 / 日 → 公历。年份取基准日所在农历年，避免再多一个滚轮。
-                val lunarYear = LunarCalendar.fromSolar(base)?.year ?: base.year
+                // 反查：农历年 / 月 / 日 → 公历。三个都能改——「明年农历八月十五是哪天」
+                // 是这个面板最常被问的问题，年份锁死等于把需求砍掉一半。
+                LaunchedEffect(base) {
+                    lunarYear = LunarCalendar.fromSolar(base)?.year ?: base.year
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -204,9 +211,12 @@ fun DateCalculatorSheet(onDismiss: () -> Unit) {
                     Text("农历", style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()))
                     Stepper(
                         value = "$lunarYear 年",
-                        onMinus = {},
-                        onPlus = {},
-                        enabled = false,
+                        onMinus = {
+                            lunarYear = (lunarYear - 1).coerceAtLeast(LunarCalendar.MIN_YEAR)
+                        },
+                        onPlus = {
+                            lunarYear = (lunarYear + 1).coerceAtMost(LunarCalendar.MAX_YEAR)
+                        },
                     )
                     Stepper(
                         value = "${LunarCalendar.monthName(lunarMonth)}",
@@ -225,12 +235,14 @@ fun DateCalculatorSheet(onDismiss: () -> Unit) {
                         text = back?.let { "对应 ${DateMath.longLabel(it)}" } ?: "这一年没有这个农历日",
                         style = TextStyle(fontSize = 13.sp, color = glassTextPrimary()),
                     )
-                    if (back != null) {
-                        Text(
-                            text = "小月会取月末：农历三十遇上廿九天时按廿九过",
-                            style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
-                        )
-                    }
+                    Text(
+                        text = if (back != null) {
+                            "小月会取月末：农历三十遇上廿九天时按廿九过"
+                        } else {
+                            "闰月不单选：闰四月的日子按四月查（与生日规则一致）"
+                        },
+                        style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(

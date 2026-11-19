@@ -83,7 +83,7 @@ class CalendarRepeatRenderTest {
                             CalendarView.MONTH -> MonthView(ui, actions()) {}
                             CalendarView.YEAR -> YearView(ui, actions())
                             CalendarView.LIST -> MonthListView(ui) {}
-                            CalendarView.TIMELINE -> TimelineView(ui) {}
+                            CalendarView.TIMELINE -> TimelineView(ui, onOpenEvent = {}, onCreateRange = { _, _, _ -> }, onResizeEvent = { _, _, _ -> })
                         }
                     }
                 }

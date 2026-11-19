@@ -34,7 +34,13 @@ data class EventCardModel(
     val isAllDay: Boolean,
     val isCompleted: Boolean,
     val repeatType: com.morrowviento.morrow.domain.model.RepeatType,
-    /** 创建→目标的进度，0f..1f；仅非重复事件有效（重复事件恒为 0f）。 */
+    /**
+     * 进度环的值，0f..1f。
+     *
+     * 4.5.0 起是双轨的：待办且带子任务时是子任务完成度；重复事件（生日、纪念日）是
+     * 「上一次发生 → 下一次发生」的周期进度；其余仍是「创建 → 目标」的时间进度。
+     * 判定在 [EventPresentation.toCard] 里一次算完，UI 只管画。
+     */
     val progress: Float,
     /** 目标就在今天且未到时，形如 `03:24:15`；否则为 null。 */
     val remainingToday: String?,
@@ -65,9 +71,18 @@ data class EventCardModel(
     val archivedLabel: String? = null,
     /** 预计时长文案（「1 小时」）；未指定为 null。 */
     val durationLabel: String? = null,
+    /** 子任务清单（有序、可勾选）。空表示没有拆解步骤。 */
+    val checklist: List<com.morrowviento.morrow.domain.model.ChecklistItem> = emptyList(),
 ) {
     val isArchived: Boolean get() = archivedAt != null
     val days: Int get() = abs(dayDelta)
+    val hasChecklist: Boolean get() = checklist.isNotEmpty()
+    val checklistTotal: Int get() = checklist.size
+    val checklistDone: Int get() = checklist.count { it.done }
+    val checklistProgress: Float
+        get() = com.morrowviento.morrow.domain.model.EventChecklist.progress(checklist)
+    /** 子任务计数文案（「3/5」）；没有子任务为 null。 */
+    val checklistLabel: String? get() = if (hasChecklist) "$checklistDone/$checklistTotal" else null
 }
 
 /** 撤销条状态。[remainingSeconds] 由每秒时间源算出，用于展示剩余可撤销时间。 */
@@ -143,7 +158,14 @@ object EventPresentation {
         val target = coveringStart?.atTime(event.targetDate.toLocalTime())
             ?: RepeatRule.upcomingTarget(event, today)
         val dayDelta = com.morrowviento.morrow.domain.time.CalendarMath.daysUntil(target.toLocalDate(), today)
-        val progress = if ((event.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE)) 0f else progressOf(event.createdAt, target, now)
+        // 进度双轨：有子任务的待办看子任务完成度；重复事件看本周期走了多少；其余看创建→目标
+        val progress = when {
+            event.kind == com.morrowviento.morrow.domain.model.EventKind.TODO && event.hasChecklist ->
+                (event.checklistProgress * PROGRESS_STEPS).toInt() / PROGRESS_STEPS
+            event.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE ->
+                cycleProgressOf(event, target.toLocalDate(), today)
+            else -> progressOf(event.createdAt, target, now)
+        }
         // 进行中：按「这次到哪天结束」算剩余天数，卡片不再说「已经过了 N 天」
         val coveringEnd = if (event.isMultiDay) RepeatRule.coveringEnd(event, today) else null
         return EventCardModel(
@@ -184,7 +206,49 @@ object EventPresentation {
             archivedAt = event.archivedAt,
             archivedLabel = event.archivedAt?.let { archivedLabelOf(it, today) },
             durationLabel = durationLabelOf(event),
+            checklist = event.checklist,
         )
+    }
+
+    /**
+     * 重复事件的周期进度：上一个发生日 → 下一个发生日之间已经走了多少。
+     *
+     * 生日、纪念日这类每年重复的事件本来「创建→目标」的语义就不成立（目标每年被重算，
+     * 比例会年年从头跑），旧实现干脆不画环。这里改成按周期算：从上次发生到今天除以
+     * 整个周期长度，环才是「这一年过去了多少」。
+     *
+     * 上一个落点的求法：只在目标日前 400 天内回看（够覆盖 DAILY/WEEKLY/MONTHLY/YEARLY
+     * 各档一个周期），取最后一个早于目标日的发生；找不到就退回系列起点；
+     * **系列根本还没发生过**（刚建的生日，锚点就在未来）时按规则往回退一个周期——
+     * 否则新建的生日环又是空的，那正是这次要修的观感。
+     */
+    fun cycleProgressOf(
+        event: CountdownEvent,
+        next: LocalDate,
+        today: LocalDate,
+    ): Float {
+        val windowStart = maxOf(event.dateOnly, next.minusDays(400))
+        val previous = RepeatRule.occurrencesBetween(event, windowStart, next.minusDays(1)).lastOrNull()
+            ?: event.dateOnly.takeIf { it.isBefore(next) }
+            ?: previousCycleStart(event, next)
+            ?: return 0f
+        val total = java.time.temporal.ChronoUnit.DAYS.between(previous, next).toLong()
+        if (total <= 0L) return 1f
+        val elapsed = java.time.temporal.ChronoUnit.DAYS.between(previous, today).toLong()
+        val raw = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+        return (raw * PROGRESS_STEPS).toInt() / PROGRESS_STEPS
+    }
+
+    /** 按间隔往回退一个周期，作为「本周期起点」的兜底。 */
+    private fun previousCycleStart(event: CountdownEvent, next: LocalDate): LocalDate? {
+        val step = event.repeatInterval.coerceIn(1, CountdownEvent.MAX_REPEAT_INTERVAL).toLong()
+        return when (event.repeatType) {
+            com.morrowviento.morrow.domain.model.RepeatType.DAILY -> next.minusDays(step)
+            com.morrowviento.morrow.domain.model.RepeatType.WEEKLY -> next.minusWeeks(step)
+            com.morrowviento.morrow.domain.model.RepeatType.MONTHLY -> next.minusMonths(step)
+            com.morrowviento.morrow.domain.model.RepeatType.YEARLY -> next.minusYears(step)
+            com.morrowviento.morrow.domain.model.RepeatType.NONE -> null
+        }
     }
 
     /**
@@ -217,7 +281,15 @@ object EventPresentation {
         var patched: MutableList<EventCardModel>? = null
         for (index in cards.indices) {
             val card = cards[index]
-            val progress = if (card.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE) 0f else progressOf(card.createdAt, card.target, now)
+            // 只有「创建→目标」这一轨会随钟点走。另外两轨**天内是常量**：
+            // 子任务进度只在勾选时变，重复事件的周期进度只在跨日时变（跨日会整表重算）。
+            // 这里若一律用 progressOf 重算，会把双轨进度一秒打回旧语义——
+            // 生日环刚画好的弧线、待办环的勾选进度都会跳掉。
+            val progress = when {
+                card.kind == com.morrowviento.morrow.domain.model.EventKind.TODO && card.hasChecklist -> card.progress
+                card.repeatType != com.morrowviento.morrow.domain.model.RepeatType.NONE -> card.progress
+                else -> progressOf(card.createdAt, card.target, now)
+            }
             val remaining = remainingTodayOf(card.target, card.isAllDay, today, now)
             if (progress == card.progress && remaining == card.remainingToday) continue
             if (patched == null) patched = cards.toMutableList()

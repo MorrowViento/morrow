@@ -15,6 +15,35 @@
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      新建类快捷方式：长按图标就能直接开表单，不必先进应用再点 ＋。
+      静态 shortcut 的 intent 不支持 extra，只能靠 action 区分——所以两个动作各自独立。
+      「待办」走全天（只关心哪一天），「事件」沿用当前时刻（要开时间段）。
+    -->
+    <shortcut
+        android:enabled="true"
+        android:shortcutDisabledMessage="@string/shortcut_widget_disabled"
+        android:shortcutId="new_event"
+        android:shortcutLongLabel="@string/shortcut_new_event_long"
+        android:shortcutShortLabel="@string/shortcut_new_event_short">
+        <intent
+            android:action="com.morrowviento.morrow.action.NEW_EVENT"
+            android:targetClass="com.morrowviento.morrow.MainActivity"
+            android:targetPackage="com.morrowviento.morrow" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:shortcutDisabledMessage="@string/shortcut_widget_disabled"
+        android:shortcutId="new_todo"
+        android:shortcutLongLabel="@string/shortcut_new_todo_long"
+        android:shortcutShortLabel="@string/shortcut_new_todo_short">
+        <intent
+            android:action="com.morrowviento.morrow.action.NEW_TODO"
+            android:targetClass="com.morrowviento.morrow.MainActivity"
+            android:targetPackage="com.morrowviento.morrow" />
+    </shortcut>
+
     <shortcut
         android:enabled="true"
         android:shortcutDisabledMessage="@string/shortcut_widget_disabled"

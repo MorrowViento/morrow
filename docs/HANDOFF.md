@@ -2,12 +2,90 @@
 
 > 更新：2026-11-19。默认只读本文件与 [TODO](TODO.md)；历史批次查 [CHANGELOG](CHANGELOG.md)，
 > 许可归属查 [LICENSE-AUDIT](LICENSE-AUDIT.md)，人工验收查 [MANUAL-TEST](MANUAL-TEST.md)（该文件不代勾）。
-> 当前状态：**4.4.1 / 77 已正式发布（2026-11-19T05:21:27Z）**。内容与 4.4.0 一致，只修构建链（4.4.0 的 CI 三次推送全红）。
-> tag `v4.4.1` → `4186831`、Release「朝夕 4.4.1」id `450909704`、资产 `morrow-77-4.4.1-release.apk`
-> **5,325,145 B / `4ea97ff9…08dc`**（回下载 `cmp` 逐字节一致后才转正式）；提交链 `4186831`(代码+版本+文档)
-> → `9bf0457`(manifest)，main = `9bf0457`。CI 在 `ca12bfd` 与 `4186831` 两次推送均绿。
+> 当前状态：**4.5.0 / 78 已构建，待发布**（本地全绿，见下）。子任务、时间轴 15 分钟粒度、拖拽建块与改时长、
+> 「现在」线、农历年份可切、长按图标快捷新建、自然语言输入、小按钮按压去泛白、倒计时环三条轨道。
+> APK `morrow-78-4.5.0-release.apk` **5,359,721 B / `bdb0f872…53667a`**，证书同 68（可原位升级）。
+> 上一版 4.4.1 / 77 已发布（tag `v4.4.1` → `4186831`，Release `450909704`，资产 `4ea97ff9…08dc`）。
 > 构建链现状：`vendor/glasmio-maven/` 随仓库带 6 个 AAR，**不再依赖 `mavenLocal()`**；许可锁定哈希按仓库内 LF 字节算。
-> 上一版 4.4.0 / 76 已发布（Release `450858119`，资产 `8d5f7539…b2182`）。
+
+## #30 4.5.0 / 78：子任务 · 时间轴 15 分钟 · 拖拽 · 自然语言 · 进度环
+
+**用户指令**（一次十条）：子任务 / checklist、时间轴 15 分钟粒度、拖拽创建、拖动边缘调时长、
+一条「现在」线、日期计算器农历换算不能切年份、长按图标快捷新建、自然语言输入；
+排序与 ✕ 这类小按钮按下变很白、通透感差；生日倒计时环没有进度、待办也要有进度环。
+版本与方案由用户点选：**4.5.0 / 78**、**本地规则解析（非云端）**、**周期 + 子任务双轨**。
+
+### ① 子任务（本批最大一块）
+
+存 `events.checklist` 一列 JSON，不建子表——理由同提醒：上限 20 条，独立表会让 `EventDao.replaceAll()`
+（clear + upsertAll）在替换时留下孤儿子项。**不能照抄标签的逗号串**：`EventTags.clean` 会把逗号换成空格，
+子任务标题一含逗号就毁数据。编解码全在 `domain/model/EventChecklist.kt`：
+`clean`（压换行 / 截 60 字）→ `normalize`（丢空项 · 按标题忽略大小写去重 · 截 20 · **不重排**）→ `decode`（宽松）。
+入口三处：编辑面板增删勾、详情页勾选（无删除）、首页卡片「3/5 子任务」+ 56×3dp 细进度条。
+
+### ② 倒计时环三条轨道
+
+旧实现 `EventCardView` 里 `if (repeatType == NONE)` 直接把「每年重复」整类跳过，`HomeUiState` 又给重复事件
+固定 `0f`——所以生日、纪念日永远没有弧线。现在：
+
+1. 待办且有子任务 → `checklistProgress`；
+2. 重复事件 → `cycleProgressOf()`：上一个发生日 → 下一个发生日之间走了多少；
+3. 其余 → `progressOf(createdAt, target, now)`。
+
+**坑**：`refreshClock` 每秒重算时若一律用 `progressOf`，会把前两轨一秒打回旧语义（环刚画好又跳掉）。
+现在前两轨「天内是常量」、只推进第三轨。另一处：`RepeatRule.occurrencesBetween` 永远不在锚点之前产出，
+所以**刚建的生日**（锚点在未来）找不到上一个落点——按间隔往回退一个周期兜底，否则新环又是空的。
+
+### ③ 时间轴：15 分钟粒度 + 拖拽 + 现在线
+
+`TimelineLayout` 新增 `SNAP_MINUTES = 15` / `MIN_BLOCK_MINUTES = 15` / `snapClamped()`，网格 48 → 96 条（整点稍重）。
+空白处 **长按后纵向拖** 出区间即开新建面板（用 `detectDragGesturesAfterLongPress`，点按会和纵向滚动抢手势，
+时间轴就滚不动了）；块底 14dp 把手用 `detectDragGestures` 改时长，按像素换算分钟后吸附。
+改时长**刻意不进撤销队列**：连续手势会刷出几十条撤销，噪声大于价值。`NowLine` 改成左侧强调色时刻标签 + 1.5dp 横线，30 秒刷新。
+
+### ④ 自然语言（本地规则）
+
+`domain/time/NaturalDateParser.kt`，纯函数无 IO。先长后短匹配并**从工作串删除已匹配片段**：
+先吃掉「2026年1月1日」，才不会把里面的「1日」当时长或农历日；剩下的字就是标题。
+两个易错点：**「每周一三五」必须整体认**（先认「每周」会把「一」剩成标题，先认「周一」会丢掉重复类型）；
+**「初十」要单独判**（`drop(1)` 拿到的是「十」，不在 `CN_DIGITS` 里）。
+合并规则收在 `EventFormState.applyParsed()`：只覆盖解析到的字段、标题只在空着时填、改重复档位时清掉周几 / 农历。
+
+### ⑤ 小按钮按压泛白（根因在依赖里）
+
+不是 App 画了什么，是 Glasmio 的按压光效按**大面板**调参：`configureNativePressGlow` 里
+<120dp 的控件 `pressOpacity` 直接满档，而 `nativePressDodgeGain` 在 `Clear` 材质下是 `1/(1-0.7) = 3.33` 倍。
+于是 34dp 的排序胶囊、关闭 ✕ 一按就整块白，玻璃最要紧的通透感被按没了。
+修法在封装层：`GlassPanel` / `GlassCirclePanel` 不再把 `onClick` 交给材质，
+改用 `rememberGlassPress` 自绘（缩小 4.5% + 7% 主文字色薄高光，与 `ChoiceChip` 同一条弹簧曲线）；
+`GlassTextButton` 从 `GlasmioButton` 换成同一套，几何与字号照抄。**未改 submodule**，也没重新发布 AAR。
+
+### ⑥ 其余四项
+
+- **农历年份可切**：`DateCalculatorSheet` 的年份 `Stepper` 从 `enabled = false` 改为可 ±（夹在 `MIN_YEAR..MAX_YEAR`），
+  年份进 `remember` 状态并在基准日变化时跟随。
+- **长按图标快捷新建**：`res/xml/shortcuts.xml` 两条静态快捷方式（静态 shortcut 不支持 extra，所以用两个独立 action），
+  `MainActivity.handleIntent` 按 action 分派并**消费后清空**（否则旋转屏幕会再弹一次）。
+- **时长档位**：15 / 30 / 45 / 60 / 90 / 120 / 240。
+- **月视图 / 表单细节**：新建面板与时间轴的时长、区块最短高度都按 15 分钟对齐。
+
+### 存储与兼容
+
+- Room **schema 5 → 6**：`ALTER TABLE events ADD COLUMN checklist TEXT NOT NULL DEFAULT ''`；
+  `EventEntity` 的 `@ColumnInfo(defaultValue = "''")` 必须与迁移语句一致，否则打开库时 schema 校验直接抛。
+- 备份 **format 4 → 5**：字段可选，但旧版本读到更高版本会明确报「请先升级」，而不是静默丢掉子任务。
+- `UndoCodec` + `UndoKind.TOGGLE_CHECKLIST`；三条路径统一「非空才写、解码宽松」。
+
+### 验证
+
+- **514 项单测 / 0 失败**：新增 `EventChecklistTest`(12)、`NaturalDateParserTest`(17)、
+  `EventChecklistFormTest`(13)、`CountdownRingTest`(8)；`EventMapperTest` / `BackupCodecTest` /
+  `UndoCodecTest` 各补子任务往返；`BackupRepositoryTest` 的 1→N 迁移用例补 5→6 路径并断言 version 6。
+- 三处旧断言随语义更新：`TimelineLayoutTest`（滚动吸附 15 分钟）、`EventPresentationTest`
+  （重复事件不再恒 0，改断言 194/365）、`CalendarRepeatRenderTest`（`TimelineView` 新签名）。
+- lint release **0 errors / 15 warnings**；`assembleRelease`、`verifyRuntimeNoticeCompleteness` 均通过。
+- 注意：全量跑时 `UndoWindowTest` 偶发 `UncaughtExceptionsBeforeTest`（同 JVM 里别的测试漏出的异常），
+  单独跑或 `--rerun-tasks` 全绿——是**既有的跨测试污染**，与本批改动无关，但 CI 上再出现不要误判为回归。
 
 ## #29 4.4.1 / 77：修构建链（Glasmio AAR 进仓库 · 许可哈希按 LF 锁定）
 

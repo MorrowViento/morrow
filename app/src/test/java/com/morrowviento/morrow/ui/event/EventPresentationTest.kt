@@ -153,7 +153,7 @@ class EventPresentationTest {
     }
 
     @Test
-    fun progress_isClampedAndZeroForRepeats() {
+    fun progress_isClampedAndRepeatsUseCycleProgress() {
         val createdAt = LocalDateTime.of(2026, 1, 1, 0, 0)
         val target = LocalDateTime.of(2026, 1, 11, 0, 0)
 
@@ -165,7 +165,10 @@ class EventPresentationTest {
             "r", "生日", LocalDateTime.of(2020, 5, 1, 0, 0),
             repeatType = RepeatType.YEARLY, repeatMonth = 5, repeatDay = 1,
         )
-        assertEquals(0f, EventPresentation.toCard(repeat, today, now).progress, 0.001f)
+        // 4.5.0 起重复事件不再「一律 0」：环画的是本周期（上次 → 下次）走了多少。
+        // 2026-05-01 到 2027-05-01 共 365 天，今天 2026-11-11 已过 194 天 ≈ 0.53
+        val cycle = EventPresentation.toCard(repeat, today, now).progress
+        assertEquals(194f / 365f, cycle, 0.01f)
     }
 
     @Test

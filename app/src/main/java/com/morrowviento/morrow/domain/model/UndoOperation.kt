@@ -9,7 +9,7 @@ package com.morrowviento.morrow.domain.model
  *
  * 因此撤销动作只有一种实现（整批 upsert），不需要为每种操作各写一套回滚逻辑。
  */
-enum class UndoKind { DELETE, TOGGLE_COMPLETED, TOGGLE_PINNED, CLEAR_COMPLETED, CLEAR_ALL, TOGGLE_ARCHIVED, CLEAR_ARCHIVED }
+enum class UndoKind { DELETE, TOGGLE_COMPLETED, TOGGLE_PINNED, TOGGLE_CHECKLIST, CLEAR_COMPLETED, CLEAR_ALL, TOGGLE_ARCHIVED, CLEAR_ARCHIVED }
 
 /**
  * 待撤销操作。

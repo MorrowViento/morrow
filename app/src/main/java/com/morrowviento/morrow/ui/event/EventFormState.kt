@@ -54,6 +54,8 @@ data class EventFormState(
     val tags: List<String> = emptyList(),
     /** 预计时长（分钟），0 = 未指定。 */
     val durationMinutes: Int = 0,
+    /** 子任务清单（有序、可勾选）。保存时统一走 `EventChecklist.normalize`。 */
+    val checklist: List<com.morrowviento.morrow.domain.model.ChecklistItem> = emptyList(),
 ) {
     /** 落库用的目标时刻。 */
     val target: LocalDateTime
@@ -119,6 +121,7 @@ data class EventFormState(
             // 编辑不该顺手把事件从归档箱里捞出来：归档状态只由「归档 / 恢复」动作改变
             archivedAt = existing?.archivedAt,
             durationMinutes = if (isAllDay) 0 else durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+            checklist = com.morrowviento.morrow.domain.model.EventChecklist.normalize(checklist),
         )
     }
 
@@ -220,6 +223,70 @@ data class EventFormState(
     fun toggleTag(tag: String): EventFormState =
         if (tags.any { it == tag }) removeTag(tag) else addTag(tag)
 
+    /** 加一条子任务；空标题、重复标题、超过上限时原样返回（由调用方决定是否提示）。 */
+    fun addChecklistItem(raw: String): EventFormState {
+        val title = com.morrowviento.morrow.domain.model.EventChecklist.clean(raw)
+        if (title.isEmpty()) return this
+        if (checklist.size >= com.morrowviento.morrow.domain.model.EventChecklist.MAX_COUNT) return this
+        if (checklist.any { it.title.equals(title, ignoreCase = true) }) return this
+        val item = com.morrowviento.morrow.domain.model.ChecklistItem(
+            id = UUID.randomUUID().toString(),
+            title = title,
+        )
+        return copy(checklist = checklist + item)
+    }
+
+    fun removeChecklistItem(id: String): EventFormState =
+        copy(checklist = checklist.filterNot { it.id == id })
+
+    /**
+     * 把自然语言解析结果合进表单。
+     *
+     * 合并原则：**只有解析到的字段才覆盖**，没解析到的一律保留用户手填的值——
+     * 「明天下午三点 开会」不该顺手把用户已经选好的分类、提醒、子任务清掉。
+     *
+     * 三个细节：
+     * - 标题只在还空着时填：用户先写了标题再补一句时间，不能被解析出的残词顶掉；
+     * - 全天判定放这里而不是解析器里：解析器不知道表单原本是不是全天，
+     *   「没说时刻」只在**解析到了日期**时才该翻成全天；
+     * - 改了重复档位要把不相关的隐藏字段清掉（周几 / 农历），否则会带着
+     *   上次选的星期落库，变成一条「每年重复但带着周几」的怪事件。
+     */
+    fun applyParsed(parsed: com.morrowviento.morrow.domain.time.ParsedEventInput): EventFormState {
+        if (!parsed.matched) return this
+        val nextRepeat = parsed.repeatType.takeIf { it != RepeatType.NONE } ?: repeatType
+        val nextWeekdays = when {
+            nextRepeat != RepeatType.WEEKLY -> emptySet()
+            parsed.repeatWeekdays.isNotEmpty() -> parsed.repeatWeekdays
+            else -> repeatWeekdays
+        }
+        val merged = copy(
+            title = if (title.isBlank()) parsed.title else title,
+            time = parsed.time ?: time,
+            isAllDay = when {
+                parsed.time != null -> false
+                parsed.date != null -> parsed.isAllDay
+                else -> isAllDay
+            },
+            repeatType = nextRepeat,
+            repeatWeekdays = nextWeekdays,
+            repeatOnLunar = if (nextRepeat == RepeatType.YEARLY) repeatOnLunar else false,
+            repeatUntil = if (nextRepeat == RepeatType.NONE) null else repeatUntil,
+            durationMinutes = if (parsed.durationMinutes > 0) {
+                parsed.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES)
+            } else {
+                durationMinutes
+            },
+        )
+        // 走 withDate 而不是 copy：日历夹日（1 月 31 日 → 2 月 28 日）与
+        // 「开始日越过结束日就作废」这两条归一化都在它里面
+        return parsed.date?.let { merged.withDate(it) } ?: merged
+    }
+
+    /** 勾选/取消勾选某一项。只动 done，不重排——清单顺序由用户决定。 */
+    fun toggleChecklistItem(id: String): EventFormState =
+        copy(checklist = checklist.map { if (it.id == id) it.copy(done = !it.done) else it })
+
     /** 时长选择：点同一个值取消（回到「不指定」）。 */
     fun withDuration(minutes: Int): EventFormState = copy(
         durationMinutes = if (durationMinutes == minutes) 0 else minutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
@@ -251,6 +318,7 @@ data class EventFormState(
             createdAt = event.createdAt,
             tags = event.tags,
             durationMinutes = event.durationMinutes,
+            checklist = event.checklist,
         )
 
         /**

@@ -98,6 +98,22 @@ object UndoCodec {
         }
         event.archivedAt?.let { addProperty("archivedAt", it.toString()) }
         if (event.durationMinutes > 0) addProperty("durationMinutes", event.durationMinutes)
+        if (event.checklist.isNotEmpty()) {
+            add(
+                "checklist",
+                JsonArray().apply {
+                    event.checklist.forEach { item ->
+                        add(
+                            JsonObject().apply {
+                                addProperty("id", item.id)
+                                addProperty("title", item.title)
+                                addProperty("done", item.done)
+                            },
+                        )
+                    }
+                },
+            )
+        }
         addProperty("createdAt", event.createdAt.toString())
         add(
             "reminders",
@@ -195,6 +211,22 @@ object UndoCodec {
             archivedAt = parseDateTime(obj.string("archivedAt")),
             durationMinutes = (obj.int("durationMinutes") ?: 0)
                 .coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+            // 撤销同样不做 normalize：只丢空标题、保留原顺序与原 done
+            checklist = obj.get("checklist")
+                ?.takeIf { it.isJsonArray }
+                ?.asJsonArray
+                ?.mapNotNull { element ->
+                    val item = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                    val title = item.string("title")?.trim().orEmpty()
+                    if (title.isEmpty()) return@mapNotNull null
+                    com.morrowviento.morrow.domain.model.ChecklistItem(
+                        id = item.string("id")?.takeIf { it.isNotBlank() } ?: "c-${title.hashCode()}",
+                        title = title,
+                        done = item.bool("done") ?: false,
+                    )
+                }
+                ?.take(com.morrowviento.morrow.domain.model.EventChecklist.MAX_COUNT)
+                .orEmpty(),
         )
     }
 

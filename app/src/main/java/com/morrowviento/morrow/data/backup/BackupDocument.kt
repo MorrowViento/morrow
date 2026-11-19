@@ -77,6 +77,14 @@ data class BackupEvent(
     val archivedAt: String? = null,
     /** 预计时长（分钟），0 = 未指定。只影响时间块高度。 */
     val durationMinutes: Int = 0,
+    /** 子任务清单（4.5.0）。旧备份没有这一项 → 空列表。 */
+    val checklist: List<BackupChecklistItem> = emptyList(),
+)
+
+data class BackupChecklistItem(
+    val id: String,
+    val title: String,
+    val done: Boolean,
 )
 
 data class BackupReminder(
@@ -131,8 +139,13 @@ object BackupCodec {
 
     const val FORMAT = "morrow-backup"
 
-    /** 当前写入的版本。读到更高的版本说明备份来自更新的 App，拒绝而不是猜测。 */
-    const val CURRENT_VERSION = 4
+    /**
+     * 当前写入的版本。读到更高的版本说明备份来自更新的 App，拒绝而不是猜测。
+     *
+     * 4 → 5（4.5.0）：事件多了 `checklist` 子任务数组。字段本身是可选的，旧 App 读到会
+     * 静默忽略——但用户会以为「子任务也备份了」，所以宁可在旧版本上直接报「请先升级」。
+     */
+    const val CURRENT_VERSION = 5
 
     // ---------------------------------------------------------------- 编码
 
@@ -202,6 +215,23 @@ object BackupCodec {
         }
         event.archivedAt?.let { addProperty("archivedAt", it) }
         if (event.durationMinutes > 0) addProperty("durationMinutes", event.durationMinutes)
+        // 子任务写成对象数组：备份要能被人读懂，也要能只改其中一条
+        if (event.checklist.isNotEmpty()) {
+            add(
+                "checklist",
+                JsonArray().apply {
+                    event.checklist.forEach { item ->
+                        add(
+                            JsonObject().apply {
+                                addProperty("id", item.id)
+                                addProperty("title", item.title)
+                                addProperty("done", item.done)
+                            },
+                        )
+                    }
+                },
+            )
+        }
         addProperty("createdAt", event.createdAt)
         add(
             "reminders",
@@ -353,7 +383,27 @@ object BackupCodec {
             archivedAt = obj.stringOrNull("archivedAt")?.takeIf { parseTime(it) != null },
             durationMinutes = (obj.intOrNull("durationMinutes") ?: 0)
                 .coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+            checklist = decodeChecklist(obj.arrayOrNull("checklist")),
         )
+    }
+
+    /**
+     * 子任务：坏元素只丢自己，不让整条事件作废。
+     *
+     * 标题为空的项直接丢弃——它没有可展示的内容，留着只会在详情页出现一条点不动的空行。
+     */
+    private fun decodeChecklist(array: JsonArray?): List<BackupChecklistItem> {
+        if (array == null) return emptyList()
+        return array.mapNotNull { element ->
+            val item = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+            val title = item.stringOrNull("title")?.trim().orEmpty()
+            if (title.isEmpty()) return@mapNotNull null
+            BackupChecklistItem(
+                id = item.stringOrNull("id")?.takeIf { it.isNotBlank() } ?: "c-${title.hashCode()}",
+                title = title,
+                done = item.boolOrNull("done") ?: false,
+            )
+        }.take(com.morrowviento.morrow.domain.model.EventChecklist.MAX_COUNT)
     }
 
     private fun decodeReminders(array: JsonArray?): List<BackupReminder> {
@@ -504,6 +554,9 @@ object BackupMapper {
         tags = event.tags,
         archivedAt = event.archivedAt?.toString(),
         durationMinutes = event.durationMinutes,
+        checklist = event.checklist.map {
+            BackupChecklistItem(id = it.id, title = it.title, done = it.done)
+        },
     )
 
     fun toDomain(backup: BackupEvent): CountdownEvent? {
@@ -541,6 +594,11 @@ object BackupMapper {
             tags = com.morrowviento.morrow.domain.model.EventTags.normalize(backup.tags),
             archivedAt = backup.archivedAt?.let { BackupCodec.parseTime(it) },
             durationMinutes = backup.durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
+            checklist = com.morrowviento.morrow.domain.model.EventChecklist.normalize(
+                backup.checklist.map {
+                    com.morrowviento.morrow.domain.model.ChecklistItem(id = it.id, title = it.title, done = it.done)
+                },
+            ),
         )
     }
 

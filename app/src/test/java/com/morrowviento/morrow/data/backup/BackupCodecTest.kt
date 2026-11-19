@@ -1,6 +1,7 @@
 package com.morrowviento.morrow.data.backup
 
 import com.morrowviento.morrow.data.settings.AccentColor
+import com.morrowviento.morrow.domain.model.ChecklistItem
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
@@ -99,8 +100,8 @@ class BackupCodecTest {
             lastHandledOccurrence = java.time.LocalDate.of(2027, 3, 8))
         val raw = BackupCodec.encode(document(listOf(original)))
         val parsed = BackupCodec.decode(raw) as BackupParse.Ok
-        // 4.2.0 起格式版本是 3（新增重复间隔 / 星期 / 农历 / 结束日 / 持续区间）
-        assertEquals(4, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
+        // 4.5.0 起格式版本是 5（新增 checklists 子任务数组）；旧版本读高版本会明确要求升级
+        assertEquals(5, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
         assertEquals(original, BackupMapper.toDomain(parsed.document.events.single()))
         val legacy = BackupCodec.decode("""{"format":"morrow-backup","version":1,
             "events":[{"id":"old","targetDate":"2027-05-01T08:00","isCompleted":true,"isPinned":true,"repeatType":"YEARLY"}]}""") as BackupParse.Ok
@@ -310,5 +311,37 @@ class BackupCodecTest {
     fun `建议文件名带时间戳且是 json`() {
         val name = BackupFiles.suggestedName(LocalDateTime.of(2026, 11, 11, 18, 30))
         assertEquals("morrow-backup-20261111-1830.json", name)
+    }
+
+    @Test
+    fun `子任务清单随备份往返`() {
+        val withTasks = event().copy(
+            checklist = listOf(
+                ChecklistItem(id = "c1", title = "订机票", done = true),
+                ChecklistItem(id = "c2", title = "确认酒店", done = false),
+            ),
+        )
+        val raw = BackupCodec.encode(document(events = listOf(withTasks)))
+        val ok = BackupCodec.decode(raw) as BackupParse.Ok
+        val restored = BackupMapper.toDomain(ok.document.events.single())!!
+        assertEquals(withTasks.checklist, restored.checklist)
+        assertTrue(restored.hasChecklist)
+    }
+
+    @Test
+    fun `没有子任务的备份不写这个字段，旧备份导入仍为空清单`() {
+        // 非空才写：避免每份备份都拖着二十个空数组
+        val raw = BackupCodec.encode(document(events = listOf(event())))
+        assertTrue(!raw.contains("\"checklist\""))
+
+        val legacy = """
+            {"format":"morrow-backup","version":4,"exportedAt":"2026-11-11T18:30",
+             "appVersion":"4.4.0 (76)",
+             "events":[{"id":"e1","title":"生日","targetDate":"2027-03-08T00:00:00",
+                        "createdAt":"2026-01-02T09:30:00","isAllDay":true}],
+             "categories":["生活"],"widgets":[]}
+        """.trimIndent()
+        val ok = BackupCodec.decode(legacy) as BackupParse.Ok
+        assertEquals(emptyList<ChecklistItem>(), BackupMapper.toDomain(ok.document.events.single())!!.checklist)
     }
 }
