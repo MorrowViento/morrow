@@ -1,8 +1,8 @@
 # TODO — 朝夕 · 当前待办
 
 > 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)；历史实现见 [CHANGELOG](CHANGELOG.md)，许可归属见 [LICENSE-AUDIT](LICENSE-AUDIT.md)。
-> 当前状态：**4.6.0 / 79 已构建、全绿，待发布**——APK `morrow-79-4.6.0-release.apk`
-> 5,376,105 B / `3619711f…5023`，证书同 68（可原位升级）。
+> 当前状态：**4.6.0 / 79 已正式发布（2026-11-19T12:07:20Z）**——Release `451292263`、tag `v4.6.0` = `f130067`、
+> 资产 `morrow-79-4.6.0-release.apk` 5,376,105 B / `3619711f…5023`，证书同 68（可原位升级）。
 > 上一版 4.5.0 / 78 已正式发布（2026-11-19T09:59:53Z）：Release `451154161`、tag `v4.5.0` = `9043c9b`、
 > 资产 `morrow-78-4.5.0-release.apk` 5,359,721 B / `bdb0f872…53667a`。
 
@@ -17,7 +17,7 @@
 - [x] **顺带修掉的静默 bug**：`toggleEventCompleted` 只查 `active + completed`，纪念日搬段后主操作变成 no-op。统一走 `visibleCards()`。
 - [x] **存储**：Room schema **6→7**（`MIGRATION_6_7`）；备份 format **5→6**；`UndoCodec` 同步。
 - [x] **验证**：**542 项单测 / 0 失败**（新增 28）；lint **0 errors / 15 warnings**；`assembleRelease` + `verifyRuntimeNoticeCompleteness` 通过。
-- [ ] **发布 4.6.0 / 79**：提交 → 推送 main → 等 CI 绿 → 建 draft → 上传 `morrow-79-4.6.0-release.apk` → 回下载 `cmp` → 转正式 → 回填 `update/manifest.json`。
+- [x] **发布 4.6.0 / 79**：CI 在 `f130067` 转绿 → draft（id `451292263`）→ 上传 → API 与公网回下载均 `cmp` 逐字节一致 → 转正式（`published_at` 2026-11-19T12:07:20Z）→ 回填 `update/manifest.json`（`545d6c7`）。
 
 ## 4.5.0 / 78：子任务 · 时间轴 15 分钟 · 拖拽 · 自然语言 · 进度环
 
