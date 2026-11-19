@@ -2,14 +2,102 @@
 
 > 更新：2026-11-19。默认只读本文件与 [TODO](TODO.md)；历史批次查 [CHANGELOG](CHANGELOG.md)，
 > 许可归属查 [LICENSE-AUDIT](LICENSE-AUDIT.md)，人工验收查 [MANUAL-TEST](MANUAL-TEST.md)（该文件不代勾）。
-> 当前状态：**4.5.0 / 78 已正式发布（2026-11-19T09:59:53Z）**。子任务、时间轴 15 分钟粒度、拖拽建块与改时长、
-> 「现在」线、农历年份可切、长按图标快捷新建、自然语言输入、小按钮按压去泛白、倒计时环三条轨道。
-> tag `v4.5.0` → `9043c9b`（代码+文档）、Release「朝夕 4.5.0」id `451154161`、
-> 资产 `morrow-78-4.5.0-release.apk` **5,359,721 B / `bdb0f872…53667a`**
-> （回下载 `cmp` 逐字节一致后才转正式；`/releases/latest` 与 `update/manifest.json` 已回读一致）。
-> 提交链 `9043c9b`(代码+文档) → `9ce37c6`(manifest) → 本次(文档回填)；**tag 不等于 main 属正常**（4.1.1 起同例）。
-> 上一版 4.4.1 / 77：tag `v4.4.1` → `4186831`、Release `450909704`、资产 `4ea97ff9…08dc`。
+> 当前状态：**4.6.0 / 79 已构建，待发布**（本地全绿，见下）。纪念日「第 N 天」里程碑、首页纪念日独立成段、
+> 时间轴上下缘都能拖、轻点不再改时长（修 4.5.0 的 bug）。APK `morrow-79-4.6.0-release.apk`
+> **5,376,105 B / `3619711f…5023`**，证书同 68（可原位升级）。
+> 上一版 4.5.0 / 78 已正式发布（2026-11-19T09:59:53Z）：tag `v4.5.0` → `9043c9b`、Release `451154161`、
+> 资产 `morrow-78-4.5.0-release.apk` 5,359,721 B / `bdb0f872…53667a`（子任务、时间轴 15 分钟、拖拽建块、
+> 「现在」线、农历年份可切、快捷新建、自然语言、小按钮按压去泛白、倒计时环三轨）。
+> 更早：4.4.1 / 77（tag `v4.4.1` → `4186831`、Release `450909704`）。
 > 构建链现状：`vendor/glasmio-maven/` 随仓库带 6 个 AAR，**不再依赖 `mavenLocal()`**；许可锁定哈希按仓库内 LF 字节算。
+
+## #31 4.6.0 / 79：时间轴拖拽修复 · 纪念日里程碑 · 首页分区
+
+**用户指令**（一次三条）：时间轴上已有的事件很难触发拖拽改时间范围，而且点一下边缘会
+自动缩短十五分钟直到只剩 15min；能不能加「距离第一天过去 100 天 / 300 天提醒」这类功能；
+纪念日和待办分区域或分组显示。版本与入口位置由用户点选：**4.6.0 / 79**、**只在纪念日类型下显示里程碑**。
+
+### ① 时间轴拖拽：一个 bug + 一次重做
+
+旧实现是「块底 14dp 的把手 + `detectDragGestures`」，两个问题叠在一起：
+
+1. **难触发**：14dp 既窄又在块的最底部，小块（15 分钟只有 14dp 高）上几乎按不到；
+   而且只有下缘能改，用户想调「从几点开始」没有任何入口。
+2. **点一下就缩一格**：`detectDragGestures` 一旦超过 touch slop 就进 `onDragStart`，
+   于是轻点会被当成一次零位移拖动；`onDrag` 里逐帧 `roundToInt()` 再交给 `snapClamped`
+   吸附到 15 分钟格线，一像素的抖动就能把结束时间推到最近的格线——连点几下缩到 15 分钟。
+
+现在整块只有**一个**手势循环（`blockGestures`，`awaitEachGesture`）：
+
+- 按下位置落在上/下 18dp 判区：立即消费事件（避免外层滚动抢走），
+  累计位移 **≥ 8dp** 才 `onResizeStart`，否则抬起就是一次点按；
+- 落在中间区：不消费，纵向拖动交给 `verticalScroll`，抬起且未被取消才 `onTap`；
+- 判区宽度按 `min(18dp, max(10dp, 高度/3))` 取：15 分钟的块两条带正好铺满，
+  反正它本来也放不下「中间可点区」，轻点仍然能打开详情。
+
+拖动量的换算是**相对按下时的原值**（`ResizeDraft.baseStart/baseEnd`），不是逐帧累加：
+逐帧累加会把每帧取整的误差攒起来，慢速拖动时块会「跟不上手指」。
+上缘改开始时刻、下缘改结束时刻，两侧都保留至少一格。**上缘改动会重排闹钟**
+（`setTimeRange` 里时刻真的变了就 `cancel + sync`），否则挪了会议时间闹钟还按旧时刻响。
+
+### ② 纪念日里程碑
+
+`events.milestones` 一列逗号串（`EventMilestones`，上限 6 个 / 单值 ≤ 36500）。
+**用逗号串而不是 JSON**：内容是纯整数，没有 `EventTags.clean` 那种「清洗时吃掉分隔符」
+的风险，而逗号串在库里肉眼可读、迁移只需一行 `ALTER TABLE`。
+
+语义上它和 `reminders` 是两个维度，这点必须在代码里写清楚：
+
+- **提醒**回答「这一次还有多久开始」，锚点跟着重复规则往后走；
+- **里程碑**回答「从第一天算起走到第几天了」，锚点是**绝对**的，第 100 天一辈子只有一次。
+
+因此 `ReminderPlan.milestoneReminders()` 完全不碰 `RepeatRule`：起点取 `event.dateOnly`，
+时刻沿用 `reminderAnchor` 的时分（全天事件即 09:00）。已经过去的里程碑直接跳过——
+补发一条「40 天前你满 100 天了」只会让人困惑。
+
+**三个容易踩的点**：
+
+1. 里程碑不占用 `reminders` 的语义，但**要占闹钟槽位**。`MAX_ALARMS` 从
+   `2×5` 改成 `2×5 + 6 = 16`，否则排在最末尾的里程碑会用到超界槽位，
+   而 `cancel` 只扫到上界——闹钟留在系统里再也清不掉。`take(MAX_ALARMS)` 兜住总数。
+2. 通知的**完成/稍后按钮必须去掉**：完成对里程碑没有语义；稍后走
+   `ReminderPlan.isValidTarget`，那条校验只认重复规则的发生日，点「稍后」会静默失败。
+3. 接收器的**投递后对账必须跳过里程碑**，判据是 `EXTRA_MILESTONE_DAY > 0`：
+   `isValidTarget` 对里程碑必然为 false，不跳过就会把刚发出的通知立刻撤掉。
+
+### ③ 首页分两段（并顺带暴露一个 bug）
+
+`EventPartition` 加 `anniversaries`，`HomeUiState` 同步；`EventList` 先渲染「纪念日 · N」
+再渲染「待办 · N」，纪念日为空时整段不出现（不留空标题）。理由：两者读法不同——
+待办是「要做的事」，纪念日是「要记住的日子」，混排时排序会把它们按同一个「距离」
+维度打乱，用户得逐条读标题才知道哪张卡在说什么。
+
+纪念日卡片补一行「已经 137 天 · 第 300 天还有 163 天」。徽章上的「还有 N 天」说的是
+下一次周年，光看它分不清这是第几年。
+
+**顺带修掉一个真 bug**：`toggleEventCompleted` 用
+`state.value.active + state.value.completed` 按 id 找卡片。纪念日搬出 `active` 之后，
+这条链路直接 `?: return`——「点一下纪念日卡片的主操作」变成什么都不发生，
+而且**不会报错**。统一改走 `visibleCards()`（三段合并）。
+这类「拆分区」的改动一定要把所有「按 id 找卡片」的入口过一遍，否则会静默失效。
+
+### 存储与兼容
+
+- Room **schema 6 → 7**：`ALTER TABLE events ADD COLUMN milestones TEXT NOT NULL DEFAULT ''`；
+  `EventEntity` 的 `@ColumnInfo(defaultValue = "''")` 必须与迁移语句一字不差。
+- 备份 **format 5 → 6**：字段可选，但旧版本读到更高版本会明确报「请先升级」，
+  而不是静默丢掉里程碑。非空才写，旧备份导入仍为空列表。
+- `UndoCodec` 同步；三条路径都「非空才写、解码宽松」。
+
+### 验证
+
+- **542 项单测 / 0 失败**（较 4.5.0 的 514 增 28）：`EventMilestonesTest` 12（归一化/编解码/
+  派生值）、`ReminderPlanTest` 补里程碑 5（绝对锚点、不随年重复、过去不补发、
+  非纪念日不排、与普通提醒共享上限）、表单里程碑 4、`BackupCodecTest` 2、
+  `UndoCodecTest` 2、`EventMapperTest` 1、`EventPresentationTest` 3。
+- 三处既有测试随分区语义更新：`BackupRepositoryTest`（迁移路径补 6→7、version 断言 7）、
+  `EventViewModelTest`（取卡改成跨段 `allCards()`）、`CountdownRingTest`（纪念日段与待办段合并）。
+- lint release **0 errors / 15 warnings**；`assembleRelease`、`verifyRuntimeNoticeCompleteness` 通过。
 
 ## #30 4.5.0 / 78：子任务 · 时间轴 15 分钟 · 拖拽 · 自然语言 · 进度环
 

@@ -241,12 +241,30 @@ internal fun EventList(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 94.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // 纪念日单独一段：它和待办读法不同（「已经多少天 / 还有多久到」vs「要做的事」），
+        // 混排时用户得逐条读标题才知道这张卡在讲什么。为空时整段不出现，不留空标题。
+        if (state.anniversaries.isNotEmpty()) {
+            item(key = "anniversary-header") {
+                SectionLabel("纪念日 · ${state.anniversaries.size}")
+            }
+            items(state.anniversaries, key = { "anni-${it.id}" }) { card ->
+                EventCardView(card, onClick = { onOpenDetail(card.id) })
+            }
+        }
         item(key = "active-header") {
-            SectionLabel("进行中 · ${state.active.size}")
+            SectionLabel("待办 · ${state.active.size}")
         }
         if (state.active.isEmpty()) {
             item(key = "active-empty") {
-                SectionHint(if (searching) "没有匹配的进行中事件" else "暂无进行中的事件，点下方 ＋ 新建")
+                SectionHint(
+                    if (searching) {
+                        "没有匹配的进行中事件"
+                    } else if (state.anniversaries.isNotEmpty()) {
+                        "没有待办，只有纪念日"
+                    } else {
+                        "暂无进行中的事件，点下方 ＋ 新建"
+                    },
+                )
             }
         }
         items(state.active, key = { it.id }) { card ->

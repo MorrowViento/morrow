@@ -166,4 +166,30 @@ class UndoCodecTest {
         """.trimIndent()
         assertEquals(emptyList<ChecklistItem>(), UndoCodec.decode(raw)?.snapshot?.single()?.checklist)
     }
+
+    @Test
+    fun `里程碑随撤销快照往返`() {
+        val event = sampleEvent().copy(
+            kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+            milestones = listOf(100, 365),
+        )
+        val operation = UndoOperation(
+            id = "u-milestone",
+            kind = UndoKind.TOGGLE_ARCHIVED,
+            message = "已修改纪念日",
+            snapshot = listOf(event),
+            expiresAtMillis = 1L,
+        )
+        val decoded = UndoCodec.decode(UndoCodec.encode(operation))
+        assertEquals(event.milestones, decoded?.snapshot?.single()?.milestones)
+    }
+
+    @Test
+    fun `旧版撤销快照没有里程碑字段时解成空`() {
+        val raw = """
+            {"id":"u","kind":"DELETE","message":"m","expiresAt":1,
+             "events":[{"id":"e1","title":"t","targetDate":"2027-02-06T09:30:00","createdAt":"2026-11-01T20:15:00"}]}
+        """.trimIndent()
+        assertEquals(emptyList<Int>(), UndoCodec.decode(raw)?.snapshot?.single()?.milestones)
+    }
 }

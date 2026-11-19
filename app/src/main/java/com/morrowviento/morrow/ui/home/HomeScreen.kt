@@ -282,7 +282,7 @@ fun HomeScreen(
                                 )
                             },
                             onResizeEvent = { id, startMinute, endMinute ->
-                                eventActions.resizeDuration(id, endMinute - startMinute)
+                                eventActions.resizeDuration(id, startMinute, endMinute)
                             },
                         )
 

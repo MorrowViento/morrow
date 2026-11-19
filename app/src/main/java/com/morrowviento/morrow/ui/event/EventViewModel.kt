@@ -125,6 +125,7 @@ class EventViewModel(
         val events: List<CountdownEvent>,
         val mode: SortMode,
         val today: LocalDate,
+        val anniversaries: List<EventCardModel>,
         val active: List<EventCardModel>,
         val completed: List<EventCardModel>,
         val archived: List<EventCardModel>,
@@ -148,18 +149,24 @@ class EventViewModel(
         val cards = if (cached != null && cached.events === list && cached.mode == mode && cached.today == today) {
             // 同一份数据、同一排序、同一天：只把「今日剩余」推进一秒。
             // 两份列表都没变时连快照对象也不新建（一秒一个对象的垃圾也省了）。
+            val anniversaries = EventPresentation.refreshClock(cached.anniversaries, today, now)
             val active = EventPresentation.refreshClock(cached.active, today, now)
             val completed = EventPresentation.refreshClock(cached.completed, today, now)
             // 归档列表不参与秒级刷新：归档箱里不显示倒计时，原样复用即可
-            if (active === cached.active && completed === cached.completed) {
+            if (anniversaries === cached.anniversaries &&
+                active === cached.active && completed === cached.completed
+            ) {
                 cached
             } else {
-                CardsSnapshot(list, mode, today, active, completed, cached.archived)
+                CardsSnapshot(list, mode, today, anniversaries, active, completed, cached.archived)
             }
         } else {
             // 一次分区同时拿到三段：归档的事件本来就不该进「进行中 / 已完成」
             val parts = EventPresentation.partition(list, mode, today, now)
-            CardsSnapshot(list, mode, today, parts.active, parts.completed, parts.archived)
+            CardsSnapshot(
+                list, mode, today,
+                parts.anniversaries, parts.active, parts.completed, parts.archived,
+            )
         }
         snapshot = cards
 
@@ -168,6 +175,7 @@ class EventViewModel(
             ?.let { UndoUiState(message = it.message, remainingSeconds = it.remainingSeconds(nowMillis)) }
 
         HomeUiState(
+            anniversaries = cards.anniversaries,
             active = cards.active,
             completed = cards.completed,
             archived = cards.archived,
@@ -314,7 +322,9 @@ class EventViewModel(
     }
 
     fun toggleEventCompleted(id: String) {
-        val expected = (state.value.active + state.value.completed).firstOrNull { it.id == id } ?: return
+        // 必须把纪念日段也算上：4.6.0 起它不在 active 里，
+        // 只查 active 会让「点一下纪念日卡片上的主操作」变成一条静默 no-op
+        val expected = state.value.visibleCards().firstOrNull { it.id == id } ?: return
         mutate {
             val event = events.findById(id) ?: return@mutate
             if (event.isCompleted != expected.isCompleted || event.primaryAction != expected.primaryAction) return@mutate
@@ -342,21 +352,45 @@ class EventViewModel(
     }
 
     /**
-     * 时间块视图拖底边改时长。
+     * 时间块视图拖动上下缘改时间范围。
+     *
+     * 上缘动开始时刻、下缘动结束时刻，两者都落到「开始时刻 + 时长」上——这是事件模型里
+     * 唯一的时间表达，多天持续事件的跨度由 `endDate` 另行表达，这里不碰。
      *
      * 刻意不进撤销队列：这是连续手势的终点，一次拖动理应只有一个结果，
      * 若每松手一次就压一条撤销，撤销条会被「恢复 45 分钟」这类噪声塞满。
-     * 时长只影响块的观感，不改提醒与倒计时语义，因此也不需要重排闹钟。
+     *
+     * 但**必须重排闹钟**：上缘拖动改了开始时刻，提醒锚点跟着变，不同步的话
+     * 闹钟还停在旧时刻，用户会觉得「我把会议挪到十点，它九点就来叫我」。
      */
-    fun setDuration(id: String, minutes: Int) {
-        val safe = minutes.coerceIn(
-            TimelineLayout.MIN_BLOCK_MINUTES,
-            CountdownEvent.MAX_DURATION_MINUTES,
+    fun setTimeRange(id: String, startMinute: Int, endMinute: Int) {
+        val start = startMinute.coerceIn(
+            0,
+            TimelineLayout.MINUTES_PER_DAY - TimelineLayout.MIN_BLOCK_MINUTES,
+        )
+        val end = endMinute.coerceIn(
+            start + TimelineLayout.MIN_BLOCK_MINUTES,
+            TimelineLayout.MINUTES_PER_DAY,
         )
         mutate {
             val event = events.findById(id) ?: return@mutate
-            if (event.durationMinutes == safe) return@mutate
-            events.save(event.copy(durationMinutes = safe))
+            // 全天事件没有「几点开始」，轴上也不该出现它的块；真出现就当脏数据跳过
+            if (event.isAllDay) return@mutate
+            val time = java.time.LocalTime.of(start / 60, start % 60)
+            val duration = (end - start).coerceAtMost(CountdownEvent.MAX_DURATION_MINUTES)
+            val timeChanged = event.targetDate.toLocalTime() != time
+            if (!timeChanged && event.durationMinutes == duration) return@mutate
+            val updated = event.copy(
+                targetDate = event.targetDate.toLocalDate().atTime(time),
+                durationMinutes = duration,
+            )
+            events.save(updated)
+            if (timeChanged) {
+                withContext(Dispatchers.IO) {
+                    reminders.cancel(id)
+                    reminders.sync(updated)
+                }
+            }
         }
     }
 
@@ -516,6 +550,15 @@ class EventViewModel(
             }
         }
     }
+
+    /**
+     * 首页几段合起来的事件卡片。
+     *
+     * 纪念日在 4.6.0 从 `active` 拆出去单独成段，任何「按 id 找卡片」的逻辑
+     * 都必须走这里——散落的 `active + completed` 会漏掉整个纪念日段。
+     */
+    private fun HomeUiState.visibleCards(): List<EventCardModel> =
+        anniversaries + active + completed
 
     companion object {
         private const val TAG = "MorrowEventVM"

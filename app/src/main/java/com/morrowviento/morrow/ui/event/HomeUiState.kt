@@ -73,6 +73,14 @@ data class EventCardModel(
     val durationLabel: String? = null,
     /** 子任务清单（有序、可勾选）。空表示没有拆解步骤。 */
     val checklist: List<com.morrowviento.morrow.domain.model.ChecklistItem> = emptyList(),
+    /**
+     * 纪念日的「第 N 天」里程碑（已归一化、升序）。
+     *
+     * 只有 [kind] 是纪念日时才有值；待办带着里程碑是没有意义的，判定在 `toCard` 里做一次。
+     */
+    val milestones: List<Int> = emptyList(),
+    /** 从第一天数到今天过了几天；不是纪念日时为 null。 */
+    val elapsedDays: Long? = null,
 ) {
     val isArchived: Boolean get() = archivedAt != null
     val days: Int get() = abs(dayDelta)
@@ -83,6 +91,9 @@ data class EventCardModel(
         get() = com.morrowviento.morrow.domain.model.EventChecklist.progress(checklist)
     /** 子任务计数文案（「3/5」）；没有子任务为 null。 */
     val checklistLabel: String? get() = if (hasChecklist) "$checklistDone/$checklistTotal" else null
+    val hasMilestones: Boolean get() = milestones.isNotEmpty()
+    /** 「已经 137 天」；不是纪念日为 null。 */
+    val elapsedLabel: String? get() = elapsedDays?.let { "已经 $it 天" }
 }
 
 /** 撤销条状态。[remainingSeconds] 由每秒时间源算出，用于展示剩余可撤销时间。 */
@@ -95,6 +106,14 @@ data class UndoUiState(
 /** 首页状态。加载中、空态、错误态都在这一个结构里，避免页面里散落 boolean。 */
 @Immutable
 data class HomeUiState(
+    /**
+     * 纪念日单独一段。
+     *
+     * 它不是「另一种待办」：待办是「要做的事」（有截止、可勾完成），纪念日是
+     * 「要记住的日子」（已经过了多少天、还有多久到）。混在一张列表里，
+     * 排序会把两者按同一个「距离」维度打乱，用户得逐条读标题才知道哪张卡在说什么。
+     */
+    val anniversaries: List<EventCardModel> = emptyList(),
     val active: List<EventCardModel> = emptyList(),
     val completed: List<EventCardModel> = emptyList(),
     /**
@@ -108,15 +127,16 @@ data class HomeUiState(
     val error: String? = null,
     val undo: UndoUiState? = null,
 ) {
-    val isEmpty: Boolean get() = active.isEmpty() && completed.isEmpty()
+    val isEmpty: Boolean get() = anniversaries.isEmpty() && active.isEmpty() && completed.isEmpty()
     /** 归档箱不参与「总数」：它是收起来的东西，不是待处理的东西。 */
-    val totalCount: Int get() = active.size + completed.size
+    val totalCount: Int get() = anniversaries.size + active.size + completed.size
     val archivedCount: Int get() = archived.size
 }
 
 /** 一次分区的结果。用命名结构而不是 Pair：加归档后三元组再解构很容易错位。 */
 @Immutable
 data class EventPartition(
+    val anniversaries: List<EventCardModel> = emptyList(),
     val active: List<EventCardModel> = emptyList(),
     val completed: List<EventCardModel> = emptyList(),
     val archived: List<EventCardModel> = emptyList(),
@@ -140,9 +160,14 @@ object EventPresentation {
         // 它只是被收进抽屉。剩下的一批再按完成与否分两段。
         val (archivedEvents, visible) = events.partition { it.isArchived }
         val (doneEvents, activeEvents) = visible.partition { it.isCompleted }
+        // 纪念日从「进行中」里再拆一段：两者排序维度相同，但读法完全不同
+        val (anniversaryEvents, todoEvents) = activeEvents.partition {
+            it.kind == com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY
+        }
         val comparator = comparator(mode)
         return EventPartition(
-            active = activeEvents.map { toCard(it, today, now) }.sortedWith(comparator),
+            anniversaries = anniversaryEvents.map { toCard(it, today, now) }.sortedWith(comparator),
+            active = todoEvents.map { toCard(it, today, now) }.sortedWith(comparator),
             completed = doneEvents.map { toCard(it, today, now) }.sortedWith(comparator),
             // 归档箱按归档时刻倒序：最近收起来的在最上面（用时刻而不是文案排序）
             archived = archivedEvents
@@ -207,6 +232,13 @@ object EventPresentation {
             archivedLabel = event.archivedAt?.let { archivedLabelOf(it, today) },
             durationLabel = durationLabelOf(event),
             checklist = event.checklist,
+            // 待办的 milestones 一律按空处理：用户在表单里看不到那一区，卡片上更不该出现
+            milestones = event.activeMilestones,
+            elapsedDays = if (event.kind == com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY) {
+                event.elapsedDays(today)
+            } else {
+                null
+            },
         )
     }
 

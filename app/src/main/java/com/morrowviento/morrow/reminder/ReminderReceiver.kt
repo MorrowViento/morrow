@@ -60,6 +60,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val target = intent.getLongExtra(EXTRA_TARGET, 0L)
         val title = intent.getStringExtra(EXTRA_TITLE)
         val isAllDay = intent.getBooleanExtra(EXTRA_IS_ALL_DAY, false)
+        val milestoneDay = intent.getIntExtra(EXTRA_MILESTONE_DAY, 0)
 
         val actionName = intent.getStringExtra(EXTRA_PRIMARY_ACTION)
         val fastContent = target > 0L && !title.isNullOrBlank() && actionName != null
@@ -67,7 +68,9 @@ class ReminderReceiver : BroadcastReceiver() {
             val action = com.morrowviento.morrow.domain.model.EventPrimaryAction.entries.firstOrNull {
                 it.name == actionName
             } ?: com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE
-            app.reminderNotifier.show(eventId, title, isAllDay, minutes, target, receivedAt, action)
+            app.reminderNotifier.show(
+                eventId, title, isAllDay, minutes, target, receivedAt, action, milestoneDay,
+            )
         } else {
             // 旧闹钟缺少标题或动作类型时，从当前记录补齐，不能把合法提醒误判为过期内容。
             val event = app.eventRepository.findById(eventId) ?: return
@@ -89,11 +92,15 @@ class ReminderReceiver : BroadcastReceiver() {
                 app.reminderNotifier.cancel(eventId)
                 app.reminderScheduler.cancel(eventId)
             } else {
-                val staleContent = fastContent && (
+                // 里程碑的锚点不在重复规则的发生日里，isValidTarget 必然返回 false；
+                // 不跳过这段对账的话，刚发出的「第 100 天」通知会被自己立刻撤掉。
+                val staleContent = milestoneDay == 0 && fastContent && (
                     event.title != title || event.isAllDay != isAllDay ||
                         event.primaryAction.name != intent.getStringExtra(EXTRA_PRIMARY_ACTION)
                     )
-                if (staleContent || (target > 0L && !com.morrowviento.morrow.domain.time.ReminderPlan.isValidTarget(event, target))) {
+                val staleTarget = milestoneDay == 0 && target > 0L &&
+                    !com.morrowviento.morrow.domain.time.ReminderPlan.isValidTarget(event, target)
+                if (staleContent || staleTarget) {
                     app.reminderNotifier.cancel(eventId)
                 }
                 app.reminderScheduler.sync(event)
@@ -190,6 +197,9 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_IS_ALL_DAY = "is_all_day"
         const val EXTRA_PRIMARY_ACTION = "primary_action"
+
+        /** 非 0 表示「第 N 天」里程碑提醒；用于文案与跳过发生日校验。 */
+        const val EXTRA_MILESTONE_DAY = "milestone_day"
 
         const val SNOOZE_MINUTES = 10
     }

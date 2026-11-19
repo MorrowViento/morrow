@@ -172,6 +172,8 @@ class AlarmReminderScheduler(context: Context) : ReminderScheduler {
             .putExtra(ReminderReceiver.EXTRA_TITLE, item.title)
             .putExtra(ReminderReceiver.EXTRA_IS_ALL_DAY, item.isAllDay)
             .putExtra(ReminderReceiver.EXTRA_PRIMARY_ACTION, item.primaryAction.name)
+            // 0 表示普通提醒；非 0 是「第 N 天」里程碑，接收方靠它绕开发生日校验
+            .putExtra(ReminderReceiver.EXTRA_MILESTONE_DAY, item.milestoneDay)
 
     private fun snoozeIntent(eventId: String): Intent =
         Intent(appContext, ReminderReceiver::class.java)

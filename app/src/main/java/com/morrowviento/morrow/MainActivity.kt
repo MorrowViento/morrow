@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
                     toggleCompleted = viewModel::toggleEventCompleted,
                     togglePinned = viewModel::togglePinned,
                     toggleChecklist = viewModel::toggleChecklistItem,
-                    resizeDuration = viewModel::setDuration,
+                    resizeDuration = viewModel::setTimeRange,
                     clearCompleted = viewModel::clearCompleted,
                     clearAll = viewModel::clearAll,
                     undo = viewModel::undoLast,

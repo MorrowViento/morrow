@@ -3,6 +3,7 @@ package com.morrowviento.morrow.data
 import com.morrowviento.morrow.data.db.EventMapper
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.ChecklistItem
+import com.morrowviento.morrow.domain.model.EventKind
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
 import com.morrowviento.morrow.domain.model.RepeatType
@@ -111,6 +112,22 @@ class EventMapperTest {
         assertEquals(
             emptyList<ChecklistItem>(),
             EventMapper.toDomain(entity.copy(checklist = "{不是数组}"), zone).checklist,
+        )
+    }
+
+    @Test
+    fun `里程碑往返，脏编码不让整条事件挂掉`() {
+        val withMilestones = sample().copy(
+            kind = EventKind.ANNIVERSARY,
+            milestones = listOf(100, 300, 1000),
+        )
+        val entity = EventMapper.toEntity(withMilestones, zone)
+        assertEquals(withMilestones.milestones, EventMapper.toDomain(entity, zone).milestones)
+
+        // 手改库塞进非法 token：只丢那一项，事件本身仍然读得出来
+        assertEquals(
+            listOf(100),
+            EventMapper.toDomain(entity.copy(milestones = "100,abc"), zone).milestones,
         )
     }
 }

@@ -96,10 +96,14 @@ class EventViewModelTest {
         createdAt = LocalDateTime.of(2020, 1, 1, 12, 0),
     )
 
+    /** 卡片可能落在三段里的任一段（4.6.0 起纪念日单独一段），查全再断言。 */
+    private fun HomeUiState.allCards(): List<EventCardModel> =
+        anniversaries + active + completed + archived
+
     private suspend fun card(id: String, predicate: (EventCardModel) -> Boolean = { true }): EventCardModel =
         withTimeout(10_000) {
-            vm.state.first { state -> (state.active + state.completed).any { it.id == id && predicate(it) } }
-                .let { (it.active + it.completed).first { item -> item.id == id } }
+            vm.state.first { state -> state.allCards().any { it.id == id && predicate(it) } }
+                .allCards().first { item -> item.id == id }
         }
 
     @Test fun queuedDoubleAdvanceHandlesOneCycleAndUndoRestoresAnchor(): Unit = runBlocking {

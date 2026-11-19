@@ -210,4 +210,43 @@ class EventChecklistFormTest {
         assertEquals(60, after.durationMinutes)
         assertFalse(after.isAllDay)
     }
+
+    // ---- 纪念日里程碑 ----
+
+    @Test
+    fun `加里程碑按升序且可再次点掉`() {
+        val next = form().toggleMilestone(300).toggleMilestone(100)
+        assertEquals(listOf(100, 300), next.milestones)
+        assertEquals(listOf(100), next.toggleMilestone(300).milestones)
+    }
+
+    @Test
+    fun `非法的天数不进入表单`() {
+        val base = form()
+        assertEquals(base, base.toggleMilestone(0))
+        assertEquals(base, base.toggleMilestone(-100))
+        assertEquals(base, base.toggleMilestone(com.morrowviento.morrow.domain.model.EventMilestones.MAX_DAY + 1))
+    }
+
+    @Test
+    fun `里程碑超过上限时后加的被丢掉`() {
+        var next = form()
+        repeat(com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT + 2) {
+            next = next.toggleMilestone((it + 1) * 10)
+        }
+        assertEquals(
+            com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT,
+            next.milestones.size,
+        )
+    }
+
+    @Test
+    fun `保存时里程碑走归一化并带上纪念日类型`() {
+        val event = form()
+            .copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY)
+            .toggleMilestone(300)
+            .toEvent(existing = null)!!
+        assertEquals(listOf(300), event.milestones)
+        assertEquals(com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY, event.kind)
+    }
 }

@@ -14,7 +14,7 @@ data class EventActions(
     val clearAll: () -> Unit,
     val undo: () -> Unit,
     /** 时间块视图拖底边改时长：(事件 id, 新时长分钟)。 */
-    val resizeDuration: (String, Int) -> Unit = { _, _ -> },
+    val resizeDuration: (String, Int, Int) -> Unit = { _, _, _ -> },
     /** 详情页勾选子任务：(事件 id, 子任务 id)。 */
     val toggleChecklist: (String, String) -> Unit = { _, _ -> },
     /** 详情页点「编辑」时按 id 取回完整事件并转成表单状态。 */

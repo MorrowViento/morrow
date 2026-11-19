@@ -146,9 +146,11 @@ class CountdownRingTest {
             createdAt = LocalDateTime.of(2026, 11, 11, 15, 30),
         )
 
-        val cards = EventPresentation.partition(
+        // 4.6.0 起纪念日单独成段，这里两段合并后再按 id 查
+        val parts = EventPresentation.partition(
             listOf(birthday, todo, plain), SortMode.DISTANCE, today, now,
-        ).active
+        )
+        val cards = parts.anniversaries + parts.active
         val byId = cards.associateBy { it.id }
 
         // 同一天晚一秒刷新

@@ -105,6 +105,7 @@ class BackupRepositoryTest {
                 MorrowDatabase.MIGRATION_3_4,
                 MorrowDatabase.MIGRATION_4_5,
                 MorrowDatabase.MIGRATION_5_6,
+                MorrowDatabase.MIGRATION_6_7,
             )
             .allowMainThreadQueries().build()
         val updated = original.copy(isCompleted = false,
@@ -115,9 +116,9 @@ class BackupRepositoryTest {
         try {
             val repository = EventRepository(migrated.eventDao())
             assertEquals(original, repository.findById(original.id))
-            // 升级到 schema 6（子任务清单）：1→6 一步到位也要能过，
-            // 且旧行必须落在 checklist 的默认空串上——全量断言已含这条
-            assertEquals(6, migrated.openHelper.writableDatabase.version)
+            // 升级到 schema 7（子任务清单 + 纪念日里程碑）：1→7 一步到位也要能过，
+            // 且旧行必须落在两列的默认空串上——全量断言已含这条
+            assertEquals(7, migrated.openHelper.writableDatabase.version)
             repository.save(updated)
         } finally { migrated.close() }
         val reopened = open()

@@ -56,6 +56,8 @@ data class EventFormState(
     val durationMinutes: Int = 0,
     /** 子任务清单（有序、可勾选）。保存时统一走 `EventChecklist.normalize`。 */
     val checklist: List<com.morrowviento.morrow.domain.model.ChecklistItem> = emptyList(),
+    /** 纪念日的「第 N 天」里程碑。保存时走 `EventMilestones.normalize`。 */
+    val milestones: List<Int> = emptyList(),
 ) {
     /** 落库用的目标时刻。 */
     val target: LocalDateTime
@@ -122,6 +124,7 @@ data class EventFormState(
             archivedAt = existing?.archivedAt,
             durationMinutes = if (isAllDay) 0 else durationMinutes.coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
             checklist = com.morrowviento.morrow.domain.model.EventChecklist.normalize(checklist),
+            milestones = com.morrowviento.morrow.domain.model.EventMilestones.normalize(milestones),
         )
     }
 
@@ -283,6 +286,23 @@ data class EventFormState(
         return parsed.date?.let { merged.withDate(it) } ?: merged
     }
 
+    /**
+     * 切换一个里程碑：已选则取消，未选则加上。
+     *
+     * 不做「再点一下变成自定义」这类智能猜测——用户点 chips 就是想加/删这一个。
+     */
+    fun toggleMilestone(day: Int): EventFormState {
+        if (day !in 1..com.morrowviento.morrow.domain.model.EventMilestones.MAX_DAY) return this
+        val next = if (milestones.contains(day)) {
+            milestones.filterNot { it == day }
+        } else {
+            milestones + day
+        }
+        return copy(
+            milestones = com.morrowviento.morrow.domain.model.EventMilestones.normalize(next),
+        )
+    }
+
     /** 勾选/取消勾选某一项。只动 done，不重排——清单顺序由用户决定。 */
     fun toggleChecklistItem(id: String): EventFormState =
         copy(checklist = checklist.map { if (it.id == id) it.copy(done = !it.done) else it })
@@ -319,6 +339,7 @@ data class EventFormState(
             tags = event.tags,
             durationMinutes = event.durationMinutes,
             checklist = event.checklist,
+            milestones = event.milestones,
         )
 
         /**

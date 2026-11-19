@@ -101,6 +101,36 @@ fun EventDetailScreen(
                     if (card.isCompleted) InfoRow("状态", "已完成")
                     card.archivedLabel?.let { InfoRow("归档", it) }
 
+                    // 纪念日里程碑：只报「第几天到了没有」，不列具体公历日期——
+                    // 从起始日+天数就能算出来，而多一列日期会把这屏挤成台账
+                    if (card.hasMilestones) {
+                        Spacer(Modifier.height(18.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "里程碑",
+                                style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = card.elapsedLabel ?: "",
+                                style = TextStyle(fontSize = 11.sp, color = glassTextSecondary()),
+                            )
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        val elapsed = card.elapsedDays ?: 0L
+                        card.milestones.forEach { day ->
+                            val remain = day - elapsed
+                            InfoRow(
+                                label = "第 $day 天",
+                                value = when {
+                                    remain < 0 -> "已过"
+                                    remain == 0L -> "就是今天"
+                                    else -> "还有 $remain 天"
+                                },
+                            )
+                        }
+                    }
+
                     // 子任务：能直接勾，不用进编辑面板。全部勾完也不会自动标完成——
                     // 那一步仍要用户自己点「标记完成」，否则一条「编辑标题」就能把完成态吃掉。
                     if (card.hasChecklist) {

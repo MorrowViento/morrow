@@ -197,9 +197,10 @@ class ReminderPlanTest {
             zone,
         )
 
-        // 两次落点 × 五条提醒 = 上限，避免无限堆积闹钟
-        assertEquals(ReminderPlan.MAX_ALARMS, plan.size)
+        // 两次落点 × 五条提醒 = 10，避免无限堆积闹钟；
+        // 上限本身是 16（额外留给 6 个里程碑），所以这里断言「恰好 10 且不超上限」
         assertEquals(10, plan.size)
+        assertTrue(plan.size <= ReminderPlan.MAX_ALARMS)
     }
 
     @Test
@@ -252,5 +253,82 @@ class ReminderPlanTest {
         val triggers = plan.map { it.triggerAtMillis }
         assertEquals(triggers.sorted(), triggers)
         assertEquals(listOf(1440, 180, 60, 0), plan.map { it.minutesBefore })
+    }
+
+    // ---- 里程碑（第 N 天） ----
+
+    private fun anniversary(
+        start: java.time.LocalDate,
+        milestones: List<Int>,
+        reminders: List<EventReminder> = emptyList(),
+    ) = CountdownEvent(
+        id = "a1",
+        title = "在一起",
+        targetDate = start.atTime(9, 0),
+        reminders = reminders,
+        isAllDay = true,
+        kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+        milestones = milestones,
+        createdAt = start.atTime(9, 0),
+    )
+
+    @Test
+    fun milestoneFiresOnAbsoluteDayFromStart() {
+        // 起点 2026-01-01，第 100 天 = 2026-04-11
+        val plan = ReminderPlan.upcoming(
+            anniversary(java.time.LocalDate.of(2026, 1, 1), listOf(100)),
+            millis(LocalDateTime.of(2026, 3, 1, 0, 0)),
+            zone,
+        )
+        assertEquals(1, plan.size)
+        assertEquals(100, plan.single().milestoneDay)
+        assertEquals(LocalDateTime.of(2026, 4, 11, 9, 0), local(plan.single().targetAtMillis))
+        // 里程碑没有「完成」动作，通知上也不该出现按钮
+        assertEquals(
+            com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE,
+            plan.single().primaryAction,
+        )
+    }
+
+    @Test
+    fun milestoneDoesNotRepeatWithYearlyEvent() {
+        // 每年重复的纪念日，第 100 天仍然只有一个，不该按「今年 + 明年」各排一次
+        val event = anniversary(java.time.LocalDate.of(2026, 1, 1), listOf(100))
+            .copy(repeatType = RepeatType.YEARLY, repeatMonth = 1, repeatDay = 1)
+        val plan = ReminderPlan.upcoming(event, millis(LocalDateTime.of(2026, 3, 1, 0, 0)), zone)
+        assertEquals(1, plan.count { it.milestoneDay == 100 })
+    }
+
+    @Test
+    fun pastMilestonesAreSkippedInsteadOfCaughtUp() {
+        // 已经过了第 100 天：不补发，也不因此少排第 300 天
+        val plan = ReminderPlan.upcoming(
+            anniversary(java.time.LocalDate.of(2026, 1, 1), listOf(100, 300)),
+            millis(LocalDateTime.of(2026, 8, 1, 0, 0)),
+            zone,
+        )
+        assertEquals(listOf(300), plan.map { it.milestoneDay })
+    }
+
+    @Test
+    fun milestonesAreIgnoredForNonAnniversaryKinds() {
+        // 待办带着里程碑（用户把类型改回待办后常见）不该排任何提醒
+        val todo = anniversary(java.time.LocalDate.of(2026, 1, 1), listOf(100))
+            .copy(kind = com.morrowviento.morrow.domain.model.EventKind.TODO)
+        val plan = ReminderPlan.upcoming(todo, millis(LocalDateTime.of(2026, 3, 1, 0, 0)), zone)
+        assertTrue(plan.isEmpty())
+    }
+
+    @Test
+    fun milestonesAndNormalRemindersShareTheAlarmBudget() {
+        // 5 条提醒 × 2 落点 + 6 个里程碑 = 16，正是槽位上限；再多也只能排到上限为止
+        val event = anniversary(
+            java.time.LocalDate.of(2026, 1, 1),
+            List(com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT) { (it + 1) * 10 },
+            reminders = minutes(0, 10, 30, 60, 1440),
+        ).copy(repeatType = RepeatType.YEARLY, repeatMonth = 1, repeatDay = 1)
+        val plan = ReminderPlan.upcoming(event, millis(LocalDateTime.of(2026, 1, 2, 0, 0)), zone)
+        assertTrue(plan.size <= ReminderPlan.MAX_ALARMS)
+        assertTrue(plan.any { it.milestoneDay > 0 })
     }
 }

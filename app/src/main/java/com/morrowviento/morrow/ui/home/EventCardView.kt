@@ -151,6 +151,33 @@ fun EventCardView(
                         }
                     }
                 }
+                // 纪念日：补一句「已经 N 天」+ 下一个里程碑还剩多久。
+                // 徽章上的「还有 194 天」说的是下一次周年，光看它分不清这是第几年。
+                if (card.kind == com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY) {
+                    Spacer(Modifier.height(5.dp))
+                    val elapsed = card.elapsedDays
+                    val next = card.milestones.firstOrNull { it >= (elapsed ?: 0L) }
+                    Text(
+                        text = buildString {
+                            if (elapsed != null) {
+                                append("已经 ")
+                                append(elapsed)
+                                append(" 天")
+                            }
+                            if (next != null && elapsed != null) {
+                                append(" · ")
+                                if (next.toLong() == elapsed) {
+                                    append("今天第 $next 天")
+                                } else {
+                                    append("第 $next 天还有 ${next - elapsed} 天")
+                                }
+                            }
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(fontSize = 11.sp, color = secondary),
+                    )
+                }
                 // 多维标记：`#报销 #出差`。放最下面一行，不抢标题和日期的位置
                 if (card.tagLine.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))

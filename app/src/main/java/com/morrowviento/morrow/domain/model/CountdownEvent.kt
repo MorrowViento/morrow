@@ -89,8 +89,40 @@ data class CountdownEvent(
      * （`EventFormState.toEvent` 里 `isCompleted` 仍沿用 existing）。
      */
     val checklist: List<ChecklistItem> = emptyList(),
+    /**
+     * 「第 N 天」里程碑（见 [EventMilestones]）。只在 [kind] 为 [EventKind.ANNIVERSARY] 时生效。
+     *
+     * 与 [reminders] 是两个维度：提醒跟着重复规则走，里程碑的锚点是**绝对**的
+     * （第 100 天一辈子只有一次），因此不参与重复推导。
+     */
+    val milestones: List<Int> = emptyList(),
 ) {
     val isArchived: Boolean get() = archivedAt != null
+
+    /**
+     * 真正会排提醒的里程碑：非纪念日一律空。
+     *
+     * 存的时候不按类型过滤（用户可能把纪念日改回待办又改回来，里程碑不该在这一步被抹掉），
+     * 但**排期与展示只看这个**——待办带着「第 100 天」是没有意义的。
+     */
+    val activeMilestones: List<Int>
+        get() = if (kind == EventKind.ANNIVERSARY) milestones else emptyList()
+
+    /** 从第一天数到今天过了几天（当天为 0）。纪念日卡片上的「已经 137 天」用它。 */
+    fun elapsedDays(today: java.time.LocalDate = java.time.LocalDate.now()): Long =
+        java.time.temporal.ChronoUnit.DAYS.between(dateOnly, today)
+
+    /**
+     * 下一个还没到的里程碑（今天当天算「到」）及其公历日期；全部走完则为 null。
+     *
+     * 用「日期不早于今天」而不是「剩余天数 > 0」：第 100 天当天打开应用，
+     * 应该看到「今天 · 第 100 天」，而不是直接跳到第 300 天。
+     */
+    fun nextMilestone(today: java.time.LocalDate = java.time.LocalDate.now()):
+        Pair<Int, java.time.LocalDate>? = activeMilestones
+        .asSequence()
+        .map { it to dateOnly.plusDays(it.toLong()) }
+        .firstOrNull { (_, at) -> !at.isBefore(today) }
 
     /** 已勾选的子任务数。 */
     val checklistDone: Int get() = checklist.count { it.done }

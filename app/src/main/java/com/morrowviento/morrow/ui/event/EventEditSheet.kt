@@ -82,6 +82,8 @@ fun EventEditSheet(
     var naturalInput by remember { mutableStateOf("") }
     /** 自然语言解析失败时的提示（与标题校验共用 error 样式）。 */
     var naturalError by remember { mutableStateOf<String?>(null) }
+    /** 自定义里程碑的输入框内容（纯数字天数）。 */
+    var milestoneInput by remember { mutableStateOf("") }
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
     val isEditing = form.id != null
@@ -217,6 +219,49 @@ fun EventEditSheet(
                         com.morrowviento.morrow.domain.model.EventKind.entries.forEach { kind ->
                             ChoiceChip(kind.label, form.kind == kind) { form = form.copy(kind = kind) }
                         }
+                    }
+                    // 里程碑只对纪念日有意义：待办上的「第 100 天」提醒没有任何语义，
+                    // 所以整块跟着类型出现 / 消失，而不是一直占着表单的半屏
+                    if (form.kind == com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY) {
+                        SectionTitle("第 N 天提醒")
+                        ChipRow {
+                            com.morrowviento.morrow.domain.model.EventMilestones.PRESETS.forEach { day ->
+                                ChoiceChip(
+                                    label = "第 $day 天",
+                                    selected = form.milestones.contains(day),
+                                ) { form = form.toggleMilestone(day) }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            GlassTextField(
+                                value = milestoneInput,
+                                onValueChange = { raw ->
+                                    // 只收数字：这里的天数没有别的合法输入，留着字母只会变成一次失败
+                                    milestoneInput = raw.filter { it.isDigit() }.take(5)
+                                },
+                                placeholder = "自定义第几天",
+                                modifier = Modifier.weight(1f),
+                            )
+                            ChoiceChip("添加", false) {
+                                val day = milestoneInput.toIntOrNull()
+                                if (day != null) {
+                                    form = form.toggleMilestone(day)
+                                    milestoneInput = ""
+                                }
+                            }
+                        }
+                        Text(
+                            text = if (form.milestones.isEmpty()) {
+                                "从开始日算起，第 100 天那天提醒一次；里程碑不会跟着每年重复"
+                            } else {
+                                "已设：" + form.milestones.joinToString("、") { "第 $it 天" }
+                            },
+                            style = TextStyle(fontSize = 11.sp, color = secondary),
+                        )
                     }
                     SectionTitle("重复")
                     ChipRow {

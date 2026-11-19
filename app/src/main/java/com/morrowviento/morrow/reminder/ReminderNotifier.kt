@@ -64,9 +64,16 @@ class ReminderNotifier(context: Context) {
         targetAtMillis: Long,
         nowMillis: Long,
         primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE,
+        /** 非 0 表示「第 N 天」里程碑：标题带天数、正文说明来源、不给完成/稍后按钮。 */
+        milestoneDay: Int = 0,
     ) {
+        val isMilestone = milestoneDay > 0
         val target = LocalDateTime.ofInstant(Instant.ofEpochMilli(targetAtMillis), ZoneId.systemDefault())
         val body = buildString {
+            if (isMilestone) {
+                append("从第一天算起满 $milestoneDay 天")
+                append(" · ")
+            }
             append(target.format(if (isAllDay) DATE_ONLY else DATE_TIME))
             append(" · ")
             append(relativeText(target.toLocalDate(), nowMillis))
@@ -75,15 +82,16 @@ class ReminderNotifier(context: Context) {
         val noIcon: Icon? = null
         val notification = Notification.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
+            .setContentTitle(if (isMilestone) "$title · 第 $milestoneDay 天" else title)
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))
-            .setSubText(EventReminder.labelForMinutes(minutesBefore))
+            .setSubText(if (isMilestone) "纪念日里程碑" else EventReminder.labelForMinutes(minutesBefore))
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openIntent(eventId))
             .apply {
-                if (primaryAction != com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE &&
+                if (!isMilestone &&
+                    primaryAction != com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE &&
                     primaryAction != com.morrowviento.morrow.domain.model.EventPrimaryAction.RESTORE
                 ) {
                     addAction(
@@ -93,14 +101,18 @@ class ReminderNotifier(context: Context) {
                         ).build(),
                     )
                 }
+                // 里程碑不放「稍后」：它的锚点是一次性的，稍后重排会被 isValidTarget 判成非法，
+                // 用户点了没反应比没有按钮更糟
+                if (!isMilestone) {
+                    addAction(
+                        Notification.Action.Builder(
+                            noIcon,
+                            appContext.getString(R.string.reminder_action_snooze),
+                            actionIntent(eventId, ReminderReceiver.ACTION_SNOOZE, targetAtMillis, primaryAction),
+                        ).build(),
+                    )
+                }
             }
-            .addAction(
-                Notification.Action.Builder(
-                    noIcon,
-                    appContext.getString(R.string.reminder_action_snooze),
-                    actionIntent(eventId, ReminderReceiver.ACTION_SNOOZE, targetAtMillis, primaryAction),
-                ).build(),
-            )
             .build()
         notify(notificationId(eventId), notification)
     }

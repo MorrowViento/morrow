@@ -307,4 +307,49 @@ class EventPresentationTest {
         )
         assertEquals("生活 · 12月3日 · 全天", allDay.meta)
     }
+
+    @Test
+    fun partition_separatesAnniversariesFromTodos() {
+        val todo = event("t1", "交房租", LocalDateTime.of(2026, 12, 1, 9, 0))
+        val anniversary = event("a1", "在一起", LocalDateTime.of(2026, 5, 1, 9, 0))
+            .copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY)
+        val parts = EventPresentation.partition(listOf(todo, anniversary), SortMode.DISTANCE, today, now)
+
+        // 纪念日不进「待办」段：两段读法不同，混排会让人以为纪念日也是一件要做的事
+        assertEquals(listOf("t1"), parts.active.map { it.id })
+        assertEquals(listOf("a1"), parts.anniversaries.map { it.id })
+    }
+
+    @Test
+    fun partition_anniversariesStillExcludeArchivedAndCompleted() {
+        val done = event("a1", "在一起", LocalDateTime.of(2026, 5, 1, 9, 0))
+            .copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY, isCompleted = true)
+        val archived = event("a2", "毕业", LocalDateTime.of(2026, 6, 1, 9, 0))
+            .copy(
+                kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+                archivedAt = LocalDateTime.of(2026, 10, 1, 12, 0),
+            )
+        val parts = EventPresentation.partition(listOf(done, archived), SortMode.DISTANCE, today, now)
+        assertTrue(parts.anniversaries.isEmpty())
+        assertEquals(listOf("a1"), parts.completed.map { it.id })
+        assertEquals(listOf("a2"), parts.archived.map { it.id })
+    }
+
+    @Test
+    fun card_carriesMilestonesOnlyForAnniversaries() {
+        val anniversary = event("a1", "在一起", LocalDateTime.of(2026, 5, 1, 9, 0)).copy(
+            kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY,
+            milestones = listOf(100, 300),
+            createdAt = LocalDateTime.of(2026, 1, 1, 9, 0),
+        )
+        val card = EventPresentation.toCard(anniversary, today, now)
+        assertEquals(listOf(100, 300), card.milestones)
+        // 起始日 = targetDate（2026-05-01），到 2026-11-11 是 194 天
+        assertEquals(194L, card.elapsedDays)
+
+        // 同一条数据换成待办：卡片上不该出现里程碑（表单里也看不到那一区）
+        val todo = anniversary.copy(kind = com.morrowviento.morrow.domain.model.EventKind.TODO)
+        assertTrue(EventPresentation.toCard(todo, today, now).milestones.isEmpty())
+        assertNull(EventPresentation.toCard(todo, today, now).elapsedDays)
+    }
 }

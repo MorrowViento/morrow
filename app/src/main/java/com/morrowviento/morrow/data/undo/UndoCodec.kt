@@ -114,6 +114,9 @@ object UndoCodec {
                 },
             )
         }
+        if (event.milestones.isNotEmpty()) {
+            add("milestones", JsonArray().apply { event.milestones.forEach { add(it) } })
+        }
         addProperty("createdAt", event.createdAt.toString())
         add(
             "reminders",
@@ -226,6 +229,17 @@ object UndoCodec {
                     )
                 }
                 ?.take(com.morrowviento.morrow.domain.model.EventChecklist.MAX_COUNT)
+                .orEmpty(),
+            // 里程碑是纯整数：撤销快照里也做一次 normalize，手改过的快照不至于塞进负数
+            milestones = obj.get("milestones")
+                ?.takeIf { it.isJsonArray }
+                ?.asJsonArray
+                ?.mapNotNull { element ->
+                    element.takeIf { it.isJsonPrimitive }?.let {
+                        runCatching { it.asJsonPrimitive.asInt }.getOrNull()
+                    }
+                }
+                ?.let { com.morrowviento.morrow.domain.model.EventMilestones.normalize(it) }
                 .orEmpty(),
         )
     }

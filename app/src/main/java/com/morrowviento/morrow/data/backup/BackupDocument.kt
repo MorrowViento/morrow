@@ -79,6 +79,8 @@ data class BackupEvent(
     val durationMinutes: Int = 0,
     /** 子任务清单（4.5.0）。旧备份没有这一项 → 空列表。 */
     val checklist: List<BackupChecklistItem> = emptyList(),
+    /** 纪念日的「第 N 天」里程碑（4.6.0）。旧备份没有这一项 → 空列表。 */
+    val milestones: List<Int> = emptyList(),
 )
 
 data class BackupChecklistItem(
@@ -144,8 +146,10 @@ object BackupCodec {
      *
      * 4 → 5（4.5.0）：事件多了 `checklist` 子任务数组。字段本身是可选的，旧 App 读到会
      * 静默忽略——但用户会以为「子任务也备份了」，所以宁可在旧版本上直接报「请先升级」。
+     *
+     * 5 → 6（4.6.0）：多了纪念日的 `milestones`。同理：旧版本导入新版备份直接要求升级。
      */
-    const val CURRENT_VERSION = 5
+    const val CURRENT_VERSION = 6
 
     // ---------------------------------------------------------------- 编码
 
@@ -231,6 +235,10 @@ object BackupCodec {
                     }
                 },
             )
+        }
+        // 里程碑是纯整数，数组最直观，也方便手改
+        if (event.milestones.isNotEmpty()) {
+            add("milestones", JsonArray().apply { event.milestones.forEach { add(it) } })
         }
         addProperty("createdAt", event.createdAt)
         add(
@@ -384,6 +392,13 @@ object BackupCodec {
             durationMinutes = (obj.intOrNull("durationMinutes") ?: 0)
                 .coerceIn(0, CountdownEvent.MAX_DURATION_MINUTES),
             checklist = decodeChecklist(obj.arrayOrNull("checklist")),
+            milestones = com.morrowviento.morrow.domain.model.EventMilestones.normalize(
+                obj.arrayOrNull("milestones")?.mapNotNull { element ->
+                    element.takeIf { it.isJsonPrimitive }?.let {
+                        runCatching { it.asJsonPrimitive.asInt }.getOrNull()
+                    }
+                }.orEmpty(),
+            ),
         )
     }
 
@@ -557,6 +572,7 @@ object BackupMapper {
         checklist = event.checklist.map {
             BackupChecklistItem(id = it.id, title = it.title, done = it.done)
         },
+        milestones = event.milestones,
     )
 
     fun toDomain(backup: BackupEvent): CountdownEvent? {
@@ -599,6 +615,7 @@ object BackupMapper {
                     com.morrowviento.morrow.domain.model.ChecklistItem(id = it.id, title = it.title, done = it.done)
                 },
             ),
+            milestones = com.morrowviento.morrow.domain.model.EventMilestones.normalize(backup.milestones),
         )
     }
 

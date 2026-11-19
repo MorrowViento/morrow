@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [EventEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class MorrowDatabase : RoomDatabase() {
@@ -82,9 +82,22 @@ abstract class MorrowDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 6 → 7：纪念日的「第 N 天」里程碑。
+         *
+         * 默认空串，旧行自动等于「没有里程碑」，不需要回填。
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE events ADD COLUMN milestones TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(context: Context): MorrowDatabase =
             Room.databaseBuilder(context, MorrowDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                )
                 .build()
     }
 }

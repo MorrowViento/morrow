@@ -4,8 +4,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,19 +24,28 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +63,8 @@ import com.morrowviento.morrow.ui.glass.glassTextSecondary
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
+import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** 一小时的高度。15 分钟那一格就是它的四分之一（14dp）。 */
@@ -192,9 +205,8 @@ private fun TimelineTrack(
 
     /** 长按拖拽中的落点区间（分钟）；null 表示没在拖。 */
     var draft by remember(day.date) { mutableStateOf<IntRange?>(null) }
-    /** 正在拖底边的事件 id 与临时结束分钟。 */
-    var resizingId by remember(day.date) { mutableStateOf<String?>(null) }
-    var resizingEnd by remember(day.date) { mutableIntStateOf(0) }
+    /** 正在改时间范围的事件与临时区间；null 表示没在拖。 */
+    var resize by remember(day.date) { mutableStateOf<ResizeDraft?>(null) }
 
     BoxWithConstraints(Modifier.fillMaxWidth().height(HourHeight * 24)) {
         // 15 分钟网格：整点稍重、其余很淡。96 条线一次画完，比 96 个 Divider 便宜得多。
@@ -269,39 +281,62 @@ private fun TimelineTrack(
         val laneGap = 5.dp
         day.blocks.forEach { block ->
             val columnWidth = maxWidth / block.laneCount
-            val top = HourHeight * (block.startMinute / 60f)
-            val endMinute = if (resizingId == block.id) resizingEnd else block.endMinute
-            val height = (HourHeight * ((endMinute - block.startMinute) / 60f))
+            val preview = resize?.takeIf { it.id == block.id }
+            val startMinute = preview?.start ?: block.startMinute
+            val endMinute = preview?.end ?: block.endMinute
+            val top = HourHeight * (startMinute / 60f)
+            val height = (HourHeight * ((endMinute - startMinute) / 60f))
                 .coerceAtLeast(HourHeight / 4)
             TimelineBlockView(
                 block = block,
                 accent = accent,
+                startMinute = startMinute,
                 endMinute = endMinute,
-                resizing = resizingId == block.id,
+                resizingEdge = preview?.edge,
                 modifier = Modifier
                     .offset(x = columnWidth * block.lane, y = top)
                     .width((columnWidth - laneGap).coerceAtLeast(24.dp))
                     .height(height)
                     .padding(vertical = 1.dp),
                 onClick = { onOpenEvent(block.id) },
-                onResizeStart = {
-                    resizingId = block.id
-                    resizingEnd = block.endMinute
+                onResizeStart = { edge ->
+                    resize = ResizeDraft(
+                        id = block.id,
+                        edge = edge,
+                        baseStart = block.startMinute,
+                        baseEnd = block.endMinute,
+                        start = block.startMinute,
+                        end = block.endMinute,
+                    )
                 },
-                onResize = { deltaMinutes ->
-                    val minEnd = block.startMinute + TimelineLayout.SNAP_MINUTES
-                    resizingEnd = TimelineLayout.snapClamped(
-                        (resizingEnd + deltaMinutes).coerceAtLeast(minEnd),
-                    ).coerceAtLeast(minEnd)
-                },
-                onResizeEnd = {
-                    val finalEnd = resizingEnd
-                    resizingId = null
-                    if (finalEnd != block.endMinute) {
-                        onResizeEvent(block.id, block.startMinute, finalEnd)
+                onResizeBy = { deltaMinutes ->
+                    val current = resize ?: return@TimelineBlockView
+                    if (current.id != block.id) return@TimelineBlockView
+                    resize = when (current.edge) {
+                        // 上缘：只动开始，最少留一格；下界不能越过当天 00:00
+                        ResizeEdge.START -> current.copy(
+                            start = TimelineLayout.snapClamped(current.baseStart + deltaMinutes)
+                                .coerceIn(0, current.baseEnd - TimelineLayout.MIN_BLOCK_MINUTES),
+                        )
+                        // 下缘：只动结束，最少留一格；上界是 24:00
+                        ResizeEdge.END -> current.copy(
+                            end = TimelineLayout.snapClamped(current.baseEnd + deltaMinutes)
+                                .coerceIn(
+                                    current.baseStart + TimelineLayout.MIN_BLOCK_MINUTES,
+                                    TimelineLayout.MINUTES_PER_DAY,
+                                ),
+                        )
                     }
                 },
-                onResizeCancel = { resizingId = null },
+                onResizeEnd = {
+                    val finished = resize
+                    resize = null
+                    if (finished != null &&
+                        (finished.start != block.startMinute || finished.end != block.endMinute)
+                    ) {
+                        onResizeEvent(block.id, finished.start, finished.end)
+                    }
+                },
             )
         }
 
@@ -366,14 +401,14 @@ private fun NowLine() {
 private fun TimelineBlockView(
     block: TimelineBlock,
     accent: Color,
+    startMinute: Int,
     endMinute: Int,
-    resizing: Boolean,
+    resizingEdge: ResizeEdge?,
     modifier: Modifier,
     onClick: () -> Unit,
-    onResizeStart: () -> Unit,
-    onResize: (Int) -> Unit,
+    onResizeStart: (ResizeEdge) -> Unit,
+    onResizeBy: (Int) -> Unit,
     onResizeEnd: () -> Unit,
-    onResizeCancel: () -> Unit,
 ) {
     val dark = LocalGlassDark.current
     val primary = glassTextPrimary()
@@ -384,13 +419,21 @@ private fun TimelineBlockView(
         accent.copy(alpha = if (dark) 0.34f else 0.20f)
     }
     val shape = RoundedCornerShape(10.dp)
-    val density = LocalDensity.current.density
+    // 手势 lambda 每次重组都是新实例，直接塞进 pointerInput 的 key 会让拖动中途被打断、
+    // 塞进闭包又会用到旧的回调（块被复用到另一条事件上时特别明显）。用 State 兜住最新值，
+    // key 恒为 Unit，手势因此能跨越整段拖动持续存活。
+    val handlers = rememberUpdatedState(
+        BlockHandlers(onClick, onResizeStart, onResizeBy, onResizeEnd),
+    )
     Box(
         modifier = modifier
             .clip(shape)
             .background(tint)
-            .clip(shape)
-            .clickableBlock(onClick)
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                onClick(label = "打开「${block.title}」") { onClick(); true }
+            }
+            .blockGestures(handlers)
             .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Column {
@@ -405,45 +448,119 @@ private fun TimelineBlockView(
                 ),
             )
             Text(
-                text = clockRange(block.startMinute, endMinute),
+                text = clockRange(startMinute, endMinute),
                 maxLines = 1,
                 style = TextStyle(fontSize = 10.sp, fontFeatureSettings = "tnum", color = secondary),
             )
         }
 
-        // 底边拖拽把手：只有在这里按下才进「改时长」，块的其余部分仍然是「打开详情」。
-        // 视觉上只是一条更亮的横杠，不额外加阴影或图标，免得 30 分钟的块里堆满装饰。
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(14.dp)
-                .pointerInput(block.id, block.startMinute, block.endMinute) {
-                    detectDragGestures(
-                        onDragStart = { onResizeStart() },
-                        onDrag = { change, amount ->
-                            change.consume()
-                            val delta = ((amount.y / density) / HourHeight.value * 60f)
-                                .roundToInt()
-                            if (delta != 0) onResize(delta)
-                        },
-                        onDragEnd = { onResizeEnd() },
-                        onDragCancel = { onResizeCancel() },
-                    )
-                },
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Box(
-                Modifier
-                    .padding(bottom = 2.dp)
-                    .width(22.dp)
-                    .height(if (resizing) 3.dp else 2.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(
-                        if (resizing) accent.copy(alpha = 0.9f) else primary.copy(alpha = 0.28f),
-                    ),
-            )
+        // 上下缘各一条短杠：这不是「按钮」，是「这里可以拖」的提示。
+        // 平时几乎看不见，按到哪条哪条变亮，用户才知道自己抓的是上缘还是下缘。
+        EdgeGrip(
+            edge = ResizeEdge.START,
+            active = resizingEdge == ResizeEdge.START,
+            accent = accent,
+            primary = primary,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+        EdgeGrip(
+            edge = ResizeEdge.END,
+            active = resizingEdge == ResizeEdge.END,
+            accent = accent,
+            primary = primary,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+}
+
+@Composable
+private fun EdgeGrip(
+    edge: ResizeEdge,
+    active: Boolean,
+    accent: Color,
+    primary: Color,
+    modifier: Modifier,
+) {
+    Box(
+        modifier = modifier
+            .padding(vertical = 2.dp)
+            .width(22.dp)
+            .height(if (active) 3.dp else 2.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(if (active) accent.copy(alpha = 0.9f) else primary.copy(alpha = 0.24f)),
+    )
+}
+
+/** 块上可拖的两条边。 */
+internal enum class ResizeEdge { START, END }
+
+/** 拖动预览：`base*` 是按下时的原值，累计位移始终相对它换算，避免逐帧取整的误差越滚越大。 */
+@Immutable
+private data class ResizeDraft(
+    val id: String,
+    val edge: ResizeEdge,
+    val baseStart: Int,
+    val baseEnd: Int,
+    val start: Int,
+    val end: Int,
+)
+
+@Immutable
+private data class BlockHandlers(
+    val onTap: () -> Unit,
+    val onResizeStart: (ResizeEdge) -> Unit,
+    val onResizeBy: (Int) -> Unit,
+    val onResizeEnd: () -> Unit,
+)
+
+/**
+ * 块上的手势：上下缘拖动改时间范围，中间点按打开详情。
+ *
+ * 为什么不用 `clickable` + `detectDragGestures` 叠两层：那样边缘拖动要靠「把手」这块
+ * 独立子区域接事件，14dp 的把手既难按中，又会把轻点吞成一次零位移拖动——
+ * 逐帧取整 + 吸附到 15 分钟格线，点一下就把结束时间挪走一格（连着点就一路缩到 15 分钟）。
+ *
+ * 这里一个手势循环处理三件事：
+ * 1. 中间区不消费事件，纵向拖动自然交给外层滚动；
+ * 2. 边缘区按下即消费，避免「想拖边缘结果滚了时间轴」；
+ * 3. 累计位移超过 8dp 才算拖动，否则抬起就是一次点按——阈值是这条 bug 的正解。
+ */
+private fun Modifier.blockGestures(handlers: State<BlockHandlers>): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val heightPx = size.height.toFloat()
+        // 上下缘各 18dp；15 分钟的块只有 14dp 高，按高度 1/3 收缩才不会两条带互相盖住
+        val band = min(18.dp.toPx(), maxOf(10.dp.toPx(), heightPx / 3f))
+        val edge = when {
+            heightPx <= 0f -> null
+            down.position.y <= band -> ResizeEdge.START
+            down.position.y >= heightPx - band -> ResizeEdge.END
+            else -> null
         }
+
+        if (edge == null) {
+            val up = waitForUpOrCancellation()
+            if (up != null) handlers.value.onTap()
+            return@awaitEachGesture
+        }
+
+        down.consume()
+        var totalPx = 0f
+        var dragging = false
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (change.changedToUpIgnoreConsumed()) break
+            totalPx += change.positionChange().y
+            if (!dragging) {
+                if (abs(totalPx) < 8.dp.toPx()) continue
+                dragging = true
+                handlers.value.onResizeStart(edge)
+            }
+            change.consume()
+            handlers.value.onResizeBy((totalPx / density / HourHeight.value * 60f).roundToInt())
+        }
+        if (dragging) handlers.value.onResizeEnd() else handlers.value.onTap()
     }
 }
 

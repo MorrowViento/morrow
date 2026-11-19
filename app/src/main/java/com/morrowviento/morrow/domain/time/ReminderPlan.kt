@@ -21,6 +21,14 @@ data class ScheduledReminder(
     val targetAtMillis: Long,
     val isAllDay: Boolean,
     val primaryAction: com.morrowviento.morrow.domain.model.EventPrimaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.COMPLETE,
+    /**
+     * 非 0 表示这是一条「第 N 天」里程碑提醒。
+     *
+     * 里程碑的锚点是绝对的，不在重复规则的发生日里，因此收件方**不能**拿
+     * [ReminderPlan.isValidTarget] 去校验它——那条校验只认发生日，会把刚发出的
+     * 里程碑通知当成过期内容立刻撤掉。
+     */
+    val milestoneDay: Int = 0,
 )
 
 /**
@@ -38,8 +46,15 @@ object ReminderPlan {
     /** 最多为单个事件排期几次落点。 */
     const val MAX_OCCURRENCES = 2
 
-    /** 单个事件在系统里的闹钟上限（= 落点数 × 提醒条数上限），与调度器的槽位数一致。 */
-    const val MAX_ALARMS = MAX_OCCURRENCES * EventReminder.MAX_COUNT
+    /**
+     * 单个事件在系统里的闹钟上限。
+     *
+     * = 落点数 × 提醒条数上限 **+ 里程碑条数上限**。里程碑与普通提醒共用一套槽位，
+     * 少算这一段的话，排在最末尾的里程碑会用到超界槽位，而取消时只扫到上界——
+     * 闹钟留在系统里再也清不掉，用户会收到一条来自「已删除事件」的提醒。
+     */
+    const val MAX_ALARMS =
+        MAX_OCCURRENCES * EventReminder.MAX_COUNT + com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT
 
     private const val MINUTE_MILLIS = 60_000L
 
@@ -54,34 +69,77 @@ object ReminderPlan {
         // 提醒还照响的话归档就成了纯粹的自欺欺人。恢复归档后由调用方重新 sync。
         if (event.isArchived) return emptyList()
 
-        val reminders = event.reminders.filter { it.enabled && it.minutesBefore >= 0 }
-        if (reminders.isEmpty()) return emptyList()
+        val result = ArrayList<ScheduledReminder>()
 
-        val result = ArrayList<ScheduledReminder>(reminders.size * MAX_OCCURRENCES)
-        var occurrences = 0
-        val earliestTarget = fromMillis + reminders.minOf { it.minutesBefore } * MINUTE_MILLIS
-        for (target in targetInstants(event, earliestTarget, zone)) {
-            if (occurrences >= MAX_OCCURRENCES) break
-            var added = false
-            for (reminder in reminders) {
-                val triggerAt = target - reminder.minutesBefore * MINUTE_MILLIS
-                // 用 <= 而非 <：恰好等于当前时刻的提醒已经没有意义
-                if (triggerAt <= fromMillis) continue
-                added = true
-                result += ScheduledReminder(
-                    eventId = event.id,
-                    title = event.title,
-                    minutesBefore = reminder.minutesBefore,
-                    triggerAtMillis = triggerAt,
-                    targetAtMillis = target,
-                    isAllDay = event.isAllDay,
-                    primaryAction = event.primaryAction,
-                )
+        val reminders = event.reminders.filter { it.enabled && it.minutesBefore >= 0 }
+        if (reminders.isNotEmpty()) {
+            var occurrences = 0
+            val earliestTarget = fromMillis + reminders.minOf { it.minutesBefore } * MINUTE_MILLIS
+            for (target in targetInstants(event, earliestTarget, zone)) {
+                if (occurrences >= MAX_OCCURRENCES) break
+                var added = false
+                for (reminder in reminders) {
+                    val triggerAt = target - reminder.minutesBefore * MINUTE_MILLIS
+                    // 用 <= 而非 <：恰好等于当前时刻的提醒已经没有意义
+                    if (triggerAt <= fromMillis) continue
+                    added = true
+                    result += ScheduledReminder(
+                        eventId = event.id,
+                        title = event.title,
+                        minutesBefore = reminder.minutesBefore,
+                        triggerAtMillis = triggerAt,
+                        targetAtMillis = target,
+                        isAllDay = event.isAllDay,
+                        primaryAction = event.primaryAction,
+                    )
+                }
+                // 该落点的所有提醒都已过期时不计入次数，否则会把名额浪费在过去
+                if (added) occurrences++
             }
-            // 该落点的所有提醒都已过期时不计入次数，否则会把名额浪费在过去
-            if (added) occurrences++
         }
-        return result.sortedBy { it.triggerAtMillis }
+
+        result += milestoneReminders(event, fromMillis, zone)
+
+        // 槽位是有上界的：多出来的宁可排不进去，也不能生成调度器清不掉的闹钟
+        return result.sortedBy { it.triggerAtMillis }.take(MAX_ALARMS)
+    }
+
+    /**
+     * 里程碑提醒（「第 100 天」「第 300 天」）。
+     *
+     * 锚点是 `开始日 + N 天` 的提醒时刻，**绝对**且只发生一次：即便这是每年重复的生日，
+     * 第 100 天也只有那么一天。已经过去的里程碑直接跳过，不做补偿提醒——
+     * 「补发一条 40 天前的恭喜」只会让人困惑。
+     *
+     * 动作刻意是 [EventPrimaryAction.NONE]：里程碑没有「完成」这回事，
+     * 给个按钮反而要解释「点完会发生什么」。
+     */
+    private fun milestoneReminders(
+        event: CountdownEvent,
+        fromMillis: Long,
+        zone: ZoneId,
+    ): List<ScheduledReminder> {
+        val days = event.activeMilestones
+        if (days.isEmpty()) return emptyList()
+        val elapsed = java.time.Instant.ofEpochMilli(fromMillis).atZone(zone).toLocalDate()
+            .let { java.time.temporal.ChronoUnit.DAYS.between(event.dateOnly, it) }
+        // 便宜的先剪枝：整批都在过去时不必逐条构造
+        if (days.all { it.toLong() < elapsed }) return emptyList()
+        val anchorTime = event.reminderAnchor.toLocalTime()
+        return days.mapNotNull { day ->
+            val at = event.dateOnly.plusDays(day.toLong()).atTime(anchorTime).toMillis(zone)
+            if (at <= fromMillis) return@mapNotNull null
+            ScheduledReminder(
+                eventId = event.id,
+                title = event.title,
+                minutesBefore = 0,
+                triggerAtMillis = at,
+                targetAtMillis = at,
+                isAllDay = event.isAllDay,
+                primaryAction = com.morrowviento.morrow.domain.model.EventPrimaryAction.NONE,
+                milestoneDay = day,
+            )
+        }
     }
 
     /**

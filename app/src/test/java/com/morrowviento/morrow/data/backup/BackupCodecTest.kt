@@ -2,6 +2,7 @@ package com.morrowviento.morrow.data.backup
 
 import com.morrowviento.morrow.data.settings.AccentColor
 import com.morrowviento.morrow.domain.model.ChecklistItem
+import com.morrowviento.morrow.domain.model.EventKind
 import com.morrowviento.morrow.domain.model.CountDirection
 import com.morrowviento.morrow.domain.model.CountdownEvent
 import com.morrowviento.morrow.domain.model.EventReminder
@@ -100,8 +101,8 @@ class BackupCodecTest {
             lastHandledOccurrence = java.time.LocalDate.of(2027, 3, 8))
         val raw = BackupCodec.encode(document(listOf(original)))
         val parsed = BackupCodec.decode(raw) as BackupParse.Ok
-        // 4.5.0 起格式版本是 5（新增 checklists 子任务数组）；旧版本读高版本会明确要求升级
-        assertEquals(5, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
+        // 4.6.0 起格式版本是 6（新增 milestones 里程碑数组）；旧版本读高版本会明确要求升级
+        assertEquals(6, com.google.gson.JsonParser.parseString(raw).asJsonObject["version"].asInt)
         assertEquals(original, BackupMapper.toDomain(parsed.document.events.single()))
         val legacy = BackupCodec.decode("""{"format":"morrow-backup","version":1,
             "events":[{"id":"old","targetDate":"2027-05-01T08:00","isCompleted":true,"isPinned":true,"repeatType":"YEARLY"}]}""") as BackupParse.Ok
@@ -343,5 +344,37 @@ class BackupCodecTest {
         """.trimIndent()
         val ok = BackupCodec.decode(legacy) as BackupParse.Ok
         assertEquals(emptyList<ChecklistItem>(), BackupMapper.toDomain(ok.document.events.single())!!.checklist)
+    }
+
+    @Test
+    fun `里程碑随备份往返`() {
+        val withMilestones = event().copy(
+            kind = EventKind.ANNIVERSARY,
+            milestones = listOf(100, 300, 1000),
+        )
+        val raw = BackupCodec.encode(document(events = listOf(withMilestones)))
+        val ok = BackupCodec.decode(raw) as BackupParse.Ok
+        assertEquals(withMilestones.milestones, ok.document.events.single().milestones)
+        assertEquals(
+            withMilestones.milestones,
+            BackupMapper.toDomain(ok.document.events.single())!!.milestones,
+        )
+    }
+
+    @Test
+    fun `没有里程碑的备份不写这个字段，旧备份导入仍为空`() {
+        val raw = BackupCodec.encode(document(events = listOf(event())))
+        assertTrue(!raw.contains("\"milestones\""))
+
+        val legacy = """
+            {"format":"morrow-backup","version":5,"exportedAt":"2026-11-19T18:30",
+             "appVersion":"4.5.0 (78)",
+             "events":[{"id":"e1","title":"在一起","targetDate":"2026-01-01T09:00:00",
+                        "createdAt":"2026-01-01T09:00:00","isAllDay":true,
+                        "kind":"ANNIVERSARY"}],
+             "categories":["生活"],"widgets":[]}
+        """.trimIndent()
+        val ok = BackupCodec.decode(legacy) as BackupParse.Ok
+        assertEquals(emptyList<Int>(), BackupMapper.toDomain(ok.document.events.single())!!.milestones)
     }
 }
