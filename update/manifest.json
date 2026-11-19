@@ -1,15 +1,15 @@
 {
-  "tag_name": "v4.4.1",
-  "name": "朝夕 4.4.1",
-  "body": "## 朝夕 4.4.1\n\n工程修复版：界面与功能同 4.4.0，只把构建链修好。\n\n### 修复\n- **依赖只在本机**：4.4.0 的 CI 三次推送全红，`io.github.neoruaa.glasmio:*:0.1.4-main` 只有 `publishToMavenLocal` 的产物，GitHub Actions 与任何干净检出都报 `Could not find ...:glasmio-scaffold:0.1.4-main`。现把 6 个模块的 AAR 随仓库提交（`vendor/glasmio-maven`，6.3 MB / 18 文件），构建不再依赖 `mavenLocal()`，使用方也不需要 NDK / CMake。\n- **许可校验窗口错位**：补上 AAR 后又挂在 `generateRuntimeNotices`——Glasmio 声明的锁定哈希原本按 Windows 工作区的 CRLF 字节算（`d68c34e6…`），而 `.gitattributes` 是 `eol=lf`，CI 检出成 LF 必然对不上。改按仓库内 LF 字节锁定（`297bbf9d…`，与上游 `030d31c` 的 blob 逐字节一致）。\n- 随包的 `glasmio-third-party-notices.txt` 由 CRLF 规范为 LF（5245→5185 B）。\n\n### 验证\n- CI 在 `ca12bfd` 通过（assembleDebug + 单测 + lint）；本地搬走 `~/.m2` 与依赖缓存后仍可构建\n- 459 项单测 / 57 份 XML / 0 失败；lint 0 errors / 15 warnings\n- APK 145 条目、8 份许可资产与源文件逐字节一致、图像条目 0\n\n> 安装包 morrow-77-4.4.1-release.apk（versionCode 77）。可从 4.4.0 / 76 及更早版本原位升级，Room schema 未变。",
-  "published_at": "2026-11-19T05:21:27Z",
+  "tag_name": "v4.5.0",
+  "name": "朝夕 4.5.0",
+  "body": "## 朝夕 4.5.0\n\n把倒计时真正用起来的一版：一条事件可以拆成可勾选的子任务，时间轴能直接拖出新块并改时长，表单可以用一句中文把时间填好，倒计时环终于覆盖生日与待办。\n\n### 新增\n- **子任务 / checklist**：一条事件最多 20 条子任务。编辑面板可增删勾选，详情页可直接勾，首页卡片显示「3/5 子任务」与一条细进度条。勾完不等于事件完成——完成仍要自己点。\n- **时间轴 15 分钟粒度**：网格线由 48 条变 96 条（整点稍重），新建面板的时长档位补上 15 / 30 / 45 分钟。\n- **拖拽创建**：在时间轴空白处长按再纵向拖，拖出多长就是多久，松手直接开新建面板。\n- **拖动边缘调时长**：事件块底部有拖拽把手，上下拖动改结束时间，松手吸附到 15 分钟。\n- **「现在」线**：横贯时间轴的强调色线，左侧带时刻标签，30 秒刷新。\n- **长按图标快捷新建**：「新建事件」「新建待办」两个快捷方式，直接进对应表单。\n- **自然语言输入**：「明天下午三点 开会 1 小时」「每周一三五 健身」「农历八月十五 中秋」都能填好日期、时刻、重复与时长，标题自动提取。完全本地规则解析，不联网。\n- **日期计算器农历可切年份**：年份不再锁死。\n\n### 改进\n- **倒计时环覆盖全部事件**：重复事件按「上次 → 下次」本周期走量画环（生日以前完全没有）；待办有子任务时画勾选比例；其余仍按「创建 → 目标」。\n- **小按钮按下不再泛白**：排序胶囊、关闭 ✕、翻页、返回等 34dp 小按钮改为轻微缩小 + 一层很薄的高光，不再整块发白。\n\n### 兼容\n- 数据库 schema 5 → 6，可原位升级、数据不丢。\n- 备份格式 4 → 5：子任务一起备份；旧版本 App 导入新版备份会提示先升级。\n\n> 安装包 morrow-78-4.5.0-release.apk（versionCode 78）。可从 77 及更早版本原位升级（同一签名）。",
+  "published_at": "2026-11-19T09:59:53Z",
   "prerelease": false,
   "assets": [
     {
-      "name": "morrow-77-4.4.1-release.apk",
-      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.4.1/morrow-77-4.4.1-release.apk",
-      "size": 5325145,
-      "digest": "sha256:4ea97ff95ca0461e7c1e63dc9df74b8e5eb4022667b17ab781b6312e201d08dc"
+      "name": "morrow-78-4.5.0-release.apk",
+      "browser_download_url": "https://github.com/MorrowViento/morrow/releases/download/v4.5.0/morrow-78-4.5.0-release.apk",
+      "size": 5359721,
+      "digest": "sha256:bdb0f87220e1b1fc5a0207be58982f57d0f003758c3d57a975605ed78253667a"
     }
   ]
 }
