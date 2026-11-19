@@ -245,35 +245,52 @@ internal fun EventList(
         // 混排时用户得逐条读标题才知道这张卡在讲什么。为空时整段不出现，不留空标题。
         if (state.anniversaries.isNotEmpty()) {
             item(key = "anniversary-header") {
-                SectionLabel("纪念日 · ${state.anniversaries.size}")
+                SectionLabel("纪念日 · ${state.anniversaries.size}", Modifier.animateItem())
             }
             items(state.anniversaries, key = { "anni-${it.id}" }) { card ->
-                EventCardView(card, onClick = { onOpenDetail(card.id) })
+                EventCardView(
+                    card = card,
+                    // 换排序 / 勾完成 / 新建后，条目靠这个动画走到新位置：
+                    // 没有它，列表会在下一帧直接「闪」成新顺序，看起来像上下乱跳
+                    modifier = Modifier.animateItem(),
+                    onClick = { onOpenDetail(card.id) },
+                )
             }
         }
         item(key = "active-header") {
-            SectionLabel("待办 · ${state.active.size}")
+            SectionLabel("待办 · ${state.active.size}", Modifier.animateItem())
         }
         if (state.active.isEmpty()) {
             item(key = "active-empty") {
                 SectionHint(
-                    if (searching) {
+                    text = if (searching) {
                         "没有匹配的进行中事件"
                     } else if (state.anniversaries.isNotEmpty()) {
                         "没有待办，只有纪念日"
                     } else {
                         "暂无进行中的事件，点下方 ＋ 新建"
                     },
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
         items(state.active, key = { it.id }) { card ->
-            EventCardView(card, onClick = { onOpenDetail(card.id) })
+            EventCardView(
+                card = card,
+                modifier = Modifier.animateItem(),
+                onClick = { onOpenDetail(card.id) },
+            )
         }
         if (state.completed.isNotEmpty()) {
             item(key = "completed-header") {
-                if (searching) SectionLabel("已完成 · ${state.completed.size}")
-                else CompletedHeader(state.completed.size, state.completedExpanded, onToggleCompleted)
+                val headerModifier = if (searching) Modifier.animateItem() else Modifier
+                if (searching) {
+                    SectionLabel("已完成 · ${state.completed.size}", headerModifier)
+                } else {
+                    Box(headerModifier) {
+                        CompletedHeader(state.completed.size, state.completedExpanded, onToggleCompleted)
+                    }
+                }
             }
             if (state.completedExpanded) {
                 items(state.completed, key = { "done-${it.id}" }) { card ->
@@ -283,6 +300,7 @@ internal fun EventList(
                         // 离屏层，按压时玻璃的放大/折射一超出自身边界就被这层裁掉，
                         // 只有已完成的卡片会「一按就缺一角」。
                         dim = 0.55f,
+                        modifier = Modifier.animateItem(),
                         onClick = { onOpenDetail(card.id) },
                     )
                 }
@@ -292,20 +310,20 @@ internal fun EventList(
 }
 
 @Composable
-internal fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
-        modifier = Modifier.padding(start = 6.dp, top = 6.dp, bottom = 2.dp),
+        modifier = modifier.padding(start = 6.dp, top = 6.dp, bottom = 2.dp),
     )
 }
 
 @Composable
-internal fun SectionHint(text: String) {
+internal fun SectionHint(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = TextStyle(fontSize = 12.sp, color = glassTextSecondary()),
-        modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 4.dp),
+        modifier = modifier.padding(start = 6.dp, top = 4.dp, bottom = 4.dp),
     )
 }
 

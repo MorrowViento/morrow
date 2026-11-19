@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  「朝夕」自适应图标背景：纯色深靛（非渐变）。
-  底色压得比前景的暖金暗很多，圆形 / 方圆遮罩下都能立刻认出那半颗日轮。
+  「朝夕」自适应图标背景：宣纸米白，中心一抹几乎看不见的暖晕。
+
+  4.6.1 起整体换成国风淡色：底色不再是与前景同色系的深靛，而是偏暖的宣纸白，
+  中心垫一层只差几个色阶的暖圆，把视线聚到图形上——没有它，纯色底在大屏上一片平，
+  图形像贴上去的。
+  刻意**不用 gradient**：aapt 会把它拆成一份独立的 `$ic_launcher_background__0.xml`，
+  平白多一个资源条目；而这 5 个色阶的过渡在 108dp 上本来就看不出来。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -9,5 +14,8 @@
     android:viewportHeight="108">
     <path
         android:pathData="M0,0h108v108h-108z"
-        android:fillColor="#171728" />
+        android:fillColor="#F7F2E7" />
+    <path
+        android:pathData="M54,54 m-40,0 a40,40 0 1 0 80,0 a40,40 0 1 0 -80,0 Z"
+        android:fillColor="#F3EBD9" />
 </vector>

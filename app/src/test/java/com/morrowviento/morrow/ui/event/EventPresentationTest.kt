@@ -352,4 +352,30 @@ class EventPresentationTest {
         assertTrue(EventPresentation.toCard(todo, today, now).milestones.isEmpty())
         assertNull(EventPresentation.toCard(todo, today, now).elapsedDays)
     }
+
+    @Test
+    fun cardById_findsAnniversaryCard() {
+        // 回归：4.6.0 的详情浮层只查 active + completed，纪念日拆段之后
+        // 点纪念日卡片拿不到 card，浮层整块不出现（点了没反应）
+        val list = listOf(
+            event("t1", "交房租", LocalDateTime.of(2026, 11, 20, 9, 0)),
+            event("a1", "在一起", LocalDateTime.of(2026, 5, 1, 9, 0))
+                .copy(kind = com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY),
+            event("c1", "已办", LocalDateTime.of(2026, 11, 1, 9, 0), isCompleted = true),
+        )
+        val parts = EventPresentation.partition(list, SortMode.DISTANCE, today, now)
+        val state = HomeUiState(
+            anniversaries = parts.anniversaries,
+            active = parts.active,
+            completed = parts.completed,
+            isLoading = false,
+        )
+
+        assertEquals("a1", state.cardById("a1")?.id)
+        assertEquals("t1", state.cardById("t1")?.id)
+        assertEquals("c1", state.cardById("c1")?.id)
+        assertNull(state.cardById("不存在"))
+        // 三段合并的顺序就是首页阅读顺序
+        assertEquals(listOf("a1", "t1", "c1"), state.visibleCards().map { it.id })
+    }
 }

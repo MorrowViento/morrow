@@ -290,16 +290,18 @@ data class EventFormState(
      * 切换一个里程碑：已选则取消，未选则加上。
      *
      * 不做「再点一下变成自定义」这类智能猜测——用户点 chips 就是想加/删这一个。
+     *
+     * 满员时**原样返回**而不是交给 `normalize` 截断：`take(MAX_COUNT)` 会在升序后
+     * 踢掉最大的那一个，用户点了个新档位，消失的却是另一个此前已设好的提醒。
      */
     fun toggleMilestone(day: Int): EventFormState {
         if (day !in 1..com.morrowviento.morrow.domain.model.EventMilestones.MAX_DAY) return this
-        val next = if (milestones.contains(day)) {
-            milestones.filterNot { it == day }
-        } else {
-            milestones + day
+        if (milestones.contains(day)) {
+            return copy(milestones = milestones.filterNot { it == day })
         }
+        if (milestones.size >= com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT) return this
         return copy(
-            milestones = com.morrowviento.morrow.domain.model.EventMilestones.normalize(next),
+            milestones = com.morrowviento.morrow.domain.model.EventMilestones.normalize(milestones + day),
         )
     }
 

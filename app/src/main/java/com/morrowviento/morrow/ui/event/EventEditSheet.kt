@@ -224,8 +224,17 @@ fun EventEditSheet(
                     // 所以整块跟着类型出现 / 消失，而不是一直占着表单的半屏
                     if (form.kind == com.morrowviento.morrow.domain.model.EventKind.ANNIVERSARY) {
                         SectionTitle("第 N 天提醒")
+                        // chips 是「预设 ∪ 已设」的并集，而不是只画预设：
+                        // 早先自定义的 200 天只出现在下面那行纯文本里，没有可点的对象，
+                        // 于是加进去就再也删不掉、也改不成别的天数。现在每一个已设的值
+                        // 都是一颗可点的 chip（再点一下即移除）。
+                        val milestoneChips = remember(form.milestones) {
+                            (com.morrowviento.morrow.domain.model.EventMilestones.PRESETS + form.milestones)
+                                .distinct()
+                                .sorted()
+                        }
                         ChipRow {
-                            com.morrowviento.morrow.domain.model.EventMilestones.PRESETS.forEach { day ->
+                            milestoneChips.forEach { day ->
                                 ChoiceChip(
                                     label = "第 $day 天",
                                     selected = form.milestones.contains(day),
@@ -255,10 +264,13 @@ fun EventEditSheet(
                             }
                         }
                         Text(
-                            text = if (form.milestones.isEmpty()) {
-                                "从开始日算起，第 100 天那天提醒一次；里程碑不会跟着每年重复"
-                            } else {
-                                "已设：" + form.milestones.joinToString("、") { "第 $it 天" }
+                            text = when {
+                                form.milestones.isEmpty() ->
+                                    "从开始日算起，第 100 天那天提醒一次；里程碑不会跟着每年重复"
+                                form.milestones.size >= com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT ->
+                                    "已设 ${form.milestones.joinToString("、") { "第 $it 天" }}（最多 ${com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT} 个，点已选的可以去掉）"
+                                else ->
+                                    "已设 ${form.milestones.joinToString("、") { "第 $it 天" }}；点已选的 chip 可以去掉"
                             },
                             style = TextStyle(fontSize = 11.sp, color = secondary),
                         )

@@ -160,6 +160,23 @@ fun HomeScreen(
     LaunchedEffect(searchQuery, searchFilter) {
         if (showSearch) searchListState.scrollToItem(0)
     }
+    // 切换排序时把列表带回顶部。
+    //
+    // LazyColumn 只记住「第几个 item + 滚过多少像素」，不记「哪一条事件」。排序一换，
+    // 同一个索引底下换成了另一条事件——用户明明没滚动，画面却整块换了内容，
+    // 看起来就是「点一下排序，页面自己跳了、条目上下乱窜」。回到顶部后，
+    // 读到的一定是新排序下的第一条，位置是可预期的。
+    // 首次组合不触发：只在排序**真的变了**之后滚。
+    var lastSortMode by remember { mutableStateOf(state.sortMode) }
+    LaunchedEffect(state.sortMode) {
+        if (lastSortMode == state.sortMode) return@LaunchedEffect
+        lastSortMode = state.sortMode
+        for (target in listOf(listState, searchListState)) {
+            if (target.firstVisibleItemIndex > 0 || target.firstVisibleItemScrollOffset > 0) {
+                target.animateScrollToItem(0)
+            }
+        }
+    }
     // 退场动画期间 state.undo 已经清空，靠这份快照把撤销条画完。
     // 不能在组合里直接赋值（`if (state.undo != null) lastUndo = ...`）：
     // 组合期写状态会让 Compose 再跑一轮组合，撤销条每出现一次就多重组一帧。
@@ -210,12 +227,10 @@ fun HomeScreen(
     BackHandler(enabled = showSearch) { showSearch = false }
 
     // 详情页依赖最新卡片（每秒刷新会换新对象）；事件被删后自动失配 → 浮层自行关闭。
-    // 用 remember 缓存：原来每帧都 `active + completed` 拼一次新列表再线性查找，
-    // 列表越长、滚动越频繁，这里产生的垃圾越多。
-    val detailCard = remember(detailId, state.active, state.completed) {
-        detailId?.let { id ->
-            state.active.firstOrNull { it.id == id } ?: state.completed.firstOrNull { it.id == id }
-        }
+    // 查找必须覆盖纪念日段：4.6.0 起纪念日不在 active 里，只查 active + completed
+    // 会让「点纪念日卡片」什么都不发生（detailCard 为 null，浮层不出现）。
+    val detailCard = remember(detailId, state.anniversaries, state.active, state.completed) {
+        detailId?.let(state::cardById)
     }
 
     GlassTheme(

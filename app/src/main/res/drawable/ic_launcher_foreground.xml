@@ -1,25 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  「朝夕」自适应图标前景：半日半月。
+  「朝夕」自适应图标前景：圆相 + 半日半月。
 
-  一侧是实心暖金半圆（朝），另一侧只留等宽圆弧（夕），中间一刀分开 ——
-  比「日轮 + 八道光芒 + 倒影」少了很多装饰，缩小到启动器尺寸也不会糊成一团。
-  全部纯色、无渐变；两块形状共用同一个圆心与半径，接缝严丝合缝。
-  构图半径 25dp + 描边 3dp，最远点距中心 28dp，圆形 / 方圆 / 水滴遮罩都切不到。
+  构图取国风的「留白 + 一笔环」：外面一圈黛青开口环（禅意里的圆相，缺口朝右上，
+  像日晷上让光进来的一道缝），环内才是产品本来的语义——左半实心赭石为「朝」，
+  右半只留一道细描边为「夕」，中间一刀竖直分开，实虚相对。
+
+  配色全部取自国画颜料：赭石 #C98A5E、淡檀 #B58A6E、黛青 #6B7F86，压在宣纸底上。
+  线宽都 ≥2.6（48dp 下仍有近一个像素）；描边圆头，缩到启动器尺寸不会糊成一圈。
+  所有形状的最远点距中心 26.6，小于自适应图标安全半径 33，任何遮罩都切不到。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 圆相开口环：从 327° 顺时针扫 336°，24° 的缺口落在右上 -->
+    <path
+        android:pathData="M74.97,40.38 A25,25 0 1 1 67.62,33.03"
+        android:fillColor="#00000000"
+        android:strokeColor="#6B7F86"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round" />
     <!-- 左半：实心（朝） -->
     <path
-        android:pathData="M54,29 A25,25 0 0 0 54,79 Z"
-        android:fillColor="#F3C56C" />
+        android:pathData="M54,41.5 A12.5,12.5 0 0 0 54,66.5 Z"
+        android:fillColor="#C98A5E" />
     <!-- 右半：只描边（夕） -->
     <path
-        android:pathData="M54,29 A25,25 0 0 1 54,79"
+        android:pathData="M54,41.5 A12.5,12.5 0 0 1 54,66.5"
         android:fillColor="#00000000"
-        android:strokeColor="#F3C56C"
-        android:strokeWidth="6"
+        android:strokeColor="#B58A6E"
+        android:strokeWidth="2.6"
         android:strokeLineCap="round" />
 </vector>

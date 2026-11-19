@@ -324,7 +324,7 @@ class EventViewModel(
     fun toggleEventCompleted(id: String) {
         // 必须把纪念日段也算上：4.6.0 起它不在 active 里，
         // 只查 active 会让「点一下纪念日卡片上的主操作」变成一条静默 no-op
-        val expected = state.value.visibleCards().firstOrNull { it.id == id } ?: return
+        val expected = state.value.cardById(id) ?: return
         mutate {
             val event = events.findById(id) ?: return@mutate
             if (event.isCompleted != expected.isCompleted || event.primaryAction != expected.primaryAction) return@mutate
@@ -550,15 +550,6 @@ class EventViewModel(
             }
         }
     }
-
-    /**
-     * 首页几段合起来的事件卡片。
-     *
-     * 纪念日在 4.6.0 从 `active` 拆出去单独成段，任何「按 id 找卡片」的逻辑
-     * 都必须走这里——散落的 `active + completed` 会漏掉整个纪念日段。
-     */
-    private fun HomeUiState.visibleCards(): List<EventCardModel> =
-        anniversaries + active + completed
 
     companion object {
         private const val TAG = "MorrowEventVM"

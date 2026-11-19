@@ -2,16 +2,14 @@
 
 > 更新：2026-11-19。默认只读本文件与 [TODO](TODO.md)；历史批次查 [CHANGELOG](CHANGELOG.md)，
 > 许可归属查 [LICENSE-AUDIT](LICENSE-AUDIT.md)，人工验收查 [MANUAL-TEST](MANUAL-TEST.md)（该文件不代勾）。
-> 当前状态：**4.6.0 / 79 已正式发布（2026-11-19T12:07:20Z）**。纪念日「第 N 天」里程碑、首页纪念日独立成段、
-> 时间轴上下缘都能拖、轻点不再改时长（修 4.5.0 的 bug）。
-> tag `v4.6.0` → `f130067`（代码+文档）、Release「朝夕 4.6.0」id `451292263`、
-> 资产 `morrow-79-4.6.0-release.apk` **5,376,105 B / `3619711f…5023`**
-> （API 与公网回下载均 `cmp` 逐字节一致后才转正式；`/releases/latest` 与 `update/manifest.json` 已回读一致）。
-> 提交链 `f130067`(代码+文档) → `545d6c7`(manifest) → 本次(文档回填)；**tag 不等于 main 属正常**（4.1.1 起同例）。
-> 上一版 4.5.0 / 78 已正式发布（2026-11-19T09:59:53Z）：tag `v4.5.0` → `9043c9b`、Release `451154161`、
-> 资产 `morrow-78-4.5.0-release.apk` 5,359,721 B / `bdb0f872…53667a`（子任务、时间轴 15 分钟、拖拽建块、
-> 「现在」线、农历年份可切、快捷新建、自然语言、小按钮按压去泛白、倒计时环三轨）。
-> 更早：4.4.1 / 77（tag `v4.4.1` → `4186831`、Release `450909704`）。
+> 当前状态：**4.6.1 / 80 发布中（见 #32）**。修 4.6.0 上线当天收到的三条：纪念日点不进详情
+> （分区后按 id 取卡漏了纪念日段）、自定义「第 N 天」删不掉（chips 只画了预设）、
+> 点排序列表乱跳（LazyColumn 记索引不记 key）；另把那套图标重绘成国风淡色。
+> 上一版 4.6.0 / 79 已正式发布（2026-11-19T12:07:20Z）：tag `v4.6.0` → `f130067`、
+> Release `451292263`、资产 `morrow-79-4.6.0-release.apk` 5,376,105 B / `3619711f…5023`
+> （纪念日里程碑、首页分区、时间轴轻点不再改时长）。
+> 更早：4.5.0 / 78（tag `v4.5.0` → `9043c9b`、Release `451154161`、`bdb0f872…53667a`）、
+> 4.4.1 / 77（tag `v4.4.1` → `4186831`、Release `450909704`）。
 > 构建链现状：`vendor/glasmio-maven/` 随仓库带 6 个 AAR，**不再依赖 `mavenLocal()`**；许可锁定哈希按仓库内 LF 字节算。
 
 ## #31 4.6.0 / 79：时间轴拖拽修复 · 纪念日里程碑 · 首页分区
@@ -101,6 +99,69 @@
 - 三处既有测试随分区语义更新：`BackupRepositoryTest`（迁移路径补 6→7、version 断言 7）、
   `EventViewModelTest`（取卡改成跨段 `allCards()`）、`CountdownRingTest`（纪念日段与待办段合并）。
 - lint release **0 errors / 15 warnings**；`assembleRelease`、`verifyRuntimeNoticeCompleteness` 通过。
+
+## #32 4.6.1 / 80：纪念日详情回归 · 里程碑可删 · 排序回顶 · 国风图标
+
+**用户指令**（一次四条）：纪念日现在点击事件无法进入详情页；添加的自定义第 N 天提醒
+无法删除修改；点击排序页面位置会变、有些事件上下跳；图标换成国风配色、清新淡色、
+优雅风格重绘。版本由用户点选：**4.6.1 / 80**，并选择**现在就发**。
+
+### ① 「按 id 找卡片」的两个实例，这次收成一个入口
+
+4.6.0 把纪念日从 `active` 拆成独立一段，当天就收到反馈「点纪念日没反应」。根因与
+`toggleEventCompleted` 完全同型：`HomeScreen` 里
+
+```kotlin
+state.active.firstOrNull { it.id == id } ?: state.completed.firstOrNull { it.id == id }
+```
+
+对纪念日必然为 null，于是 `detailCard` 为 null，`detailCard?.let { EventDetailScreen(...) }`
+整个不进入组合——连一次「空浮层闪一下」都没有，看起来就是死键。
+
+修法不是再补一个 `?: state.anniversaries...`，而是把查找收敛成 `HomeUiState.cardById(id)`
+（三段合并）与 `visibleCards()`，`EventViewModel` 与 `HomeScreen` 都走它。
+**教训**：`active + completed` 这种「段名硬编码」的取卡写法，只要某天再拆出一段就会重犯；
+以后凡按 id 找卡，一律 `cardById`。
+
+### ② 表单 chips 要画「预设 ∪ 已设」
+
+里程碑表单原来只遍历 `EventMilestones.PRESETS` 画 chip，自定义的 200 天只落在底下一行
+纯文本「已设：第 200 天」里——**没有可点的对象**，加进去就再也删不掉、也改不成别的天数。
+现在：
+
+```kotlin
+val milestoneChips = (PRESETS + form.milestones).distinct().sorted()
+```
+
+已设的 chip 处于选中态，点一下即移除。同时 `toggleMilestone` 的满员分支从
+「交给 `normalize` 截断」改成「原样返回」：`normalize` 会 `sorted().take(MAX_COUNT)`，
+用户点了个新档位，消失的却是升序后最大的那个**早已设好的**提醒。
+
+### ③ 排序后乱跳：LazyColumn 记的是索引，不是 key
+
+`rememberLazyListState` 保存的是 `firstVisibleItemIndex + scrollOffset`。排序一换，
+同一个索引底下换成了另一条卡——用户明明没滚动，画面整块换了内容。
+现在 `LaunchedEffect(state.sortMode)` 在排序**真的变化**时把列表 `animateScrollToItem(0)`
+（首次组合不触发），并给卡片与分段标题加 `Modifier.animateItem()`：
+重排有可见的位移，而不是下一帧直接闪成新顺序。
+
+### ④ 图标：圆相 + 半日半月
+
+宣纸米白底（`#F7F2E7`）+ 中心一层只差几个色阶的暖晕（`#F3EBD9`，r=40，边界落在遮罩外）；
+外面一圈黛青 `#6B7F86` 的开口环（r=25 / 描边 3.2，从 327° 顺时针扫 336°，缺口 24° 朝右上）；
+环内左半赭石 `#C98A5E` 实心为「朝」，右半只留 `#B58A6E` 描边为「夕」（2.6），竖直分开。
+最远点距中心 26.6 < 安全半径 33。monochrome 同几何、同线宽。
+
+**不用 gradient 背景**：`<aapt:attr>` 的渐变会被 aapt 拆成一份独立资源
+（`res/drawable/$ic_launcher_background__0.xml`），平白多一个 APK 条目，而那 5 个色阶的
+过渡在 108dp 上肉眼无差。**图标改了要连 monochrome 一起改**，否则主题图标上环会突然变细。
+
+### 验证
+
+- **544 项单测 / 0 失败 / 62 套件**（较 4.6.0 的 542 增 2）：`EventPresentationTest.cardById_findsAnniversaryCard`
+  （三段各取一张 + 合并顺序）、`EventChecklistFormTest` 的自定义天数可删 / 满员不踢人。
+- `assembleDebug` 与 `lintDebug` 通过（10 warnings，无图标 / 矢量相关）；
+  aapt2 复核 APK 内 `ic_launcher_background.xml` **没有**派生出 `__0` 资源。
 
 ## #30 4.5.0 / 78：子任务 · 时间轴 15 分钟 · 拖拽 · 自然语言 · 进度环
 

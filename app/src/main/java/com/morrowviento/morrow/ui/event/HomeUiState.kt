@@ -131,6 +131,21 @@ data class HomeUiState(
     /** 归档箱不参与「总数」：它是收起来的东西，不是待处理的东西。 */
     val totalCount: Int get() = anniversaries.size + active.size + completed.size
     val archivedCount: Int get() = archived.size
+
+    /**
+     * 首页三段（纪念日 / 待办 / 已完成）合起来找一张卡。
+     *
+     * 4.6.0 把纪念日从 `active` 里拆出去之后，凡是「按 id 找卡片」的地方都必须走这里：
+     * 散落的 `active.firstOrNull { … } ?: completed.firstOrNull { … }` 会漏掉整个纪念日段，
+     * 症状是点纪念日**什么都不发生**（详情浮层拿不到 card，`detailCard?.let` 直接跳过）。
+     */
+    fun cardById(id: String): EventCardModel? =
+        anniversaries.firstOrNull { it.id == id }
+            ?: active.firstOrNull { it.id == id }
+            ?: completed.firstOrNull { it.id == id }
+
+    /** 三段合起来的卡片（顺序即首页阅读顺序）。 */
+    fun visibleCards(): List<EventCardModel> = anniversaries + active + completed
 }
 
 /** 一次分区的结果。用命名结构而不是 Pair：加归档后三元组再解构很容易错位。 */

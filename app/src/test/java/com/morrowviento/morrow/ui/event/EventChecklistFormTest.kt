@@ -234,10 +234,24 @@ class EventChecklistFormTest {
         repeat(com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT + 2) {
             next = next.toggleMilestone((it + 1) * 10)
         }
+        val full = next.milestones
         assertEquals(
             com.morrowviento.morrow.domain.model.EventMilestones.MAX_COUNT,
-            next.milestones.size,
+            full.size,
         )
+        // 满员后点新档位必须原样不动：交给 normalize 的 take() 会踢掉升序后最大的那个，
+        // 用户点了个新的，消失的却是另一个早先设好的提醒
+        assertEquals(full, next.toggleMilestone(999).milestones)
+    }
+
+    @Test
+    fun `自定义天数可以删掉`() {
+        // 200 不在 PRESETS 里：4.6.0 的表单只给预设画 chips，自定义值只落在一行
+        // 纯文本里，加进去就再也点不掉。表单层先保证 toggle 能删，
+        // 面板再把「预设 ∪ 已设」全都画成可点的 chip（见 EventEditSheet）。
+        val next = form().toggleMilestone(200).toggleMilestone(300)
+        assertEquals(listOf(200, 300), next.milestones)
+        assertEquals(listOf(300), next.toggleMilestone(200).milestones)
     }
 
     @Test
