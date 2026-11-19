@@ -1,7 +1,15 @@
 # TODO — 朝夕 · 当前待办
 
 > 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)；历史实现见 [CHANGELOG](CHANGELOG.md)，许可归属见 [LICENSE-AUDIT](LICENSE-AUDIT.md)。
-> 当前状态：**4.4.0 / 76 已正式发布**（Release `450858119`，资产 `8d5f7539…b2182`；main = `a02646a`）。
+> 当前状态：**4.4.1 / 77 已正式发布**（内容同 4.4.0，只修构建链）。上一版 4.4.0 / 76：Release `450858119`、资产 `8d5f7539…b2182`。
+
+## 4.4.1 / 77：修构建链（Glasmio AAR 进仓库 · 许可哈希按 LF 锁定）
+
+- [x] **诊断**：4.4.0 的三次推送 CI 全红——`Could not resolve ... io.github.neoruaa.glasmio:glasmio-scaffold:0.1.4-main`（依赖只在本机 `~/.m2`）；补上 AAR 后又挂在 `generateRuntimeNotices`（锁定哈希是 Windows CRLF 字节，CI 检出为 LF）。
+- [x] **AAR 进仓库**：`vendor/glasmio-maven/` 6 模块 `.aar`/`.pom`/`.module`（6.3 MB / 18 文件），`settings.gradle.kts` 用 file Maven 仓替代 `mavenLocal()`，`scripts/build-glasmio.sh` 加 `sync`。
+- [x] **哈希改 LF**：`glasmioNoticeSha256` → `297bbf9d…`（= 上游 `030d31c` blob）；随包声明文件落盘 LF；`RuntimeNoticesAssetTest` 同步。
+- [x] **验证**：搬走 `~/.m2` 与 Gradle 依赖缓存后仍可解析；CI 在 `ca12bfd` 转绿；459 项 / 57 XML / 0 失败；lint 0/15；APK 5,325,145 B / `4ea97ff9…08dc`、77 / 4.4.1、8 份许可资产一致、图像 0、`runtime.txt` 122,289 B / `478adc67…a8d6`。
+- [x] **发布**：77 / 4.4.1 已发布；tag 与资产回下载 `cmp` 一致后转正式，`/releases/latest` 与 `update/manifest.json` 回读一致。
 
 ## 4.4.0 / 76：顶栏同基线 · 月视图标记 · 小部件玻璃行 · 图标换设计 · Glasmio 走 main
 
@@ -22,7 +30,7 @@
 - [ ] **4.3.1**：日历列表视图不再闪退（每天 / 每周 / 跨多天持续事件）；年视图两列观感。
 - [ ] **4.3.0**：有时长事件点列表不再闪退；归档圆钮观感；多天事件结束日滚轮与开始日一致；**schema 4→5 迁移**。
 - [ ] **4.2.0**：时间块重叠分列、当前时刻线；农历生日跨年；归档箱交互；日期计算器；**schema 2→3→4 迁移**。
-- [ ] **通用**：同签名原位升级保数据（当前 75 → 76，schema 未变）；大字体下的列表与顶栏；节日柔光在浅色主题的浓度。
+- [ ] **通用**：同签名原位升级保数据（当前 76 → 77，schema 未变；也可直接从 75 或更早原位升）；大字体下的列表与顶栏；节日柔光在浅色主题的浓度。
 
 ## 长期项
 

@@ -2,12 +2,37 @@
 
 > 更新：2026-11-19。默认只读本文件与 [TODO](TODO.md)；历史批次查 [CHANGELOG](CHANGELOG.md)，
 > 许可归属查 [LICENSE-AUDIT](LICENSE-AUDIT.md)，人工验收查 [MANUAL-TEST](MANUAL-TEST.md)（该文件不代勾）。
-> 当前状态：**4.4.0 / 76 已正式发布（2026-11-19T03:54:20Z）**。tag `v4.4.0` → `842d52e`、Release「朝夕 4.4.0」
-> id `450858119`、资产 `morrow-76-4.4.0-release.apk` **5,322,913 B / `8d5f7539…b2182`**（回下载 `cmp` 逐字节一致后才转正式）；
-> 提交链 `73ed9b3`(代码+版本+submodule) → `842d52e`(文档) → `a02646a`(manifest)，main = `a02646a`。
-> aapt2 76 / 4.4.0 / minSdk 33 / targetSdk 37、证书 `8894605E…8D02` 同 68、全量 **459 项 / 57 XML / 0 失败**、
-> lint 0 errors / 15 warnings、`runtime.txt` 116,929 B / `6b0dfaf0…92bc`、7 份许可资产与源一致、图像条目 0。
-> 上一版 4.3.1 / 75 已发布（Release `450807520`）。
+> 当前状态：**4.4.1 / 77 已正式发布**。内容与 4.4.0 一致，只修构建链（4.4.0 的 CI 三次推送全红）。
+> 构建链现状：`vendor/glasmio-maven/` 随仓库带 6 个 AAR，**不再依赖 `mavenLocal()`**；许可锁定哈希按仓库内 LF 字节算。
+> 上一版 4.4.0 / 76 已发布（Release `450858119`，资产 `8d5f7539…b2182`）。
+
+## #29 4.4.1 / 77：修构建链（Glasmio AAR 进仓库 · 许可哈希按 LF 锁定）
+
+**起因**：4.4.0 发布后用户报「编译失败」。查 GitHub Actions：`73ed9b3` / `842d52e` / `a02646a` 三次推送全部红，
+`build` 步骤挂在 `Could not resolve all artifacts for configuration ':app:releaseRuntimeClasspath'`。
+
+**两层原因**
+
+1. `io.github.neoruaa.glasmio:*:0.1.4-main` 只有 `publishToMavenLocal` 的产物，CI 与干净检出都拿不到。
+   `includeBuild` 走不通（AGP 9 变体属性缺失），所以只能把产物放进仓库。
+2. 修完依赖后又挂在 `:app:generateRuntimeNotices`：「Glasmio main 第三方声明与锁定上游原文不一致」。
+   锁定的 `d68c34e6…` 是 **Windows 工作区 CRLF** 字节的哈希，而 `.gitattributes` 是 `* text=auto eol=lf`，
+   CI 检出成 LF（`297bbf9d…`，5185 B，= 上游 `030d31c` 的 blob）自然对不上。**本地能过、CI 必挂**的典型。
+
+**改动**
+
+- `vendor/glasmio-maven/`：6 个模块的 `.aar` / `.pom` / `.module`（6.3 MB / 18 文件），随仓库提交。
+- `settings.gradle.kts`：`mavenLocal()` → `maven { url = uri("vendor/glasmio-maven"); content { includeGroup(...) } }`。
+- `scripts/build-glasmio.sh`：加 `sync` 子命令（把 `~/.m2` 产物 cp 进仓库）；`build` 默认跑完自动 sync。
+- `app/build.gradle.kts` + `RuntimeNoticesAssetTest`：锁定哈希 → `297bbf9d…`；随包声明文件落盘成 LF。
+- **CI 文件一行未改**：`actions/checkout` 不拉子模块也能构建。
+
+**验证**：把 `~/.m2/repository/io/github/neoruaa` 与 Gradle 依赖缓存都搬走后，`--rerun-tasks` 仍能解析并通过；
+CI 在 `ca12bfd` 转绿；本地 459 项 / 57 XML / 0 失败、lint 0/15、`assembleRelease` +
+`verifyRuntimeNoticeCompleteness` 通过；APK 145 条目、8 份许可资产逐字节一致、图像 0。
+
+**副作用**：`runtime.txt` 116,929 → **122,289 B / 10 个原字节组**。同一份 Glasmio 声明现在按字节分两组
+（LF 的随包资产 + 仍为 CRLF 的 AAR 内 `META-INF/**/THIRD_PARTY_NOTICES.md`），是生成器「按原字节分组」的预期行为。
 
 ## #28 4.4.0 / 76：顶栏同基线 · 月视图标记 · 小部件玻璃行 · 图标换设计 · Glasmio 走 main
 
@@ -88,8 +113,9 @@ Maven Central 最新也只到 0.1.3，没有可依赖的发布物。
 
 | 版本 | 一句话 | 关键点 |
 |---|---|---|
+| 4.4.1 / 77 | 修构建链 | AAR 进 `vendor/glasmio-maven`；许可哈希按 LF 锁定；CI 三次红转绿。 |
+| 4.4.0 / 76 | 界面打磨 + Glasmio 走 main | 顶栏三页同基线（`PageHeader.kt` 固定 46dp 槽）；月视图今天改圆角底；小部件行卡 0.62 透明度封顶；图标「半日半月」。 |
 | 4.3.1 / 75 | 日历列表视图闪退真因 | `MonthListView` 的 LazyColumn key 只用事件 id，每天/每周事件同月多条 → `Key was already used`；key 加日期。年视图两列。 |
-| 4.3.0 / 74 | 修复打磨 + 多天结束时刻 | 归档按钮改 56dp 圆钮；`CountdownEvent.endTime` + schema 4→5；图标首版重绘。 |
 | 4.2.0 / 73 | 重复规则 + 时间块 / 标记 / 计算器 / 归档 | `RepeatType` 五档、农历循环、多点提醒、持续事件；schema 2→3→4。 |
 
 ## 工程约定
@@ -132,7 +158,7 @@ git add vendor/glasmio-maven .gitmodules vendor/glasmio && git commit -m "build:
 2. 全量验证四件套（见上）；`verifyRuntimeNoticeCompleteness` 退出 0 不等于许可审阅完成。
 3. APK 核验：`aapt2 dump badging`（版本 / minSdk 33 / targetSdk 37）、`apksigner.jar verify --print-certs`
    （证书 SHA-256 `8894605E…8D02`，自 68 起未变）、`unzip -p ... assets/licenses/*.txt | sha256sum` 逐份对源、
-   `runtime.txt` 116,447 B / `d1508af0…1449`、图像条目 0。
+   `runtime.txt`（当前 122,289 B / `478adc67…a8d6`，10 个原字节组）、图像条目 0。
 4. 提交 → 推送 main → 建 draft → 上传 asset → **回下载 `cmp` 逐字节一致** → 转正式 → 回填 `update/manifest.json`。
 5. 注意：`target_commitish` 用短 SHA 会 422，必须完整 SHA 或分支名；`GITHUB_PERSONAL_ACCESS_TOKEN` 已失效，
    token 从 `~/.git-credentials` 取 `ghp_`；API 与 git 都走 `127.0.0.1:10809`（WorkBuddy 注入的 59xxx 代理对 github 会 502）。
@@ -144,7 +170,7 @@ git add vendor/glasmio-maven .gitmodules vendor/glasmio && git commit -m "build:
   `93FBCB61575E9B06AFED6BF0971BFC7818E6274FD5C2F41F712B29E3042C8A4A`（每批发布后复核）。
 - 不改 CI、密钥、包名、schema 语义（只增可空列）、生产依赖（Glasmio 是唯一例外，本轮按用户要求换源）、AGP / Kotlin 版本。
 - 不安装 / 卸载设备；改版本号须用户点头。
-- 字体不随包（`runtime.txt` 自 4.1.2 起未变，9 组 / 119 来源）。
+- 字体不随包（`runtime.txt` 只随 Glasmio 换源变过：4.1.2–4.3.1 是 9 组，4.4.0 起 10 组 / 123 来源）。
 - 玻璃控件尺寸集中在 `ui/component/PageChrome.kt`：圆钮 34dp / 字形 17sp / 胶囊 34dp / 主操作 56dp / 首行槽 46dp。
 
 ### 崩溃排查经验（4.3.1 得出来的）

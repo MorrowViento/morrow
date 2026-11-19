@@ -3,6 +3,31 @@
 > 倒序排列，最新在上。一行结论优先，细节看提交。
 > 本文件是历史索引，不是当前任务状态；续接默认只读 HANDOFF / TODO，再按日期或模块检索本文件。
 
+## [2026-11-19] 4.4.1 (77)：修构建链（Glasmio AAR 进仓库、许可哈希按 LF 锁定）
+
+> 纯工程修复，界面与功能同 4.4.0。4.4.0 的三次推送在 CI 上全红——依赖只存在于本机 `~/.m2`，
+> 任何干净检出都构建不出来；`main` 修好后重出一版，让 tag 与 main 都能独立构建。
+
+- **CI 为什么红（两层）**：① `io.github.neoruaa.glasmio:*:0.1.4-main` 是 `publishToMavenLocal` 的产物，
+  GitHub Actions 上直接 `Could not find io.github.neoruaa.glasmio:glasmio-scaffold:0.1.4-main`；
+  ② 把 AAR 放进仓库后仍失败，卡在 `generateRuntimeNotices`——锁定的声明哈希 `d68c34e6…` 是按 **Windows 工作区的
+  CRLF 字节**算的，而 `.gitattributes` 是 `* text=auto eol=lf`，CI 检出成 LF 就报「Glasmio main 第三方声明与锁定上游原文不一致」。
+- **修法**：`vendor/glasmio-maven/` 随仓库提交 6 个模块的 `.aar` + `.pom` + `.module`（6.3 MB / 18 文件），
+  `settings.gradle.kts` 用 file Maven 仓库取代 `mavenLocal()`（`content { includeGroup(...) }` 限定坐标）；
+  `scripts/build-glasmio.sh` 增加 `sync` 子命令，把 `~/.m2` 产物同步进仓库。锁定哈希改为仓库内 LF 字节
+  `297bbf9d…`（与上游 `030d31c` 的 blob 逐字节相同）。CI 文件未改。
+- **避免复发的验证**：搬走 `~/.m2/repository/io/github/neoruaa` 与 Gradle 依赖缓存后，
+  `gradle :app:checkDebugAarMetadata --rerun-tasks` 仍能解析——依赖确实来自仓库。
+- **副作用（已知且接受）**：随包 `glasmio-third-party-notices.txt` 由 CRLF 变 LF（5245→5185 B）；
+  `runtime.txt` 从 116,929 B 涨到 **122,289 B / 10 个原字节组**——同一份 Glasmio 声明现在按字节分成两组
+  （LF 的随包资产 + Windows 构建出的 AAR 内 `META-INF/**/THIRD_PARTY_NOTICES.md` 仍是 CRLF），
+  这是生成器「按原字节分组、不合并不同 NOTICE」的设计结果。
+- **验证**：CI 在 `ca12bfd` **通过**（assembleDebug + 单测 + lint 全绿）；本地 **459 项 / 57 份 XML / 0 失败**；
+  lint release **0 errors / 15 warnings**；`assembleRelease` 与 `verifyRuntimeNoticeCompleteness` 通过。
+- **最终 APK** `morrow-77-4.4.1-release.apk`：**5,325,145 B**，SHA-256 `4ea97ff95ca0461e7c1e63dc9df74b8e5eb4022667b17ab781b6312e201d08dc`；
+  aapt2 77 / 4.4.1 / minSdk 33 / targetSdk 37；证书 SHA-256 `8894605E…8D02`（同 68，可原位升级）；
+  145 条目、**8 份许可资产**与源逐字节一致（`morrow.txt` = 根 `LICENSE`）、图像条目 0、`runtime.txt` 122,289 B / `478adc67…a8d6`。
+
 ## [2026-11-19] 4.4.0 (76)：顶栏三页同基线、月视图今天标记、小部件玻璃行、图标换设计、Glasmio 走 main
 
 > 界面打磨版。三页顶栏按钮真正落在同一条基线上；月视图的今天圆圈不再压住事件点；小部件行卡片去掉纸白；
