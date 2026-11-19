@@ -1,7 +1,7 @@
 # TODO — 朝夕 · 当前待办
 
 > 更新：2026-11-19。续接先读 [HANDOFF](HANDOFF.md)；历史实现见 [CHANGELOG](CHANGELOG.md)，许可归属见 [LICENSE-AUDIT](LICENSE-AUDIT.md)。
-> 当前状态：**4.4.0 / 76 待发布**（代码完成，构建核验中）。
+> 当前状态：**4.4.0 / 76 已正式发布**（Release `450858119`，资产 `8d5f7539…b2182`；main = `a02646a`）。
 
 ## 4.4.0 / 76：顶栏同基线 · 月视图标记 · 小部件玻璃行 · 图标换设计 · Glasmio 走 main
 
@@ -13,7 +13,7 @@
 - [x] **图标换设计**：「半日半月」——一侧实心暖金半圆、另一侧等宽描边圆弧，中间一刀分开；背景纯色 `#171728`。去掉光芒/地平线/倒影等装饰，缩小到启动器尺寸也不糊。
 - [x] **交接文档精简**：HANDOFF 359→约 120 行、TODO 176→约 80 行，历史批次收敛为「一行索引 + 指向 CHANGELOG」。
 - [x] **验证**：**459 项单测 / 57 份 XML / 0 失败**；lint 0 errors / 15 warnings；`assembleRelease` + `verifyRuntimeNoticeCompleteness` 通过；APK 5,322,913 B / `8d5f7539…b2182`、76 / 4.4.0、证书同 68、7 份许可资产一致、图像 0、`runtime.txt` 116,929 B / `6b0dfaf0…92bc`。
-- [ ] **发布**：`versionCode 75→76`、`versionName 4.3.1→4.4.0`，原签名 release + 上传 + 回下载比对 + 回填 manifest。
+- [x] **发布**：76 / 4.4.0 已发布；tag `v4.4.0` = `842d52e`，资产回下载 `cmp` 一致后转正式，`/releases/latest` 与 `update/manifest.json` 已回读一致。
 
 ## 真机验收（累积，按版本标注）
 

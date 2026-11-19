@@ -2,9 +2,12 @@
 
 > 更新：2026-11-19。默认只读本文件与 [TODO](TODO.md)；历史批次查 [CHANGELOG](CHANGELOG.md)，
 > 许可归属查 [LICENSE-AUDIT](LICENSE-AUDIT.md)，人工验收查 [MANUAL-TEST](MANUAL-TEST.md)（该文件不代勾）。
-> 当前状态：**4.4.0 / 76 代码完成，构建核验已过，发布进行中**。release APK `morrow-76-4.4.0-release.apk`
-> **5,322,913 B / `8d5f7539…b2182`**，aapt2 76 / 4.4.0、证书 `8894605E…8D02` 同 68、全量 **459 项 / 57 XML / 0 失败**、
-> lint 0 errors / 15 warnings、`runtime.txt` 116,929 B / `6b0dfaf0…92bc`。上一版 4.3.1 / 75 已发布（Release `450807520`）。
+> 当前状态：**4.4.0 / 76 已正式发布（2026-11-19T03:54:20Z）**。tag `v4.4.0` → `842d52e`、Release「朝夕 4.4.0」
+> id `450858119`、资产 `morrow-76-4.4.0-release.apk` **5,322,913 B / `8d5f7539…b2182`**（回下载 `cmp` 逐字节一致后才转正式）；
+> 提交链 `73ed9b3`(代码+版本+submodule) → `842d52e`(文档) → `a02646a`(manifest)，main = `a02646a`。
+> aapt2 76 / 4.4.0 / minSdk 33 / targetSdk 37、证书 `8894605E…8D02` 同 68、全量 **459 项 / 57 XML / 0 失败**、
+> lint 0 errors / 15 warnings、`runtime.txt` 116,929 B / `6b0dfaf0…92bc`、7 份许可资产与源一致、图像条目 0。
+> 上一版 4.3.1 / 75 已发布（Release `450807520`）。
 
 ## #28 4.4.0 / 76：顶栏同基线 · 月视图标记 · 小部件玻璃行 · 图标换设计 · Glasmio 走 main
 
