@@ -29,6 +29,20 @@ internal object PageChrome {
     /** 头部行的下内边距。 */
     val HeaderBottom = 4.dp
 
+    /**
+     * 顶栏「首行」的固定高度：标题第一行与右侧按钮都放进这个槽里居中。
+     *
+     * 三页标题行数不同（首页两行、日历两行、设置一行），若各按内容高低居中，
+     * 同一颗 34dp 圆钮的落点就会差上几 dp。固定槽高之后，按钮中心恒为
+     * `HeaderTop + HeaderFirstLine / 2`。
+     *
+     * 46dp 是「34sp 大标题 + 显式 40sp 行高」还能完整放下的高度。
+     */
+    val HeaderFirstLine = 46.dp
+
+    /** 顶栏按钮之间的水平间距。 */
+    val HeaderActionGap = 8.dp
+
     /** 与圆形按钮同排的胶囊（排序胶囊等）的高度，取和圆钮同高才不显矮。 */
     val ChipHeight = 34.dp
 

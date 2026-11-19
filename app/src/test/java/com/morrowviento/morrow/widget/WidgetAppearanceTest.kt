@@ -158,7 +158,8 @@ class WidgetAppearanceTest {
         for (dark in listOf(false, true)) {
             val colors = WidgetStyle().colors(dark, AppSettings().resolvedAccent)
             assertEquals(if (dark) 23 else 13, Color.alpha(WidgetAppearance.rowTint(colors, 0f, false)))
-            assertTrue(Color.alpha(WidgetAppearance.rowTint(colors, 0f, true)) >= 183)
+            // 4.4.0 起行卡片不透明度封顶 62%（158/255）：不封顶时「不透明」档会刷成实心白纸片
+            assertEquals(158, Color.alpha(WidgetAppearance.rowTint(colors, 0f, true)))
         }
     }
 

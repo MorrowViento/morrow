@@ -1,6 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!-- 行卡片描边：半透明白细边，模拟玻璃片的受光边缘 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <corners android:radius="26dp" />
+    <corners android:radius="22dp" />
     <solid android:color="#00000000" />
-    <stroke android:width="1dp" android:color="#FFFFFFFF" />
+    <stroke android:width="1dp" android:color="#4DFFFFFF" />
 </shape>

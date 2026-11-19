@@ -1,0 +1,4 @@
+[submodule "vendor/glasmio"]
+	path = vendor/glasmio
+	url = https://github.com/neoruaa/glasmio.git
+	branch = main

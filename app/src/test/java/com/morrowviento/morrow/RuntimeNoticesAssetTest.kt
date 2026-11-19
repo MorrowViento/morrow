@@ -128,15 +128,17 @@ class RuntimeNoticesAssetTest {
     @Test
     fun lockedGlasmioNoticeRetainsUpstreamTextAndAppleExclusions() {
         val bytes = asset("glasmio-third-party-notices.txt")
-        assertEquals("e7327a8f2829e07f92e4c582d80a03c439ee2c55bea46a294490288b1ea820c1", sha256(bytes))
+        assertEquals("d68c34e6d1175b0688e1029dabf4216a753cf67acb39a719b52f994fbd96a37f", sha256(bytes))
         val notice = text(bytes)
         assertTrue(notice.contains("Apple Inc. retains copyright"))
         assertTrue(notice.contains("not covered by Glasmio's Apache-2.0 license"))
+        // main 新增：Miuix 的 Display-cutout safe-area repair 也进了库，声明必须同步
+        assertTrue(notice.contains("Display-cutout safe-area repair"))
         val runtime = text(asset("runtime.txt"))
         assertTrue(runtime.contains(notice))
-        assertTrue(runtime.contains("3332b385a4c1578d93366471195a882d1f0173e1/THIRD_PARTY_NOTICES.md"))
-        assertTrue(runtime.contains("glasmio-ui-0.1.3.aar"))
-        assertTrue(runtime.contains("glasmio-icons-0.1.3.aar"))
+        assertTrue(runtime.contains("030d31c1cb1b9958ddab0b6764c4e8ed82864b0b/THIRD_PARTY_NOTICES.md"))
+        assertTrue(runtime.contains("glasmio-ui-0.1.4-main.aar"))
+        assertTrue(runtime.contains("glasmio-icons-0.1.4-main.aar"))
     }
 
     @Test

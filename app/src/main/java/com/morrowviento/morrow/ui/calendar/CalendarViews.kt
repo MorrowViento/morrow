@@ -109,6 +109,7 @@ internal fun MonthView(
 internal fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit) {
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
+    val accent = glassAccent()
     val dimmed = !cell.inMonth
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val textAlpha = when {
@@ -148,22 +149,28 @@ internal fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit
                 tint = glassAccent().copy(alpha = 0.20f),
             )
         }
-        if (cell.isToday) {
-            Canvas(Modifier.matchParentSize().padding(6.dp)) {
-                drawCircle(color = primary.copy(alpha = 0.4f), style = Stroke(width = 1.2.dp.toPx()))
-            }
-        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // 今天不再用「整格描边圆」：那个圆的直径盖住了农历行和底部的事件点，
+            // 圈底必然压到点。改成只包住日期数字的淡色圆角底 —— 一眼能看出今天，
+            // 又不会碰到下面的点。
+            val todayChip = if (cell.isToday) {
+                Modifier
+                    .background(accent.copy(alpha = 0.18f), RoundedCornerShape(7.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
+            } else {
+                Modifier
+            }
             Text(
                 text = cell.date.dayOfMonth.toString(),
+                modifier = todayChip,
                 style = TextStyle(
                     fontSize = 15.sp,
                     lineHeight = 18.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = if (cell.isToday) FontWeight.SemiBold else FontWeight.Medium,
                     fontFeatureSettings = "tnum",
                     platformStyle = CalendarFontMetrics,
                     lineHeightStyle = CalendarLineHeight,
-                    color = primary.copy(alpha = textAlpha),
+                    color = if (cell.isToday) accent else primary.copy(alpha = textAlpha),
                 ),
             )
             Text(
@@ -183,14 +190,15 @@ internal fun DayCell(cell: CalendarCell, modifier: Modifier, onClick: () -> Unit
                     },
                 ),
             )
-            Box(Modifier.height(4.dp), contentAlignment = Alignment.Center) {
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    repeat(cell.eventCount.coerceAtMost(3)) {
+            // 事件点：固定占底部一条，最多 4 点。用强调色而不是正文色，和今天的圆角底同源。
+            Box(Modifier.height(6.dp), contentAlignment = Alignment.Center) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.5.dp)) {
+                    repeat(cell.eventCount.coerceAtMost(4)) {
                         Box(
                             Modifier
-                                .size(3.dp)
+                                .size(2.5.dp)
                                 .clip(CircleShape)
-                                .background(primary.copy(alpha = if (dimmed) 0.25f else 0.6f)),
+                                .background(accent.copy(alpha = if (dimmed) 0.22f else 0.75f)),
                         )
                     }
                 }
@@ -293,16 +301,16 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
                         val cell = summary.cells[row * 7 + col]
                         Box(Modifier.weight(1f).height(16.dp * fontScale), contentAlignment = Alignment.Center) {
                             if (cell.inMonth) {
-                                if (cell.isToday) Canvas(Modifier.matchParentSize()) {
-                                    drawCircle(accent.copy(alpha = 0.24f), radius = size.minDimension * 0.43f)
-                                    drawCircle(accent, radius = size.minDimension * 0.43f, style = Stroke(1.dp.toPx()))
-                                }
+                                // 年视图格子只有 16dp：今天的圆半径 7dp，底边正好压住 3dp 的事件点。
+                                // 这里不再画圆，改用强调色 + 加重字重标记今天 —— 小尺寸下反而更清楚。
                                 Text(cell.date.dayOfMonth.toString(), style = TextStyle(
-                                    fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Medium,
+                                    fontSize = 9.sp, lineHeight = 11.sp,
+                                    fontWeight = if (cell.isToday) FontWeight.Bold else FontWeight.Medium,
                                     fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
-                                    lineHeightStyle = CalendarLineHeight, color = primary,
+                                    lineHeightStyle = CalendarLineHeight,
+                                    color = if (cell.isToday) accent else primary,
                                 ))
-                                if (cell.eventCount > 0) Canvas(Modifier.align(Alignment.BottomCenter).size(3.dp)) {
+                                if (cell.eventCount > 0) Canvas(Modifier.align(Alignment.BottomCenter).size(2.5.dp)) {
                                     drawCircle(accent)
                                 }
                             }

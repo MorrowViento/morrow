@@ -60,8 +60,8 @@ android {
         minSdk = 33
         targetSdk = 37
         // 版本号只增不减：应用内更新靠 versionCode 判定，发版前必须上调
-        versionCode = 75
-        versionName = "4.3.1"
+        versionCode = 76
+        versionName = "4.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // 镜像前缀写进 BuildConfig，避免把第三方代理域名硬编码进代码（这类域名寿命短）。
@@ -154,9 +154,9 @@ object RuntimeNoticePolicy {
     const val version = 4
     const val protobuf = "androidx.datastore:datastore-preferences-external-protobuf:1.3.0"
     const val materialKolor = "com.materialkolor:material-color-utilities-android:4.1.1"
-    const val glasmioNoticeSha256 = "e7327a8f2829e07f92e4c582d80a03c439ee2c55bea46a294490288b1ea820c1"
+    const val glasmioNoticeSha256 = "d68c34e6d1175b0688e1029dabf4216a753cf67acb39a719b52f994fbd96a37f"
     const val glasmioNoticeSource =
-        "https://github.com/NEORUAA/Glasmio/blob/3332b385a4c1578d93366471195a882d1f0173e1/THIRD_PARTY_NOTICES.md"
+        "https://github.com/NEORUAA/Glasmio/blob/030d31c1cb1b9958ddab0b6764c4e8ed82864b0b/THIRD_PARTY_NOTICES.md"
 
     // 精确到模块和解析版本；同 group 的新模块/新版本不能自动继承许可。
     val apacheCoordinates = setOf(
@@ -238,12 +238,12 @@ object RuntimeNoticePolicy {
         "dev.drewhamilton.poko:poko-annotations-jvm:0.21.1",
         "io.github.kyant0:capsule:2.1.3",
         "io.github.kyant0:shapes-android:1.2.1",
-        "io.github.neoruaa.glasmio:glasmio-core:0.1.3",
-        "io.github.neoruaa.glasmio:glasmio-glass:0.1.3",
-        "io.github.neoruaa.glasmio:glasmio-icons:0.1.3",
-        "io.github.neoruaa.glasmio:glasmio-preference:0.1.3",
-        "io.github.neoruaa.glasmio:glasmio-scaffold:0.1.3",
-        "io.github.neoruaa.glasmio:glasmio-ui:0.1.3",
+        "io.github.neoruaa.glasmio:glasmio-core:0.1.4-main",
+        "io.github.neoruaa.glasmio:glasmio-glass:0.1.4-main",
+        "io.github.neoruaa.glasmio:glasmio-icons:0.1.4-main",
+        "io.github.neoruaa.glasmio:glasmio-preference:0.1.4-main",
+        "io.github.neoruaa.glasmio:glasmio-scaffold:0.1.4-main",
+        "io.github.neoruaa.glasmio:glasmio-ui:0.1.4-main",
         "org.jetbrains.compose.runtime:runtime-android:1.12.0",
         "org.jetbrains.compose.runtime:runtime-saveable-android:1.12.0",
         "org.jetbrains.compose.ui:ui-android:1.12.0",
@@ -359,7 +359,7 @@ class RuntimeNoticeCollector {
 
         fun requireGlasmioSource(bytes: ByteArray) {
             require(sha256(bytes) == RuntimeNoticePolicy.glasmioNoticeSha256) {
-                "Glasmio v0.1.3 第三方声明与锁定上游原文不一致"
+                "Glasmio main 第三方声明与锁定上游原文不一致"
             }
         }
     }
@@ -643,7 +643,7 @@ val generateRuntimeNotices = tasks.register("generateRuntimeNotices") {
         collector.add(rootBytes, "朝夕根 LICENSE — MIT；APK 副本 assets/licenses/morrow.txt")
         val glasmioBytes = glasmioNoticeFile.asFile.readBytes()
         RuntimeNoticeCollector.requireGlasmioSource(glasmioBytes)
-        collector.add(glasmioBytes, "Glasmio v0.1.3 锁定第三方声明；${RuntimeNoticePolicy.glasmioNoticeSource}")
+        collector.add(glasmioBytes, "Glasmio main@030d31c 锁定第三方声明；${RuntimeNoticePolicy.glasmioNoticeSource}")
         val gaps = sortedSetOf<String>()
         var archiveTexts = 0
         val manifest = buildString {

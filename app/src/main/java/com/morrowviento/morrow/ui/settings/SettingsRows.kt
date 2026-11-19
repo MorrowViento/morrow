@@ -31,6 +31,9 @@ import com.morrowviento.morrow.data.settings.BackdropMode
 import com.morrowviento.morrow.data.settings.GlassFrostLevel
 import com.morrowviento.morrow.data.settings.ThemeMode
 import com.morrowviento.morrow.ui.component.PageChrome
+import com.morrowviento.morrow.ui.component.PageHeaderActions
+import com.morrowviento.morrow.ui.component.PageHeaderRow
+import com.morrowviento.morrow.ui.component.PageTitleSlot
 import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassAlert
 import com.morrowviento.morrow.ui.glass.GlassAlertButton
@@ -47,31 +50,25 @@ import kotlinx.coroutines.delay
 
 @Composable
 internal fun SettingsHeader(onDismiss: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = PageChrome.HeaderHorizontal,
-                end = PageChrome.HeaderHorizontal,
-                top = PageChrome.HeaderTop,
-                bottom = PageChrome.HeaderBottom,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        GlassCirclePanel(
-            modifier = Modifier.size(PageChrome.CircleButtonSize),
-            onClick = onDismiss,
-        ) {
-            Text(
-                text = "‹",
-                style = TextStyle(fontSize = PageChrome.CircleGlyphSize, color = glassTextPrimary()),
-            )
+    PageHeaderRow {
+        PageHeaderActions {
+            GlassCirclePanel(
+                modifier = Modifier.size(PageChrome.CircleButtonSize),
+                onClick = onDismiss,
+            ) {
+                Text(
+                    text = "‹",
+                    style = TextStyle(fontSize = PageChrome.CircleGlyphSize, color = glassTextPrimary()),
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = "设置",
-            style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
-        )
+        PageTitleSlot {
+            Text(
+                text = "设置",
+                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = glassTextPrimary()),
+            )
+        }
     }
 }
 

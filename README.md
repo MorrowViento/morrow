@@ -1,6 +1,6 @@
 # 朝夕（morrow）
 
-Android 13+ 的倒计时 / 纪念日 / 待办应用，用 Kotlin + Jetpack Compose + [Glasmio](https://github.com/NEORUAA/Glasmio) 0.1.3 重写自
+Android 13+ 的倒计时 / 纪念日 / 待办应用，用 Kotlin + Jetpack Compose + [Glasmio](https://github.com/NEORUAA/Glasmio) main 重写自
 [ying](https://github.com/jiuxina/ying)（原 Flutter 版）。
 
 这是一个**独立维护的 Kotlin 应用**，不是 Flutter 版的外壳或补丁：数据模型、界面、提醒与小部件都在本仓库实现，
@@ -27,13 +27,14 @@ Android 13+ 的倒计时 / 纪念日 / 待办应用，用 Kotlin + Jetpack Compo
 | 项 | 取值 |
 |---|---|
 | 最低系统 | Android 13（API 33），Glasmio 的运行时要求 |
-| 语言 / UI | Kotlin · Jetpack Compose（Compose BOM 2026.09.00）· Glasmio 0.1.3 |
+| 语言 / UI | Kotlin · Jetpack Compose（Compose BOM 2026.09.00）· Glasmio main（`0.1.4-main`，源码见 `vendor/glasmio`） |
 | 数据 | Room 2.8.5（导出 schema）+ DataStore Preferences 1.3.0 |
 | 构建 | JDK 21 · compileSdk / targetSdk 37（build-tools 37.0.0）· Gradle 9.6.0 · AGP 9（内置 Kotlin） |
 | 包名 | `com.morrowviento.morrow` |
 
-> 不需要 NDK / CMake：Glasmio 的 AAR 已内置四个 ABI 的预编译 `libglasmio_liquid_menu_sdf.so`，
-> 本工程没有原生源码。
+> Glasmio 走 `vendor/glasmio` 的 main 源码，`glasmio-glass` 带 C++ SDF 着色器，
+> 因此构建需要 **NDK 27.1.12297006 + CMake 3.22.1**（首次先跑 `scripts/build-glasmio.sh`
+> 把库发布到本机 Maven 仓库）。Morrow 自身没有原生源码。
 
 ## 构建
 
@@ -55,14 +56,15 @@ Android 13+ 的倒计时 / 纪念日 / 待办应用，用 Kotlin + Jetpack Compo
 
 ## Glasmio 封装约定
 
-**所有 Glasmio 调用以 `v0.1.3` 标签源码为准，不是 main 分支。** 业务代码不得直接 import
+**Glasmio 以 `vendor/glasmio` 的 main 源码为准**（submodule 固定在 `030d31c`，由
+`scripts/build-glasmio.sh` 发布 `0.1.4-main` 到本机仓库；上游 Maven 最新仍是 0.1.3）。业务代码不得直接 import
 `io.github.neoruaa.glasmio.*`，只经 `ui/glass/` 封装层调用；升级库时改动应收敛在该目录。
 
 | 项 | 我们依赖的形态 |
 |---|---|
 | `GlasmioBackdropHost` | `(modifier, sampledContent, overlayContent)`；纯色底由调用方自己画 `Box` |
-| `GlassSurface` | 默认取 `LocalGlassBackdrop`；0.1.3 起自带 `onClick` / `onLongClick` / `detailAction` 按压光学 |
-| `InteractiveHighlight` | 0.1.3 的「液体光斑」，由 `ui/glass/` 统一封装 |
+| `GlassSurface` | 默认取 `LocalGlassBackdrop`；自带 `onClick` / `onLongClick` / `detailAction` 按压光学 |
+| `InteractiveHighlight` | 「液体光斑」，由 `ui/glass/` 统一封装 |
 | 渲染门槛 | 按压高光走 `RuntimeShader`，**API 36 以下库内直接跳过**，封装层另加淡白色兜底 |
 
 `com.kyant.capsule.ContinuousRoundedRectangle` 与 `com.kyant.shapes.Capsule` 同样只在封装层使用。
@@ -88,7 +90,7 @@ app/src/main/assets/licenses/   # 随包许可原文（见下）
 |---|---|
 | 本仓库代码 | MIT，见 [`LICENSE`](LICENSE) |
 | ying（原 Flutter 版） | MIT，Copyright (c) 2026 Gao Shuai，全文见 `assets/licenses/ying.txt` |
-| Glasmio 0.1.3 | **Apache-2.0**（不是 MIT）；第三方声明与 Apple 素材排除项见 `assets/licenses/glasmio-third-party-notices.txt` |
+| Glasmio main | **Apache-2.0**（不是 MIT）；第三方声明与 Apple 素材排除项见 `assets/licenses/glasmio-third-party-notices.txt` |
 | AndroidX / Jetpack Compose / Room / DataStore | Apache-2.0 |
 | MaterialKolor 4.1.1 | MIT；内嵌 Material Color Utilities 部分为 Apache-2.0，两份正文分别随包 |
 | DataStore external protobuf 1.3.0 | BSD-3-Clause；归档内正文缺版权行，随包另附上游全文 `assets/licenses/protobuf-bsd-3.txt` |

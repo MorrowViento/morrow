@@ -1,8 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+<?xml version="1.0" encoding="utf-8"?><!--
   Android 13 主题图标（Monochrome）用的单色版本。
-  系统只取 alpha 通道再着色，所以这里一律纯白、不保留灰阶与渐变；
-  与前景同一套几何（日轮 + 光芒 + 地平线 + 倒影）。
+  系统只取 alpha 通道再着色，因此这里一律纯白、不保留灰阶：
+  与前景同一套「半日半月」几何，实心半边 + 描边半边。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -10,39 +9,12 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M42,42 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"
+        android:pathData="M54,29 A25,25 0 0 0 54,79 Z"
         android:fillColor="#FFFFFFFF" />
     <path
-        android:pathData="M70,42 L74.5,42 M65.3,53.3 L68.5,56.5 M54,58 L54,62.5 M42.7,53.3 L39.5,56.5 M38,42 L33.5,42 M42.7,30.7 L39.5,27.5 M54,26 L54,21.5 M65.3,30.7 L68.5,27.5"
+        android:pathData="M54,29 A25,25 0 0 1 54,79"
         android:fillColor="#00000000"
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="3.5"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M24,72 Q54,60 84,72"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="4"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M42,78 L66,78"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.62"
-        android:strokeWidth="2.6"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M47,83 L61,83"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.44"
-        android:strokeWidth="2.6"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M50,86 L58,86"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.28"
-        android:strokeWidth="2.6"
+        android:strokeWidth="6"
         android:strokeLineCap="round" />
 </vector>

@@ -49,6 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.component.PageChrome
+import com.morrowviento.morrow.ui.component.PageHeaderActions
+import com.morrowviento.morrow.ui.component.PageHeaderRow
+import com.morrowviento.morrow.ui.component.PageTitleSlot
 import com.morrowviento.morrow.ui.component.SortGlyph
 import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.event.HomeUiState
@@ -114,26 +117,22 @@ internal fun HomeHeader(
     val primary = glassTextPrimary()
     val secondary = glassTextSecondary()
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = PageChrome.HeaderHorizontal,
-                end = PageChrome.HeaderHorizontal,
-                top = PageChrome.HeaderTop,
-                bottom = PageChrome.HeaderBottom,
-            ),
-        // 顶对齐：首页标题是「大标题 + 副标题」的多行块，若按 CenterVertically 排，
-        // 右侧按钮会被整块高度拽到中间，比日历 / 设置页的顶栏圆钮低一截。
-        // 顶对齐后按钮的**上边缘**落在 HeaderTop 上，与其它页完全同一条基线。
-        verticalAlignment = Alignment.Top,
-    ) {
+    // 顶栏首行固定槽高：标题第一行与右侧按钮同高居中，三页按钮因此落在同一条基线上。
+    PageHeaderRow {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "朝夕",
-                maxLines = 1,
-                style = TextStyle(fontSize = titleSize.sp, fontWeight = FontWeight.Bold, color = primary),
-            )
+            PageTitleSlot {
+                Text(
+                    text = "朝夕",
+                    maxLines = 1,
+                    style = TextStyle(
+                        fontSize = titleSize.sp,
+                        // 显式行高：34sp 的默认行高会超过首行槽，把字形裁掉一截
+                        lineHeight = (titleSize * 1.15f).sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primary,
+                    ),
+                )
+            }
             // 节日只在展开态出现：折叠后标题那一行已经很窄，再挤一句祝语会把
             // 「朝夕」压成省略号
             val festival = LocalFestivalSkin.current
@@ -175,14 +174,8 @@ internal fun HomeHeader(
                 )
             }
         }
-        // 右侧按钮组：按「标准顶栏行高」兜住，内容垂直居中。
-        // 行高与日历 / 设置页的顶栏一致（34dp 按钮 + 12 / 4 内边距），
-        // 于是三页按钮的上边缘和视觉中心都落在同一条基线上。
-        Row(
-            modifier = Modifier.height(PageChrome.ChipHeight),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // 右侧按钮组：与标题首行同高，内部垂直居中。
+        PageHeaderActions {
             SortChip(label = sortLabel, onClick = onCycleSort)
             moreAction()
         }

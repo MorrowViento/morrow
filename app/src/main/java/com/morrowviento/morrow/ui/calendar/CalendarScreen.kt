@@ -41,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morrowviento.morrow.ui.component.PageChrome
+import com.morrowviento.morrow.ui.component.PageHeaderActions
+import com.morrowviento.morrow.ui.component.PageHeaderRow
+import com.morrowviento.morrow.ui.component.PageTitleSlot
 import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.GlassCirclePanel
 import com.morrowviento.morrow.ui.glass.GlassMotion
@@ -287,35 +290,31 @@ private fun CalendarHeader(
         CalendarView.TIMELINE -> "天"
         else -> "年"
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = PageChrome.HeaderHorizontal,
-                end = PageChrome.HeaderHorizontal,
-                top = PageChrome.HeaderTop,
-                bottom = PageChrome.HeaderBottom,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        NavButton("‹", "上一$navUnit", enabled = canPrev) {
-            when (state.view) {
-                CalendarView.MONTH -> actions.shiftMonth(-1)
-                CalendarView.TIMELINE -> actions.shiftDay(-1)
-                else -> actions.shiftYear(-1)
+    PageHeaderRow {
+        // 左翻页钮单独成组：与右侧两个钮同高同槽，三页按钮中心一致
+        PageHeaderActions {
+            NavButton("‹", "上一$navUnit", enabled = canPrev) {
+                when (state.view) {
+                    CalendarView.MONTH -> actions.shiftMonth(-1)
+                    CalendarView.TIMELINE -> actions.shiftDay(-1)
+                    else -> actions.shiftYear(-1)
+                }
             }
         }
         CalendarAnimatedContent(transition, Modifier.weight(1f), slide = false) { snapshot ->
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = calendarTitle(snapshot),
-                    maxLines = 1,
-                    style = TextStyle(
-                        fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold,
-                        fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
-                        lineHeightStyle = CalendarLineHeight, color = glassTextPrimary(),
-                    ),
-                )
+                // 标题第一行放进固定槽：槽中心与按钮中心重合，副标题挂在槽下面
+                PageTitleSlot(alignment = Alignment.Center) {
+                    Text(
+                        text = calendarTitle(snapshot),
+                        maxLines = 1,
+                        style = TextStyle(
+                            fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold,
+                            fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
+                            lineHeightStyle = CalendarLineHeight, color = glassTextPrimary(),
+                        ),
+                    )
+                }
                 Text(
                     text = calendarSubtitle(snapshot),
                     maxLines = 1,
@@ -326,15 +325,16 @@ private fun CalendarHeader(
                 )
             }
         }
-        NavButton("›", "下一$navUnit", enabled = canNext) {
-            when (state.view) {
-                CalendarView.MONTH -> actions.shiftMonth(1)
-                CalendarView.TIMELINE -> actions.shiftDay(1)
-                else -> actions.shiftYear(1)
+        PageHeaderActions {
+            NavButton("›", "下一$navUnit", enabled = canNext) {
+                when (state.view) {
+                    CalendarView.MONTH -> actions.shiftMonth(1)
+                    CalendarView.TIMELINE -> actions.shiftDay(1)
+                    else -> actions.shiftYear(1)
+                }
             }
+            NavButton("✕", "关闭日历", onClick = onDismiss)
         }
-        Spacer(Modifier.width(10.dp))
-        NavButton("✕", "关闭日历", onClick = onDismiss)
     }
 
     // 视图切换：Glasmio 的分段控件（一条玻璃轨道 + 会滑动/拉伸的指示器）。

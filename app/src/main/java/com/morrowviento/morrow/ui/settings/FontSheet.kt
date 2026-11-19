@@ -1,7 +1,6 @@
 package com.morrowviento.morrow.ui.settings
 
 /** 字体弹层：就地预览已导入字体、导入新字体、给出推荐字体的下载入口。 */
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,16 +20,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import com.morrowviento.morrow.data.settings.AppFont
-import com.morrowviento.morrow.data.settings.RECOMMENDED_FONTS
-import com.morrowviento.morrow.data.settings.RecommendedFont
 import com.morrowviento.morrow.ui.component.Text
 import com.morrowviento.morrow.ui.glass.AppFontTheme
 import com.morrowviento.morrow.ui.glass.GlassPanel
@@ -61,7 +56,6 @@ internal fun FontSheet(
     onDelete: (AppFont) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     // 字体文件的 MIME 在各家文件管理器里写法不一：有的报 font/ttf，
     // 有的直接给 application/octet-stream。多列几个类型，别让用户在自己的手机上选不到文件。
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -155,34 +149,6 @@ internal fun FontSheet(
                 Spacer(Modifier.height(18.dp))
             }
 
-            item(key = "recommend-title") {
-                Text(
-                    text = "去哪里找字体",
-                    modifier = Modifier.padding(start = 6.dp, bottom = 4.dp),
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = glassTextSecondary()),
-                )
-                Text(
-                    // 把「为什么不在应用里直接下载」讲明白：包体与授权都不是小事
-                    text = "应用不内置字体：中文字体动辄十几 MB，且每款都要随包附带许可全文。" +
-                        "下面几款都是 OFL-1.1 开源字体，点开在浏览器里下载后，回来选「导入字体文件」。",
-                    modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 8.dp),
-                    style = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, color = glassTextTertiary()),
-                )
-            }
-
-            items(RECOMMENDED_FONTS, key = { it.url }) { font ->
-                RecommendedRow(font) {
-                    // 打开失败（没装浏览器）时不能静默：至少别让用户以为点了没反应
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, font.url.toUri())
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-
             item(key = "footnote") {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -272,31 +238,5 @@ private fun FontRow(
             modifier = Modifier.width(18.dp),
             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = glassAccent()),
         )
-    }
-}
-
-@Composable
-private fun RecommendedRow(font: RecommendedFont, onOpen: () -> Unit) {
-    GlassPanel(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart, onClick = onOpen) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = font.name,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = glassTextPrimary()),
-                )
-                Text(
-                    text = "${font.license} · ${font.note}",
-                    style = TextStyle(fontSize = 11.sp, color = glassTextTertiary()),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "前往",
-                style = TextStyle(fontSize = 12.sp, color = glassAccent()),
-            )
-        }
     }
 }

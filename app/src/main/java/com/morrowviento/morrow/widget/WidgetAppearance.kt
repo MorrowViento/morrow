@@ -197,11 +197,22 @@ internal object WidgetAppearance {
     fun textSecondary(dark: Boolean): Int = if (dark) 0x9EFFFFFF.toInt() else 0x993C3C43.toInt()
     fun separator(dark: Boolean): Int = if (dark) 0x1EFFFFFF else 0x1A000000
     fun accentOf(accent: AccentPalette, dark: Boolean): Int = accent.argb(dark).toInt()
-    fun rowTint(colors: WidgetColors, frost: Float, opaque: Boolean): Int =
-        androidx.core.graphics.ColorUtils.compositeColors(
+    fun rowTint(colors: WidgetColors, frost: Float, opaque: Boolean): Int {
+        val composited = androidx.core.graphics.ColorUtils.compositeColors(
             withAlpha(colors.accent, GlassOptics.accentAlpha(colors.dark)),
             withAlpha(if (colors.dark) INK else WHITE, GlassOptics.veilAlpha(frost, opaque)),
         )
+        // 封顶：不透明档原先会把行卡片刷成实心白片，在壁纸上像贴纸。
+        // 限到 62% 之后，底下的模糊壁纸能透出来，卡片变成磨砂玻璃。
+        val alpha = (composited ushr 24) / 255f
+        return if (alpha <= ROW_MAX_ALPHA) composited else {
+            (composited and 0x00FFFFFF) or ((ROW_MAX_ALPHA * 255).roundToInt() shl 24)
+        }
+    }
+
+    /** 行卡片不透明度上限：保证任何配色档都不会刷成「纯白纸片」。 */
+    private const val ROW_MAX_ALPHA = 0.62f
+
     private const val WHITE = 0xFFFFFFFF.toInt()
     private const val BLACK = 0xFF000000.toInt()
     private const val INK = 0xFF1C1C1E.toInt()
