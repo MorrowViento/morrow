@@ -123,7 +123,10 @@ internal fun HomeHeader(
                 top = PageChrome.HeaderTop,
                 bottom = PageChrome.HeaderBottom,
             ),
-        verticalAlignment = Alignment.CenterVertically,
+        // 顶对齐：首页标题是「大标题 + 副标题」的多行块，若按 CenterVertically 排，
+        // 右侧按钮会被整块高度拽到中间，比日历 / 设置页的顶栏圆钮低一截。
+        // 顶对齐后按钮的**上边缘**落在 HeaderTop 上，与其它页完全同一条基线。
+        verticalAlignment = Alignment.Top,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -172,9 +175,17 @@ internal fun HomeHeader(
                 )
             }
         }
-        SortChip(label = sortLabel, onClick = onCycleSort)
-        Spacer(Modifier.width(8.dp))
-        moreAction()
+        // 右侧按钮组：按「标准顶栏行高」兜住，内容垂直居中。
+        // 行高与日历 / 设置页的顶栏一致（34dp 按钮 + 12 / 4 内边距），
+        // 于是三页按钮的上边缘和视觉中心都落在同一条基线上。
+        Row(
+            modifier = Modifier.height(PageChrome.ChipHeight),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SortChip(label = sortLabel, onClick = onCycleSort)
+            moreAction()
+        }
     }
 }
 

@@ -235,7 +235,9 @@ internal fun SelectedDaySection(
                 contentPadding = PaddingValues(start = PageChrome.HeaderHorizontal, end = PageChrome.HeaderHorizontal, top = 2.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(state.selectedEntries, key = { it.id }) { entry ->
+                // 同样带上日期：这一天若同时被「重复 + 持续」的事件命中，
+                // 光用 id 也有撞 key 的风险，撞了就是整个进程被杀。
+                items(state.selectedEntries, key = { "${it.date}-${it.id}" }) { entry ->
                     CalendarEntryRow(entry) { onOpenEvent(entry.id) }
                 }
             }
@@ -249,7 +251,7 @@ internal fun SelectedDaySection(
 internal fun YearView(state: CalendarUiState, actions: CalendarActions) {
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(160.dp * fontScale),
+        columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = PageChrome.HeaderHorizontal, end = PageChrome.HeaderHorizontal, top = 6.dp, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -268,20 +270,20 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
     val accent = glassAccent()
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     GlassPanel(modifier = modifier, onClick = onClick) {
-        // 年视图是「预览」不是「完整日历」：12 个月并排，板块要小、只给一瞥。
-        // 格子高度、内边距、字号都往下压一档，让一屏能多露几行摘要。
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) {
+        // 年视图是「预览」不是「完整日历」：每行两个月，板块要紧凑、只给一瞥。
+        // 格子高度、内边距、字号都往下压，让一屏能多露几行摘要。
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${summary.month.monthValue}月", style = TextStyle(fontSize = 14.sp,
+                Text("${summary.month.monthValue}月", style = TextStyle(fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold, color = primary))
                 Spacer(Modifier.weight(1f))
-                Text("${summary.eventCount} 次", style = TextStyle(fontSize = 10.sp, color = secondary))
+                Text("${summary.eventCount} 次", style = TextStyle(fontSize = 9.5.sp, color = secondary))
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Row(Modifier.fillMaxWidth()) {
                 CalendarPresentation.WEEKDAY_LABELS.forEach { label ->
                     Text(label, Modifier.weight(1f), textAlign = TextAlign.Center,
-                        style = TextStyle(fontSize = 8.sp, color = secondary))
+                        style = TextStyle(fontSize = 7.5.sp, color = secondary))
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -289,14 +291,14 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
                 Row(Modifier.fillMaxWidth()) {
                     for (col in 0 until 7) {
                         val cell = summary.cells[row * 7 + col]
-                        Box(Modifier.weight(1f).height(18.dp * fontScale), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).height(16.dp * fontScale), contentAlignment = Alignment.Center) {
                             if (cell.inMonth) {
                                 if (cell.isToday) Canvas(Modifier.matchParentSize()) {
                                     drawCircle(accent.copy(alpha = 0.24f), radius = size.minDimension * 0.43f)
                                     drawCircle(accent, radius = size.minDimension * 0.43f, style = Stroke(1.dp.toPx()))
                                 }
                                 Text(cell.date.dayOfMonth.toString(), style = TextStyle(
-                                    fontSize = 9.5.sp, lineHeight = 12.sp, fontWeight = FontWeight.Medium,
+                                    fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Medium,
                                     fontFeatureSettings = "tnum", platformStyle = CalendarFontMetrics,
                                     lineHeightStyle = CalendarLineHeight, color = primary,
                                 ))
@@ -308,15 +310,15 @@ internal fun MonthCard(summary: MonthSummary, modifier: Modifier, onClick: () ->
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             if (summary.sampleEntries.isEmpty()) {
-                Text("本月暂无事件", style = TextStyle(fontSize = 9.5.sp, color = secondary))
+                Text("本月暂无事件", style = TextStyle(fontSize = 9.sp, color = secondary))
             } else summary.sampleEntries.forEach { entry ->
                 Text("${entry.date.dayOfMonth}日 · ${entry.title}", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 9.5.sp, color = secondary))
+                    style = TextStyle(fontSize = 9.sp, color = secondary))
             }
             if (summary.eventCount > summary.sampleEntries.size) {
-                Text("另 ${summary.eventCount - summary.sampleEntries.size} 次事件", style = TextStyle(fontSize = 9.5.sp, color = secondary))
+                Text("另 ${summary.eventCount - summary.sampleEntries.size} 次事件", style = TextStyle(fontSize = 9.sp, color = secondary))
             }
         }
     }
@@ -344,7 +346,10 @@ internal fun MonthListView(state: CalendarUiState, onOpenEvent: (String) -> Unit
             item(key = "m-${group.month}") {
                 MonthGroupHeader(group)
             }
-            items(group.entries, key = { "e-${group.month}-${it.id}" }) { entry ->
+            // key 必须带上日期：每天 / 每周的事件（以及跨多天的持续事件）在同一个月里
+            // 会产生多条条目，只用事件 id 会撞 key——Compose 直接抛 IllegalArgumentException，
+            // 把进程杀掉。真机上的「进列表就闪退」就是这个。
+            items(group.entries, key = { "e-${group.month}-${it.date}-${it.id}" }) { entry ->
                 CalendarEntryRow(entry) { onOpenEvent(entry.id) }
             }
         }
